@@ -1,0 +1,16 @@
+import type { TransportMode, TravelOption } from "@/types/domain";
+
+export type TravelSearchInput = {
+  participantId: string;
+  originCityCode: string;
+  originCityName: string;
+  destinationCityCode: string;
+  destinationCityName: string;
+  meetingDate: string;
+  targetArrivalTime: string;
+  acceptedModes: TransportMode[];
+};
+
+export type TravelProvider = {
+  search(input: TravelSearchInput): Promise<TravelOption[]>;
+};
