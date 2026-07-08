@@ -1,4 +1,5 @@
 import { generateCandidateCities } from "@/lib/city/candidate-generator";
+import { explainRecommendation } from "@/lib/ai/recommendation-explainer";
 import { scoreCandidateCity } from "@/lib/recommendation/scoring";
 import { createServiceSupabaseClient } from "@/lib/supabase/server";
 import { FlyAITravelProvider } from "@/lib/travel/flyai-provider";
@@ -133,25 +134,31 @@ export async function calculatePlanRecommendations({
     }),
   );
 
-  await supabase.from("city_recommendations").insert(
-    recommendations.map((item) => ({
-      run_id: run.id,
-      city_code: item.cityCode,
-      city_name: item.cityName,
-      total_price_cny: item.totalPriceCny,
-      avg_price_cny: item.avgPriceCny,
-      total_duration_minutes: item.totalDurationMinutes,
-      fairness_gap: item.fairnessGap,
-      waiting_penalty: item.waitingPenalty,
-      transfer_penalty: item.transferPenalty,
-      estimate_penalty: item.estimatePenalty,
-      missing_penalty: item.missingPenalty,
-      score_cheapest: item.scoreCheapest,
-      score_balanced: item.scoreBalanced,
-      score_fastest: item.scoreFastest,
-      labels: item.labels,
-    })),
+  const recommendationInserts = await Promise.all(
+    recommendations.map(async (item) => {
+      const explanation = await explainRecommendation(item);
+      return {
+        run_id: run.id,
+        city_code: item.cityCode,
+        city_name: item.cityName,
+        total_price_cny: item.totalPriceCny,
+        avg_price_cny: item.avgPriceCny,
+        total_duration_minutes: item.totalDurationMinutes,
+        fairness_gap: item.fairnessGap,
+        waiting_penalty: item.waitingPenalty,
+        transfer_penalty: item.transferPenalty,
+        estimate_penalty: item.estimatePenalty,
+        missing_penalty: item.missingPenalty,
+        score_cheapest: item.scoreCheapest,
+        score_balanced: item.scoreBalanced,
+        score_fastest: item.scoreFastest,
+        labels: item.labels,
+        explanation: explanation.short_reason,
+        risk_summary: explanation.risk_badges.join("、"),
+      };
+    }),
   );
+  await supabase.from("city_recommendations").insert(recommendationInserts);
 
   await supabase
     .from("recommendation_runs")

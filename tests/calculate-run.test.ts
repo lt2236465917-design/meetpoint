@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   from: vi.fn(),
   search: vi.fn(),
+  explainRecommendation: vi.fn(),
 }));
 
 vi.mock("@/lib/supabase/server", () => ({
@@ -17,6 +18,10 @@ vi.mock("@/lib/travel/flyai-provider", () => ({
       search: mocks.search,
     };
   }),
+}));
+
+vi.mock("@/lib/ai/recommendation-explainer", () => ({
+  explainRecommendation: mocks.explainRecommendation,
 }));
 
 function selectEqSingle(data: unknown) {
@@ -55,6 +60,7 @@ describe("calculatePlanRecommendations", () => {
     vi.resetModules();
     mocks.from.mockReset();
     mocks.search.mockReset();
+    mocks.explainRecommendation.mockReset();
   });
 
   it("creates a run, stores travel options and recommendations, and marks the plan completed", async () => {
@@ -127,6 +133,14 @@ describe("calculatePlanRecommendations", () => {
         },
       ]),
     );
+    mocks.explainRecommendation.mockImplementation((recommendation) =>
+      Promise.resolve({
+        short_reason: `${recommendation.cityName}比较均衡。`,
+        risk_badges: recommendation.estimatePenalty > 0 ? ["含估算"] : [],
+        share_summary: `${recommendation.cityName}适合这次见面。`,
+        detail_explanation: "请在购票前重新核对实时价格。",
+      }),
+    );
 
     const { calculatePlanRecommendations } = await import(
       "@/lib/recommendation/calculate-run"
@@ -167,8 +181,13 @@ describe("calculatePlanRecommendations", () => {
           city_code: "beijing",
           total_price_cny: 800,
           avg_price_cny: 400,
+          explanation: "北京比较均衡。",
+          risk_summary: "含估算",
         }),
       ]),
+    );
+    expect(mocks.explainRecommendation).toHaveBeenCalledTimes(
+      result.candidateCount,
     );
     expect(runUpdate.update).toHaveBeenCalledWith(
       expect.objectContaining({ status: "completed" }),
