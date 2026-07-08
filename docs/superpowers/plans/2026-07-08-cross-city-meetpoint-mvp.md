@@ -2297,7 +2297,7 @@ git commit -m "feat: add recommendation explanations"
 **Interfaces:**
 - Produces: verified MVP baseline and setup documentation.
 
-- [ ] **Step 1: Update README setup**
+- [x] **Step 1: Update README setup**
 
 Append to `README.md`:
 
@@ -2323,7 +2323,7 @@ Manual H5 acceptance:
 ```
 ```
 
-- [ ] **Step 2: Run full verification**
+- [x] **Step 2: Run full verification**
 
 Run:
 
@@ -2335,7 +2335,7 @@ npm run build
 
 Expected: PASS.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add README.md
