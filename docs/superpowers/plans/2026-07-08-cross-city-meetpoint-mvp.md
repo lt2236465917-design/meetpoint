@@ -4,7 +4,7 @@
 
 **Goal:** Build a clean mobile-first Next.js H5 MVP for multi-person cross-city meeting city recommendations in China.
 
-**Architecture:** Create a new clean project at `cross-city-meetpoint/`. Keep deterministic business logic in typed service modules, isolate external vendors behind provider interfaces, store collaboration data in Supabase, and use DeepSeek only to explain already-computed results.
+**Architecture:** Use `/Users/lixinyu/Desktop/cross-city-meetpoint` as the clean project root. Keep deterministic business logic in typed service modules, isolate external vendors behind provider interfaces, store collaboration data in Supabase, and use DeepSeek only to explain already-computed results.
 
 **Tech Stack:** Next.js App Router, TypeScript, Tailwind CSS, Supabase, Vitest, Zod, OpenAI-compatible DeepSeek client, Vercel-compatible route handlers.
 
@@ -28,10 +28,10 @@
 
 ## File Structure
 
-Create a new implementation project:
+Implementation project root:
 
 ```text
-cross-city-meetpoint/
+/Users/lixinyu/Desktop/cross-city-meetpoint/
 ├── AGENTS.md
 ├── README.md
 ├── .env.example
@@ -101,9 +101,9 @@ cross-city-meetpoint/
 **Interfaces:**
 - Produces: a runnable Next.js project with `npm run lint`, `npm run build`, and `npm run test`.
 
-- [ ] **Step 1: Scaffold the project**
+- [x] **Step 1: Scaffold the project**
 
-Run from `/Users/lixinyu/Desktop/meetpoint`:
+Run from the parent directory of the implementation root:
 
 ```bash
 npx create-next-app@latest cross-city-meetpoint --ts --eslint --tailwind --app --src-dir --import-alias "@/*"
@@ -111,19 +111,19 @@ npx create-next-app@latest cross-city-meetpoint --ts --eslint --tailwind --app -
 
 Expected: a new `cross-city-meetpoint/` directory.
 
-- [ ] **Step 2: Install runtime and test dependencies**
+- [x] **Step 2: Install runtime and test dependencies**
 
 Run:
 
 ```bash
-cd /Users/lixinyu/Desktop/meetpoint/cross-city-meetpoint
+cd /Users/lixinyu/Desktop/cross-city-meetpoint
 npm install @supabase/supabase-js zod openai
 npm install -D vitest @vitest/ui
 ```
 
 Expected: dependencies are added to `package.json`.
 
-- [ ] **Step 3: Modify `package.json` scripts**
+- [x] **Step 3: Modify `package.json` scripts**
 
 Set the scripts to include:
 
@@ -133,14 +133,14 @@ Set the scripts to include:
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "eslint",
     "test": "vitest run",
     "test:watch": "vitest"
   }
 }
 ```
 
-- [ ] **Step 4: Create `vitest.config.ts`**
+- [x] **Step 4: Create `vitest.config.ts`**
 
 ```ts
 import { defineConfig } from "vitest/config";
@@ -153,7 +153,7 @@ export default defineConfig({
 });
 ```
 
-- [ ] **Step 5: Create project `AGENTS.md`**
+- [x] **Step 5: Create project `AGENTS.md`**
 
 ```md
 # Project Rules
@@ -180,7 +180,7 @@ This project is a mobile-first Web H5 app for multi-person cross-city meeting pl
 - `src/components/`: mobile-first UI components.
 ```
 
-- [ ] **Step 6: Create `.env.example`**
+- [x] **Step 6: Create `.env.example`**
 
 ```env
 NEXT_PUBLIC_SUPABASE_URL=
@@ -192,7 +192,7 @@ FLYAI_API_KEY=
 FLYAI_CLI_PATH=
 ```
 
-- [ ] **Step 7: Create `README.md`**
+- [x] **Step 7: Create `README.md`**
 
 ```md
 # Cross-City MeetPoint
@@ -211,7 +211,7 @@ Mobile-first H5 MVP for choosing a fair cross-city meeting city for 2-6 people i
 Copy `.env.example` to `.env.local` and fill server-side keys locally.
 ```
 
-- [ ] **Step 8: Verify scaffold**
+- [x] **Step 8: Verify scaffold**
 
 Run:
 
@@ -221,9 +221,9 @@ npm run test
 npm run build
 ```
 
-Expected: lint and build pass; test passes with no tests or Vitest no-test behavior depending on version. If Vitest exits non-zero because no tests exist, continue after Task 2 adds tests.
+Expected: lint and build pass; Vitest exits non-zero because no tests exist until Task 2 adds `tests/**/*.test.ts`.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git init
