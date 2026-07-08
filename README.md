@@ -17,6 +17,8 @@ Mobile-first H5 MVP for choosing a fair cross-city meeting city for 2-6 people i
 - `POST /api/plans`: creates a plan from `{ title, meetingDate, targetArrivalTime, participantLimit }` and returns `{ code, manageToken, shareUrl }`.
 - `GET /api/cities/search?q=...`: searches built-in city data and returns `{ cities }`.
 - `POST /api/plans/[code]/participants`: creates a participant and returns `{ participantId, editToken }`.
+- `GET /api/plans/[code]/candidates`: returns stored candidate city controls for a plan.
+- `POST /api/plans/[code]/candidates`: saves a host candidate-city add/exclude control from `{ cityCode, cityName, enabled }`; requires `x-management-token`.
 
 ## Environment
 
