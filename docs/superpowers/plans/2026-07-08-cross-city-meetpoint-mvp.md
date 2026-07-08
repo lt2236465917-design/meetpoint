@@ -617,7 +617,7 @@ git commit -m "feat: add city library and candidate generation"
 **Interfaces:**
 - Produces: browser Supabase client, service-role server Supabase client, database schema matching the spec.
 
-- [ ] **Step 1: Create `supabase/schema.sql`**
+- [x] **Step 1: Create `supabase/schema.sql`**
 
 ```sql
 create extension if not exists pgcrypto;
@@ -743,7 +743,7 @@ alter publication supabase_realtime add table recommendation_runs;
 alter publication supabase_realtime add table city_recommendations;
 ```
 
-- [ ] **Step 2: Create browser Supabase client**
+- [x] **Step 2: Create browser Supabase client**
 
 Create `src/lib/supabase/client.ts`:
 
@@ -758,7 +758,7 @@ export function createBrowserSupabaseClient() {
 }
 ```
 
-- [ ] **Step 3: Create server Supabase client**
+- [x] **Step 3: Create server Supabase client**
 
 Create `src/lib/supabase/server.ts`:
 
@@ -775,7 +775,7 @@ export function createServiceSupabaseClient() {
 }
 ```
 
-- [ ] **Step 4: Verify TypeScript**
+- [x] **Step 4: Verify TypeScript**
 
 Run:
 
@@ -785,7 +785,7 @@ npm run lint
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add supabase/schema.sql src/lib/supabase/client.ts src/lib/supabase/server.ts
