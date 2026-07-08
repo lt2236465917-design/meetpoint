@@ -81,6 +81,7 @@ Implementation project root:
 │   └── types/domain.ts
 └── tests/
     ├── candidate-generator.test.ts
+    ├── plan-route.test.ts
     ├── scoring.test.ts
     ├── tokens.test.ts
     └── management-token.test.ts
@@ -800,12 +801,13 @@ git commit -m "feat: add supabase schema and clients"
 - Create: `cross-city-meetpoint/src/app/api/plans/route.ts`
 - Create: `cross-city-meetpoint/src/app/create/page.tsx`
 - Modify: `cross-city-meetpoint/src/app/page.tsx`
+- Test: `cross-city-meetpoint/tests/plan-route.test.ts`
 
 **Interfaces:**
 - Consumes: `createPlanSchema`, `generateToken`, `hashToken`, service Supabase client.
 - Produces: `POST /api/plans` returning `{ code: string; manageToken: string; shareUrl: string }`.
 
-- [ ] **Step 1: Create plan API**
+- [x] **Step 1: Create plan API**
 
 Create `src/app/api/plans/route.ts`:
 
@@ -854,7 +856,7 @@ export async function POST(req: Request) {
 }
 ```
 
-- [ ] **Step 2: Create mobile-first create page**
+- [x] **Step 2: Create mobile-first create page**
 
 Create `src/app/create/page.tsx`:
 
@@ -919,7 +921,7 @@ export default function CreatePlanPage() {
 }
 ```
 
-- [ ] **Step 3: Replace home page with creation entry**
+- [x] **Step 3: Replace home page with creation entry**
 
 Modify `src/app/page.tsx`:
 
@@ -941,7 +943,7 @@ export default function HomePage() {
 }
 ```
 
-- [ ] **Step 4: Verify**
+- [x] **Step 4: Verify**
 
 Run:
 
@@ -952,10 +954,10 @@ npm run build
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
-git add src/app/api/plans/route.ts src/app/create/page.tsx src/app/page.tsx
+git add src/app/api/plans/route.ts src/app/create/page.tsx src/app/page.tsx tests/plan-route.test.ts
 git commit -m "feat: add plan creation flow"
 ```
 
