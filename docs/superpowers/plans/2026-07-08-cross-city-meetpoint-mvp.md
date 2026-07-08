@@ -244,7 +244,7 @@ git commit -m "chore: scaffold cross-city meetpoint app"
 **Interfaces:**
 - Produces: `TransportMode`, `PlanStatus`, `TravelOption`, `CityRecommendation`, Zod schemas, `generateToken()`, `hashToken(token)`, `verifyToken(token, hash)`.
 
-- [ ] **Step 1: Write failing token tests**
+- [x] **Step 1: Write failing token tests**
 
 Create `tests/tokens.test.ts`:
 
@@ -267,7 +267,7 @@ describe("token utilities", () => {
 });
 ```
 
-- [ ] **Step 2: Run test and verify failure**
+- [x] **Step 2: Run test and verify failure**
 
 Run:
 
@@ -277,7 +277,7 @@ npm run test -- tests/tokens.test.ts
 
 Expected: FAIL because `@/lib/security/tokens` does not exist.
 
-- [ ] **Step 3: Create domain types**
+- [x] **Step 3: Create domain types**
 
 Create `src/types/domain.ts`:
 
@@ -347,7 +347,7 @@ export type CityRecommendation = {
 };
 ```
 
-- [ ] **Step 4: Create validation schemas**
+- [x] **Step 4: Create validation schemas**
 
 Create `src/lib/validation/schemas.ts`:
 
@@ -377,7 +377,7 @@ export const candidateCityInputSchema = z.object({
 });
 ```
 
-- [ ] **Step 5: Create token utilities**
+- [x] **Step 5: Create token utilities**
 
 Create `src/lib/security/tokens.ts`:
 
@@ -400,7 +400,7 @@ export async function verifyToken(token: string, hash: string): Promise<boolean>
 }
 ```
 
-- [ ] **Step 6: Run tests**
+- [x] **Step 6: Run tests**
 
 Run:
 
@@ -410,7 +410,7 @@ npm run test -- tests/tokens.test.ts
 
 Expected: PASS.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/types/domain.ts src/lib/validation/schemas.ts src/lib/security/tokens.ts tests/tokens.test.ts
