@@ -1657,7 +1657,7 @@ git commit -m "feat: add scoring and estimate provider"
 **Interfaces:**
 - Produces: provider wrappers that can be called by calculation and explain APIs.
 
-- [ ] **Step 1: Create FlyAI provider**
+- [x] **Step 1: Create FlyAI provider**
 
 Create `src/lib/travel/flyai-provider.ts`:
 
@@ -1680,7 +1680,7 @@ export class FlyAITravelProvider implements TravelProvider {
 
 Note: this MVP shell returns estimates until the exact FlyAI production access path is configured. The interface isolates API, MCP, CLI, or Skill-compatible access without changing callers.
 
-- [ ] **Step 2: Extend city provider with Amap fallback**
+- [x] **Step 2: Extend city provider with Amap fallback**
 
 Update `src/lib/city/city-provider.ts`:
 
@@ -1699,7 +1699,7 @@ export async function searchCities(query: string): Promise<City[]> {
 }
 ```
 
-- [ ] **Step 3: Create DeepSeek client**
+- [x] **Step 3: Create DeepSeek client**
 
 Create `src/lib/ai/deepseek-client.ts`:
 
@@ -1716,7 +1716,7 @@ export function createDeepSeekClient() {
 }
 ```
 
-- [ ] **Step 4: Create recommendation explainer**
+- [x] **Step 4: Create recommendation explainer**
 
 Create `src/lib/ai/recommendation-explainer.ts`:
 
@@ -1768,7 +1768,7 @@ export async function explainRecommendation(recommendation: CityRecommendation):
 }
 ```
 
-- [ ] **Step 5: Verify**
+- [x] **Step 5: Verify**
 
 Run:
 
@@ -1779,7 +1779,7 @@ npm run build
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/lib/travel/flyai-provider.ts src/lib/city/city-provider.ts src/lib/ai/deepseek-client.ts src/lib/ai/recommendation-explainer.ts
