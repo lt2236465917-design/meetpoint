@@ -411,7 +411,7 @@ npm run test -- tests/tokens.test.ts
 
 Expected: PASS.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/types/domain.ts src/lib/validation/schemas.ts src/lib/security/tokens.ts tests/tokens.test.ts
@@ -1680,9 +1680,9 @@ export class FlyAITravelProvider implements TravelProvider {
 
 Note: this MVP shell returns estimates until the exact FlyAI production access path is configured. The interface isolates API, MCP, CLI, or Skill-compatible access without changing callers.
 
-- [ ] **Step 2: Create city provider**
+- [ ] **Step 2: Extend city provider with Amap fallback**
 
-Create `src/lib/city/city-provider.ts`:
+Update `src/lib/city/city-provider.ts`:
 
 ```ts
 import { searchLocalCities } from "@/data/cities";
