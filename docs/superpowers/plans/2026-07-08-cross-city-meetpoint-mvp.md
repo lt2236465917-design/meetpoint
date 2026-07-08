@@ -1793,12 +1793,14 @@ git commit -m "feat: add external provider shells"
 **Files:**
 - Create: `cross-city-meetpoint/src/lib/recommendation/calculate-run.ts`
 - Create: `cross-city-meetpoint/src/app/api/plans/[code]/calculate/route.ts`
+- Create: `cross-city-meetpoint/tests/calculate-run.test.ts`
+- Create: `cross-city-meetpoint/tests/calculate-route.test.ts`
 
 **Interfaces:**
 - Consumes: candidate generator, FlyAI provider, scoring module, management token helper.
 - Produces: `calculatePlanRecommendations({ code })` and `POST /api/plans/[code]/calculate`.
 
-- [ ] **Step 1: Create calculation orchestrator**
+- [x] **Step 1: Create calculation orchestrator**
 
 Create `src/lib/recommendation/calculate-run.ts`:
 
@@ -1916,7 +1918,7 @@ export async function calculatePlanRecommendations({ code }: { code: string }) {
 }
 ```
 
-- [ ] **Step 2: Create calculation API**
+- [x] **Step 2: Create calculation API**
 
 Create `src/app/api/plans/[code]/calculate/route.ts`:
 
@@ -1925,12 +1927,13 @@ import { NextResponse } from "next/server";
 import { calculatePlanRecommendations } from "@/lib/recommendation/calculate-run";
 import { verifyManagementTokenForPlan } from "@/lib/security/management-token";
 
-export async function POST(req: Request, { params }: { params: { code: string } }) {
-  const verified = await verifyManagementTokenForPlan(params.code, req.headers.get("x-management-token"));
+export async function POST(req: Request, { params }: { params: Promise<{ code: string }> }) {
+  const { code } = await params;
+  const verified = await verifyManagementTokenForPlan(code, req.headers.get("x-management-token"));
   if (!verified.ok) return NextResponse.json({ error: verified.error }, { status: verified.status });
 
   try {
-    const result = await calculatePlanRecommendations({ code: params.code });
+    const result = await calculatePlanRecommendations({ code });
     return NextResponse.json(result);
   } catch (error) {
     return NextResponse.json(
@@ -1941,21 +1944,22 @@ export async function POST(req: Request, { params }: { params: { code: string } 
 }
 ```
 
-- [ ] **Step 3: Verify**
+- [x] **Step 3: Verify**
 
 Run:
 
 ```bash
 npm run lint
+npm run test
 npm run build
 ```
 
 Expected: PASS.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
-git add src/lib/recommendation/calculate-run.ts src/app/api/plans/[code]/calculate/route.ts
+git add src/lib/recommendation/calculate-run.ts src/app/api/plans/[code]/calculate/route.ts tests/calculate-run.test.ts tests/calculate-route.test.ts
 git commit -m "feat: add recommendation calculation API"
 ```
 
