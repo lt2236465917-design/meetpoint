@@ -431,7 +431,7 @@ git commit -m "feat: add domain contracts and token utilities"
 - Consumes: `City` from `src/types/domain.ts`.
 - Produces: `findCityByCode(code)`, `searchLocalCities(query)`, `haversineKm(a, b)`, `generateCandidateCities(input)`.
 
-- [ ] **Step 1: Write failing candidate generator tests**
+- [x] **Step 1: Write failing candidate generator tests**
 
 Create `tests/candidate-generator.test.ts`:
 
@@ -458,7 +458,7 @@ describe("generateCandidateCities", () => {
 });
 ```
 
-- [ ] **Step 2: Run test and verify failure**
+- [x] **Step 2: Run test and verify failure**
 
 Run:
 
@@ -468,7 +468,7 @@ npm run test -- tests/candidate-generator.test.ts
 
 Expected: FAIL because city modules do not exist.
 
-- [ ] **Step 3: Create city data**
+- [x] **Step 3: Create city data**
 
 Create `src/data/cities.ts`:
 
@@ -503,7 +503,7 @@ export function searchLocalCities(query: string): City[] {
 }
 ```
 
-- [ ] **Step 4: Create distance utility**
+- [x] **Step 4: Create distance utility**
 
 Create `src/lib/city/distance.ts`:
 
@@ -527,7 +527,7 @@ export function haversineKm(a: Coordinate, b: Coordinate): number {
 }
 ```
 
-- [ ] **Step 5: Create candidate generator**
+- [x] **Step 5: Create candidate generator**
 
 Create `src/lib/city/candidate-generator.ts`:
 
@@ -588,7 +588,7 @@ export function generateCandidateCities(input: GenerateCandidateCitiesInput): Ci
 }
 ```
 
-- [ ] **Step 6: Run tests**
+- [x] **Step 6: Run tests**
 
 Run:
 
@@ -598,7 +598,7 @@ npm run test -- tests/candidate-generator.test.ts
 
 Expected: PASS.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/data/cities.ts src/lib/city/distance.ts src/lib/city/candidate-generator.ts tests/candidate-generator.test.ts
