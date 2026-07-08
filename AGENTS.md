@@ -25,5 +25,7 @@ This project is a mobile-first Web H5 app for multi-person cross-city meeting pl
 - `src/app/api/`: route handlers; use the service-role Supabase client only in server-side files.
 - `src/app/`: mobile-first App Router pages with Chinese user-facing copy.
 - `src/components/`: mobile-first UI components.
+- `docs/architecture.md`: stable technical map for routes, data flow, modules, and security boundaries.
+- `docs/integration-guide.md`: stable setup, API, error-code, and smoke-test reference for handoff.
 - `docs/superpowers/specs/`: approved product and technical design specs.
 - `docs/superpowers/plans/`: implementation plans derived from approved specs.
