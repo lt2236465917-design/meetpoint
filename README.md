@@ -20,6 +20,13 @@ Mobile-first H5 MVP for choosing a fair cross-city meeting city for 2-6 people i
 - `GET /api/plans/[code]/candidates`: returns stored candidate city controls for a plan.
 - `POST /api/plans/[code]/candidates`: saves a host candidate-city add/exclude control from `{ cityCode, cityName, enabled }`; requires `x-management-token`.
 
+## Core Modules
+
+- `src/lib/city/candidate-generator.ts`: deterministic candidate-city generation from participant cities and host controls.
+- `src/lib/travel/types.ts`: normalized travel-provider boundary for provider adapters.
+- `src/lib/travel/estimate-provider.ts`: deterministic estimated travel option fallback using city distance and transport mode.
+- `src/lib/recommendation/scoring.ts`: deterministic city scoring and primary recommendation selection.
+
 ## Environment
 
 Copy `.env.example` to `.env.local` and fill server-side keys locally.

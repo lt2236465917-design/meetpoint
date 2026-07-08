@@ -1424,7 +1424,7 @@ git commit -m "feat: add management token and candidate editing"
 - Consumes: `TravelOption`, `CityRecommendation`.
 - Produces: `estimateTravelOption(input)`, `scoreCandidateCity(input)`, `pickPrimaryRecommendations(recommendations)`.
 
-- [ ] **Step 1: Write failing scoring tests**
+- [x] **Step 1: Write failing scoring tests**
 
 Create `tests/scoring.test.ts`:
 
@@ -1472,7 +1472,7 @@ describe("scoreCandidateCity", () => {
 });
 ```
 
-- [ ] **Step 2: Run test and verify failure**
+- [x] **Step 2: Run test and verify failure**
 
 Run:
 
@@ -1482,7 +1482,7 @@ npm run test -- tests/scoring.test.ts
 
 Expected: FAIL because scoring module does not exist.
 
-- [ ] **Step 3: Create travel provider types**
+- [x] **Step 3: Create travel provider types**
 
 Create `src/lib/travel/types.ts`:
 
@@ -1505,7 +1505,7 @@ export type TravelProvider = {
 };
 ```
 
-- [ ] **Step 4: Create estimate provider**
+- [x] **Step 4: Create estimate provider**
 
 Create `src/lib/travel/estimate-provider.ts`:
 
@@ -1552,7 +1552,7 @@ export function estimateTravelOption(input: TravelSearchInput, mode: TransportMo
 }
 ```
 
-- [ ] **Step 5: Create scoring module**
+- [x] **Step 5: Create scoring module**
 
 Create `src/lib/recommendation/scoring.ts`:
 
@@ -1627,7 +1627,7 @@ export function pickPrimaryRecommendations(recommendations: CityRecommendation[]
 }
 ```
 
-- [ ] **Step 6: Run scoring test**
+- [x] **Step 6: Run scoring test**
 
 Run:
 
@@ -1637,7 +1637,7 @@ npm run test -- tests/scoring.test.ts
 
 Expected: PASS.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/lib/travel/types.ts src/lib/travel/estimate-provider.ts src/lib/recommendation/scoring.ts tests/scoring.test.ts
