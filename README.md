@@ -62,3 +62,22 @@ npm run build
 ```
 
 In managed sandboxes, `npm run build` can fail if Next/Turbopack is blocked from creating a process and binding a local port. Re-run the same command in an environment that permits local port binding before release.
+
+## MVP Verification
+
+Run before handoff:
+
+```bash
+npm run lint
+npm run test
+npm run build
+```
+
+Manual H5 acceptance:
+
+1. Create a plan.
+2. Open the public link.
+3. Submit two participants from different cities.
+4. Start calculation from the manage page.
+5. Open result page and verify recommendation cards render.
+6. Confirm estimates are visually marked and stale results show a warning after `stale_after`.
