@@ -13,7 +13,10 @@ Mobile-first H5 MVP for choosing a fair cross-city meeting city for 2-6 people i
 
 - `/`: focused creation entry for the H5 app.
 - `/create`: host creates a meeting plan and receives a public link plus a management token.
+- `/p/[code]/join`: participant submits name, departure city, and accepted transport modes.
 - `POST /api/plans`: creates a plan from `{ title, meetingDate, targetArrivalTime, participantLimit }` and returns `{ code, manageToken, shareUrl }`.
+- `GET /api/cities/search?q=...`: searches built-in city data and returns `{ cities }`.
+- `POST /api/plans/[code]/participants`: creates a participant and returns `{ participantId, editToken }`.
 
 ## Environment
 
@@ -34,3 +37,5 @@ npm run lint
 npm run test
 npm run build
 ```
+
+In managed sandboxes, `npm run build` can fail if Next/Turbopack is blocked from creating a process and binding a local port. Re-run the same command in an environment that permits local port binding before release.

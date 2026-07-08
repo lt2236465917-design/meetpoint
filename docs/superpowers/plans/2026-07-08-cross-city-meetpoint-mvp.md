@@ -411,7 +411,7 @@ npm run test -- tests/tokens.test.ts
 
 Expected: PASS.
 
-- [x] **Step 7: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add src/types/domain.ts src/lib/validation/schemas.ts src/lib/security/tokens.ts tests/tokens.test.ts
@@ -977,7 +977,7 @@ git commit -m "feat: add plan creation flow"
 - Produces: `GET /api/cities/search?q=...` returning `{ cities: Array<{ code: string; name: string; province: string }> }`.
 - Produces: `POST /api/plans/[code]/participants` returning `{ participantId: string; editToken: string }`.
 
-- [ ] **Step 1: Create city search API**
+- [x] **Step 1: Create city search API**
 
 Create `src/app/api/cities/search/route.ts`:
 
@@ -999,7 +999,7 @@ export async function GET(req: Request) {
 }
 ```
 
-- [ ] **Step 2: Create transport mode picker**
+- [x] **Step 2: Create transport mode picker**
 
 Create `src/components/forms/TransportModePicker.tsx`:
 
@@ -1042,7 +1042,7 @@ export function TransportModePicker({
 }
 ```
 
-- [ ] **Step 3: Create city combobox**
+- [x] **Step 3: Create city combobox**
 
 Create `src/components/forms/CityCombobox.tsx`:
 
@@ -1087,7 +1087,7 @@ export function CityCombobox({
 }
 ```
 
-- [ ] **Step 4: Create participant API**
+- [x] **Step 4: Create participant API**
 
 Create `src/app/api/plans/[code]/participants/route.ts`:
 
@@ -1132,7 +1132,7 @@ export async function POST(req: Request, { params }: { params: { code: string } 
 }
 ```
 
-- [ ] **Step 5: Create join page**
+- [x] **Step 5: Create join page**
 
 Create `src/app/p/[code]/join/page.tsx`:
 
@@ -1189,7 +1189,7 @@ export default function JoinPlanPage({ params }: { params: { code: string } }) {
 }
 ```
 
-- [ ] **Step 6: Verify**
+- [x] **Step 6: Verify**
 
 Run:
 
@@ -1200,7 +1200,13 @@ npm run build
 
 Expected: PASS.
 
-- [ ] **Step 7: Commit**
+Actual in Codex sandbox on 2026-07-08:
+- `npm run lint`: PASS.
+- `npm run test`: PASS.
+- `./node_modules/.bin/tsc --noEmit`: PASS.
+- `npm run build`: blocked in the default sandbox by Turbopack process/port binding restriction (`Operation not permitted`), then PASS after approval to run outside the sandbox.
+
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/app/api/cities/search/route.ts src/app/api/plans/[code]/participants/route.ts src/components/forms/TransportModePicker.tsx src/components/forms/CityCombobox.tsx src/app/p/[code]/join/page.tsx
