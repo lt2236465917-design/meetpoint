@@ -30,6 +30,7 @@ This document is the stable technical map for the MVP. Detailed task history liv
 | `/api/plans/[code]/candidates` | `GET` | Read stored candidate-city controls. | None |
 | `/api/plans/[code]/candidates` | `POST` | Add or exclude a candidate city. | `x-management-token` |
 | `/api/plans/[code]/calculate` | `POST` | Run deterministic recommendation calculation. | `x-management-token` |
+| `/api/plans/[code]/explain` | `POST` | Regenerate explanations for the latest recommendation run. | None |
 | `/api/cities/search` | `GET` | Search built-in city data by query. | None |
 
 ## Data Flow
@@ -40,8 +41,9 @@ This document is the stable technical map for the MVP. Detailed task history liv
 4. Manual calculation generates candidate cities, queries the travel provider boundary, scores candidates, and writes:
    - `recommendation_runs`
    - `travel_options`
-   - `city_recommendations`
-5. Result pages read the latest run and city recommendations. Results become stale after 30 minutes.
+   - `city_recommendations`, including DeepSeek/fallback explanation fields
+5. The explain API can regenerate explanation and risk-summary fields for the latest run without changing deterministic scores.
+6. Result pages read the latest run and city recommendations. Results become stale after 30 minutes.
 
 ## Core Modules
 
@@ -53,7 +55,7 @@ This document is the stable technical map for the MVP. Detailed task history liv
 | `src/lib/travel/estimate-provider.ts` | Deterministic estimated option fallback. |
 | `src/lib/travel/flyai-provider.ts` | FlyAI provider shell; falls back to estimates until production access is configured. |
 | `src/lib/recommendation/scoring.ts` | Deterministic scoring and primary recommendation selection. |
-| `src/lib/recommendation/calculate-run.ts` | Calculation orchestration and Supabase persistence. |
+| `src/lib/recommendation/calculate-run.ts` | Calculation orchestration, explanation generation, and Supabase persistence. |
 | `src/lib/ai/recommendation-explainer.ts` | DeepSeek explanation shell with deterministic fallback copy. |
 
 ## Security Boundaries

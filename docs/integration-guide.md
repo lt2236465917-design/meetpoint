@@ -126,6 +126,23 @@ Returns:
 }
 ```
 
+Calculation also stores recommendation `explanation` and `risk_summary` fields for the result page.
+
+### Regenerate Recommendation Explanations
+
+`POST /api/plans/[code]/explain`
+
+Regenerates explanations for the latest recommendation run. The route uses DeepSeek when `DEEPSEEK_API_KEY` is configured and deterministic fallback copy otherwise.
+
+Returns:
+
+```json
+{
+  "ok": true,
+  "count": 3
+}
+```
+
 ## Error Codes
 
 | Error | Meaning |
@@ -137,10 +154,12 @@ Returns:
 | `INVALID_MANAGEMENT_TOKEN` | Host token did not match the stored hash. |
 | `SAVE_CANDIDATE_FAILED` | Candidate-city control persistence failed. |
 | `CALCULATION_FAILED` | Recommendation calculation failed. |
+| `RUN_NOT_FOUND` | No recommendation run exists for the plan. |
 
 ## Manual Smoke Path
 
 1. Open `/create`, create a plan, and save the management token.
 2. Open `/p/[code]/join`, submit at least two participants.
 3. Open `/p/[code]/manage`, enter the management token, optionally edit candidate cities, and start calculation.
-4. Open `/p/[code]/result`, confirm recommendation cards render and stale-result warnings appear when applicable.
+4. Open `/p/[code]/result`, confirm recommendation cards render explanations and stale-result warnings appear when applicable.
+5. Optionally call `POST /api/plans/[code]/explain` and confirm the response count matches the latest run's recommendation rows.

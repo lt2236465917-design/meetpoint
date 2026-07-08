@@ -24,6 +24,7 @@ Mobile-first H5 MVP for choosing a fair cross-city meeting city for 2-6 people i
 - `GET /api/plans/[code]/candidates`: returns stored candidate city controls for a plan.
 - `POST /api/plans/[code]/candidates`: saves a host candidate-city add/exclude control from `{ cityCode, cityName, enabled }`; requires `x-management-token`.
 - `POST /api/plans/[code]/calculate`: manually calculates recommendations for a plan and returns `{ runId, candidateCount }`; requires `x-management-token`.
+- `POST /api/plans/[code]/explain`: regenerates DeepSeek/fallback explanations for the latest run and returns `{ ok, count }`.
 
 ## Core Modules
 
@@ -33,7 +34,7 @@ Mobile-first H5 MVP for choosing a fair cross-city meeting city for 2-6 people i
 - `src/lib/travel/estimate-provider.ts`: deterministic estimated travel option fallback using city distance and transport mode.
 - `src/lib/travel/flyai-provider.ts`: FlyAI provider shell that currently falls back to estimated options until production access is configured.
 - `src/lib/recommendation/scoring.ts`: deterministic city scoring and primary recommendation selection.
-- `src/lib/recommendation/calculate-run.ts`: manual calculation orchestration that generates candidates, queries travel options, stores run data, and marks results stale after 30 minutes.
+- `src/lib/recommendation/calculate-run.ts`: manual calculation orchestration that generates candidates, queries travel options, stores recommendation explanations, and marks results stale after 30 minutes.
 - `src/lib/ai/recommendation-explainer.ts`: DeepSeek explanation shell with deterministic fallback copy for missing, failed, or malformed model output.
 
 ## Environment

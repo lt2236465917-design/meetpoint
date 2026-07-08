@@ -2225,7 +2225,7 @@ git commit -m "feat: add public plan management and result pages"
 - Consumes: `explainRecommendation`.
 - Produces: explanation fields on `city_recommendations`.
 
-- [ ] **Step 1: Create explain API**
+- [x] **Step 1: Create explain API**
 
 Create `src/app/api/plans/[code]/explain/route.ts`:
 
@@ -2269,7 +2269,7 @@ export async function POST(_req: Request, { params }: { params: { code: string }
 }
 ```
 
-- [ ] **Step 2: Verify**
+- [x] **Step 2: Verify**
 
 Run:
 
@@ -2280,11 +2280,11 @@ npm run build
 
 Expected: PASS.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
-git add src/app/api/plans/[code]/explain/route.ts
-git commit -m "feat: add deepseek explanation API"
+git add src/app/api/plans/[code]/explain/route.ts src/lib/recommendation/calculate-run.ts tests/explain-route.test.ts tests/calculate-run.test.ts
+git commit -m "feat: add recommendation explanations"
 ```
 
 ---
