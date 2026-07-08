@@ -1228,7 +1228,7 @@ git commit -m "feat: add participant join flow"
 - Produces: `verifyManagementTokenForPlan(code, token): Promise<{ ok: true; planId: string } | { ok: false; status: number; error: string }>`
 - Produces: `GET /api/plans/[code]/candidates` and `POST /api/plans/[code]/candidates`.
 
-- [ ] **Step 1: Write failing management token test**
+- [x] **Step 1: Write failing management token test**
 
 Create `tests/management-token.test.ts`:
 
@@ -1245,7 +1245,7 @@ describe("management token verification primitive", () => {
 });
 ```
 
-- [ ] **Step 2: Run test and verify failure if token module is missing**
+- [x] **Step 2: Run test and verify failure if token module is missing**
 
 Run:
 
@@ -1255,7 +1255,7 @@ npm run test -- tests/management-token.test.ts
 
 Expected: PASS if Task 2 is complete.
 
-- [ ] **Step 3: Create management token helper**
+- [x] **Step 3: Create management token helper**
 
 Create `src/lib/security/management-token.ts`:
 
@@ -1286,7 +1286,7 @@ export async function verifyManagementTokenForPlan(code: string, token: string |
 }
 ```
 
-- [ ] **Step 4: Create candidate city API**
+- [x] **Step 4: Create candidate city API**
 
 Create `src/app/api/plans/[code]/candidates/route.ts`:
 
@@ -1334,7 +1334,7 @@ export async function POST(req: Request, { params }: { params: { code: string } 
 }
 ```
 
-- [ ] **Step 5: Create candidate city editor component**
+- [x] **Step 5: Create candidate city editor component**
 
 Create `src/components/plan/CandidateCityEditor.tsx`:
 
@@ -1391,7 +1391,7 @@ export function CandidateCityEditor({
 }
 ```
 
-- [ ] **Step 6: Verify**
+- [x] **Step 6: Verify**
 
 Run:
 
@@ -1403,7 +1403,7 @@ npm run build
 
 Expected: PASS.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/lib/security/management-token.ts src/app/api/plans/[code]/candidates/route.ts src/components/plan/CandidateCityEditor.tsx tests/management-token.test.ts

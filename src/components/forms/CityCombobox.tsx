@@ -6,9 +6,11 @@ import { searchLocalCities } from "@/data/cities";
 export function CityCombobox({
   value,
   onChange,
+  placeholder = "选择城市",
 }: {
   value: { code: string; name: string } | null;
   onChange: (city: { code: string; name: string } | null) => void;
+  placeholder?: string;
 }) {
   const [query, setQuery] = useState(value?.name ?? "");
   const results = useMemo(() => searchLocalCities(query), [query]);
@@ -17,7 +19,7 @@ export function CityCombobox({
     <div className="relative">
       <input
         className="w-full rounded-lg border px-4 py-3"
-        placeholder="出发城市"
+        placeholder={placeholder}
         value={query}
         onChange={(event) => {
           const nextQuery = event.target.value;
