@@ -13,8 +13,12 @@ Mobile-first H5 MVP for choosing a fair cross-city meeting city for 2-6 people i
 
 - `/`: focused creation entry for the H5 app.
 - `/create`: host creates a meeting plan and receives a public link plus a management token.
+- `/p/[code]`: public plan page with meeting summary, participant completion state, join entry, and result entry.
 - `/p/[code]/join`: participant submits name, departure city, and accepted transport modes.
+- `/p/[code]/manage`: host enters the management token, edits candidate cities, and manually starts calculation.
+- `/p/[code]/result`: decision-first result page showing the latest recommendation run and stale-result warning.
 - `POST /api/plans`: creates a plan from `{ title, meetingDate, targetArrivalTime, participantLimit }` and returns `{ code, manageToken, shareUrl }`.
+- `GET /api/plans/[code]`: returns `{ plan, participants, latestRun }` for public plan reads.
 - `GET /api/cities/search?q=...`: searches built-in city data and returns `{ cities }`.
 - `POST /api/plans/[code]/participants`: creates a participant and returns `{ participantId, editToken }`.
 - `GET /api/plans/[code]/candidates`: returns stored candidate city controls for a plan.

@@ -1980,7 +1980,7 @@ git commit -m "feat: add recommendation calculation API"
 - Consumes: Supabase data and calculation API.
 - Produces: usable H5 read, manage, and result screens.
 
-- [ ] **Step 1: Create plan read API**
+- [x] **Step 1: Create plan read API**
 
 Create `src/app/api/plans/[code]/route.ts`:
 
@@ -1998,7 +1998,7 @@ export async function GET(_req: Request, { params }: { params: { code: string } 
 }
 ```
 
-- [ ] **Step 2: Create simple Notice component**
+- [x] **Step 2: Create simple Notice component**
 
 Create `src/components/ui/Notice.tsx`:
 
@@ -2008,7 +2008,7 @@ export function Notice({ children }: { children: React.ReactNode }) {
 }
 ```
 
-- [ ] **Step 3: Create ParticipantList**
+- [x] **Step 3: Create ParticipantList**
 
 Create `src/components/plan/ParticipantList.tsx`:
 
@@ -2034,7 +2034,7 @@ export function ParticipantList({ participants }: { participants: Participant[] 
 }
 ```
 
-- [ ] **Step 4: Create public plan page**
+- [x] **Step 4: Create public plan page**
 
 Create `src/app/p/[code]/page.tsx`:
 
@@ -2071,7 +2071,7 @@ export default async function PublicPlanPage({ params }: { params: { code: strin
 }
 ```
 
-- [ ] **Step 5: Create RecommendationCard**
+- [x] **Step 5: Create RecommendationCard**
 
 Create `src/components/result/RecommendationCard.tsx`:
 
@@ -2115,7 +2115,7 @@ export function RecommendationCard({ recommendation }: { recommendation: Recomme
 }
 ```
 
-- [ ] **Step 6: Create result page**
+- [x] **Step 6: Create result page**
 
 Create `src/app/p/[code]/result/page.tsx`:
 
@@ -2148,7 +2148,7 @@ export default async function ResultPage({ params }: { params: { code: string } 
 }
 ```
 
-- [ ] **Step 7: Create basic manage page**
+- [x] **Step 7: Create basic manage page**
 
 Create `src/app/p/[code]/manage/page.tsx`:
 
@@ -2195,7 +2195,7 @@ export default function ManagePage({ params }: { params: { code: string } }) {
 }
 ```
 
-- [ ] **Step 8: Verify**
+- [x] **Step 8: Verify**
 
 Run:
 
@@ -2206,7 +2206,7 @@ npm run build
 
 Expected: PASS.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add src/app/api/plans/[code]/route.ts src/components/plan/ParticipantList.tsx src/components/result/RecommendationCard.tsx src/components/ui/Notice.tsx src/app/p/[code]/page.tsx src/app/p/[code]/manage/page.tsx src/app/p/[code]/result/page.tsx
