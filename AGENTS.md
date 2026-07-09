@@ -24,6 +24,7 @@ This project is a mobile-first Web H5 app for multi-person cross-city meeting pl
 - `src/lib/supabase/`: browser anon client and server-only service-role client.
 - `src/app/api/`: route handlers; use the service-role Supabase client only in server-side files.
 - `src/app/`: mobile-first App Router pages with Chinese user-facing copy.
+- `src/components/layout/`: shared responsive page shells; desktop routes should remain centered phone-sized H5 canvases.
 - `src/components/`: mobile-first UI components.
 - `docs/architecture.md`: stable technical map for routes, data flow, modules, and security boundaries.
 - `docs/integration-guide.md`: stable setup, API, error-code, and smoke-test reference for handoff.

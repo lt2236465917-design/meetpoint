@@ -3,6 +3,8 @@
 import { use, useState } from "react";
 import { CityCombobox } from "@/components/forms/CityCombobox";
 import { TransportModePicker } from "@/components/forms/TransportModePicker";
+import { ResponsiveShell } from "@/components/layout/ResponsiveShell";
+import { getApiErrorMessage } from "@/lib/ui/api-error-message";
 import type { TransportMode } from "@/types/domain";
 
 type JoinPlanPageProps = {
@@ -48,7 +50,7 @@ export default function JoinPlanPage({ params }: JoinPlanPageProps) {
         return;
       }
 
-      setMessage(json.error || "提交失败");
+      setMessage(getApiErrorMessage(json.error, "提交失败，请稍后重试"));
     } catch {
       setMessage("提交失败，请稍后重试");
     } finally {
@@ -57,13 +59,16 @@ export default function JoinPlanPage({ params }: JoinPlanPageProps) {
   }
 
   return (
-    <main className="mx-auto min-h-screen max-w-md bg-white px-5 py-6">
-      <h1 className="text-2xl font-semibold text-gray-950">填写出发信息</h1>
-      <p className="mt-2 text-sm text-gray-500">
-        只需要你的出发城市和可接受交通方式，用来一起计算合适的见面城市。
-      </p>
-
-      <div className="mt-6 space-y-4">
+    <ResponsiveShell
+      title="填写出发信息"
+      description="只需要你的出发城市和可接受交通方式，用来一起计算合适的见面城市。"
+      aside={
+        <p className="text-center text-xs leading-5 text-gray-500">
+          交通方式只影响你的可接受路线，不会替别人做选择。
+        </p>
+      }
+    >
+      <div className="space-y-4 rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
         <input
           className="w-full rounded-lg border px-4 py-3"
           placeholder="你的名字"
@@ -88,6 +93,6 @@ export default function JoinPlanPage({ params }: JoinPlanPageProps) {
           </p>
         )}
       </div>
-    </main>
+    </ResponsiveShell>
   );
 }

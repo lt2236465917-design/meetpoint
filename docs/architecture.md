@@ -4,8 +4,9 @@ This document is the stable technical map for the MVP. Detailed task history liv
 
 ## Runtime Shape
 
-- Next.js App Router renders the H5 pages under `src/app/`.
+- Next.js App Router renders the responsive H5 pages under `src/app/`; desktop viewports show the same H5 workflow in a centered phone-sized canvas.
 - Route handlers under `src/app/api/` use the server-side Supabase service-role client.
+- When Supabase server variables are missing, route handlers use the server-side in-memory fallback store in `src/lib/fallback/mvp-store.ts` so the local create-to-result MVP can be smoke-tested without external credentials.
 - Browser-side Supabase access must use only the anon client from `src/lib/supabase/client.ts`.
 - Deterministic business logic lives in `src/lib/`; route handlers orchestrate validation, persistence, and service calls.
 
@@ -45,12 +46,16 @@ This document is the stable technical map for the MVP. Detailed task history liv
 5. The explain API can regenerate explanation and risk-summary fields for the latest run without changing deterministic scores.
 6. Result pages read the latest run and city recommendations. Results become stale after 30 minutes.
 
+In fallback mode, the same logical records are kept in process memory instead of Supabase. Fallback mode is non-persistent and exists only for local smoke testing.
+
 ## Core Modules
 
 | Module | Responsibility |
 | --- | --- |
+| `src/components/layout/ResponsiveShell.tsx` | Shared mobile-first page shell with a viewport-height H5 canvas, centered on desktop. |
 | `src/lib/city/candidate-generator.ts` | Deterministic candidate-city generation from participant cities and host controls. |
 | `src/lib/city/city-provider.ts` | Local-first city search; Amap is reserved for autocomplete/validation fallback. |
+| `src/lib/fallback/mvp-store.ts` | In-memory local fallback persistence for create-to-result smoke testing without Supabase credentials. |
 | `src/lib/travel/types.ts` | Vendor-neutral travel-provider interface and normalized option types. |
 | `src/lib/travel/estimate-provider.ts` | Deterministic estimated option fallback. |
 | `src/lib/travel/flyai-provider.ts` | FlyAI provider shell; falls back to estimates until production access is configured. |
@@ -64,6 +69,14 @@ This document is the stable technical map for the MVP. Detailed task history liv
 - Keep `SUPABASE_SERVICE_ROLE_KEY`, `AMAP_API_KEY`, `DEEPSEEK_API_KEY`, `FLYAI_API_KEY`, and `FLYAI_CLI_PATH` out of browser code.
 - Management and participant edit tokens are stored as hashes only.
 - Core ranking, ticket lookup normalization, and scoring must remain deterministic; DeepSeek may explain computed results but must not decide rankings.
+- Fallback mode is local-only and must not be treated as durable storage.
+
+## UI Boundaries
+
+- Keep user-facing copy in Chinese on both mobile and desktop.
+- Target routes must stay usable as product workflows on desktop; do not replace them with a marketing landing page.
+- `ResponsiveShell` is the default page shell for the main user routes. It keeps the workflow as a single-column, viewport-height H5 canvas on mobile and desktop, with the main content scrolling inside the canvas instead of stretching into a long document page.
+- Next.js development indicators are disabled in `next.config.ts` so local browser checks do not show the bottom-left `N` overlay.
 
 ## Verification
 

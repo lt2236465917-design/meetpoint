@@ -11,6 +11,12 @@ type Recommendation = {
   waiting_penalty: number;
 };
 
+const labelCopy: Record<string, string> = {
+  cheapest: "省钱优先",
+  balanced: "综合最优",
+  fastest: "省时优先",
+};
+
 export function RecommendationCard({
   recommendation,
 }: {
@@ -21,16 +27,19 @@ export function RecommendationCard({
     recommendation.transfer_penalty > 0 ? "含中转" : null,
     recommendation.waiting_penalty > 0 ? "等待较久" : null,
   ].filter((badge): badge is string => Boolean(badge));
+  const labels = recommendation.labels.map(
+    (label) => labelCopy[label] ?? label,
+  );
 
   return (
-    <article className="rounded-lg border border-gray-200 p-4">
+    <article className="flex h-full flex-col rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
       <div className="flex items-start justify-between gap-3">
-        <div>
+        <div className="min-w-0">
           <h3 className="text-xl font-semibold text-gray-950">
             {recommendation.city_name}
           </h3>
-          <p className="mt-1 text-sm text-gray-500">
-            {recommendation.labels.join(" / ")}
+          <p className="mt-1 break-words text-sm text-gray-500">
+            {labels.join(" / ")}
           </p>
         </div>
         <div className="shrink-0 text-right">

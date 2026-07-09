@@ -1,11 +1,24 @@
 import { NextResponse } from "next/server";
-import { createServiceSupabaseClient } from "@/lib/supabase/server";
+import { readFallbackPlan } from "@/lib/fallback/mvp-store";
+import {
+  createServiceSupabaseClient,
+  hasSupabaseEnvironment,
+} from "@/lib/supabase/server";
 
 export async function GET(
   _req: Request,
   { params }: { params: Promise<{ code: string }> },
 ) {
   const { code } = await params;
+
+  if (!hasSupabaseEnvironment()) {
+    const data = readFallbackPlan(code);
+    if (!data) {
+      return NextResponse.json({ error: "PLAN_NOT_FOUND" }, { status: 404 });
+    }
+    return NextResponse.json(data);
+  }
+
   const supabase = createServiceSupabaseClient();
   const { data: plan } = await supabase
     .from("plans")

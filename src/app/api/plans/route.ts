@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
+import { createFallbackPlan } from "@/lib/fallback/mvp-store";
 import { generateToken, hashToken } from "@/lib/security/tokens";
-import { createServiceSupabaseClient } from "@/lib/supabase/server";
+import {
+  createServiceSupabaseClient,
+  hasSupabaseEnvironment,
+} from "@/lib/supabase/server";
 import { createPlanSchema } from "@/lib/validation/schemas";
 
 function generateCode(): string {
@@ -13,6 +17,10 @@ export async function POST(req: Request) {
 
   if (!parsed.success) {
     return NextResponse.json({ error: "INVALID_INPUT" }, { status: 400 });
+  }
+
+  if (!hasSupabaseEnvironment()) {
+    return NextResponse.json(await createFallbackPlan(parsed.data));
   }
 
   const supabase = createServiceSupabaseClient();

@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
+import { createFallbackParticipant } from "@/lib/fallback/mvp-store";
 import { generateToken, hashToken } from "@/lib/security/tokens";
-import { createServiceSupabaseClient } from "@/lib/supabase/server";
+import {
+  createServiceSupabaseClient,
+  hasSupabaseEnvironment,
+} from "@/lib/supabase/server";
 import { participantInputSchema } from "@/lib/validation/schemas";
 
 export async function POST(
@@ -13,6 +17,20 @@ export async function POST(
 
   if (!parsed.success) {
     return NextResponse.json({ error: "INVALID_INPUT" }, { status: 400 });
+  }
+
+  if (!hasSupabaseEnvironment()) {
+    const result = await createFallbackParticipant(code, parsed.data);
+    if (!result.ok) {
+      return NextResponse.json(
+        { error: result.error },
+        { status: result.status },
+      );
+    }
+    return NextResponse.json({
+      participantId: result.participantId,
+      editToken: result.editToken,
+    });
   }
 
   const supabase = createServiceSupabaseClient();

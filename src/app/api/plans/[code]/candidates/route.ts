@@ -1,5 +1,12 @@
 import { NextResponse } from "next/server";
-import { createServiceSupabaseClient } from "@/lib/supabase/server";
+import {
+  readFallbackCandidates,
+  saveFallbackCandidate,
+} from "@/lib/fallback/mvp-store";
+import {
+  createServiceSupabaseClient,
+  hasSupabaseEnvironment,
+} from "@/lib/supabase/server";
 import { verifyManagementTokenForPlan } from "@/lib/security/management-token";
 import { candidateCityInputSchema } from "@/lib/validation/schemas";
 
@@ -12,6 +19,15 @@ export async function GET(
   { params }: { params: Promise<{ code: string }> },
 ) {
   const { code } = await params;
+
+  if (!hasSupabaseEnvironment()) {
+    const candidates = readFallbackCandidates(code);
+    if (!candidates) {
+      return NextResponse.json({ error: "PLAN_NOT_FOUND" }, { status: 404 });
+    }
+    return NextResponse.json({ candidates });
+  }
+
   const supabase = createServiceSupabaseClient();
   const { data: plan } = await supabase
     .from("plans")
@@ -54,9 +70,35 @@ export async function POST(
     return NextResponse.json({ error: "INVALID_INPUT" }, { status: 400 });
   }
 
+  if (!hasSupabaseEnvironment()) {
+    saveFallbackCandidate({
+      planId: verified.planId,
+      cityCode: parsed.data.cityCode,
+      cityName: parsed.data.cityName,
+      enabled: parsed.data.enabled,
+    });
+    return NextResponse.json({ ok: true });
+  }
+
   const supabase = createServiceSupabaseClient();
   const source = parsed.data.enabled ? "manual_add" : "manual_exclude";
-  const { error } = await supabase.from("candidate_cities").upsert(
+  const oppositeSource = parsed.data.enabled ? "manual_exclude" : "manual_add";
+  const candidateQuery = supabase.from("candidate_cities");
+  const { error: deleteError } = await candidateQuery
+    .delete()
+    .eq("plan_id", verified.planId)
+    .eq("city_code", parsed.data.cityCode)
+    .eq("source", oppositeSource);
+
+  if (deleteError) {
+    console.error("delete opposite candidate city error", deleteError);
+    return NextResponse.json(
+      { error: "SAVE_CANDIDATE_FAILED" },
+      { status: 500 },
+    );
+  }
+
+  const { error } = await candidateQuery.upsert(
     {
       plan_id: verified.planId,
       city_code: parsed.data.cityCode,

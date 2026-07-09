@@ -26,3 +26,11 @@ body {
   color: var(--foreground);
   font-family: var(--app-font-sans);
 }
+
+.scrollbar-none {
+  scrollbar-width: none;
+}
+
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}

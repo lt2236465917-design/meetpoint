@@ -42,7 +42,7 @@ describe("Task 10 UI components", () => {
           city_name: "南京",
           total_price_cny: 1200,
           avg_price_cny: 400,
-          labels: ["均衡", "省时"],
+          labels: ["balanced", "fastest"],
           explanation: "三人整体路程接近，价格差距较小。",
           risk_summary: "含估算票价",
           estimate_penalty: 8,
@@ -55,6 +55,7 @@ describe("Task 10 UI components", () => {
     expect(html).toContain("南京");
     expect(html).toContain("¥1200");
     expect(html).toContain("人均 ¥400");
+    expect(html).toContain("综合最优 / 省时优先");
     expect(html).toContain("含估算");
     expect(html).toContain("等待较久");
     expect(html).toContain("三人整体路程接近，价格差距较小。");

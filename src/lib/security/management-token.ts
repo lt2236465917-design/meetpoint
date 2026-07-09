@@ -1,4 +1,6 @@
 import { createServiceSupabaseClient } from "@/lib/supabase/server";
+import { verifyFallbackManagementToken } from "@/lib/fallback/mvp-store";
+import { hasSupabaseEnvironment } from "@/lib/supabase/server";
 import { verifyToken } from "./tokens";
 
 export type ManagementTokenResult =
@@ -15,6 +17,10 @@ export async function verifyManagementTokenForPlan(
       status: 401,
       error: "MANAGEMENT_TOKEN_REQUIRED",
     };
+  }
+
+  if (!hasSupabaseEnvironment()) {
+    return verifyFallbackManagementToken(code, token);
   }
 
   const supabase = createServiceSupabaseClient();

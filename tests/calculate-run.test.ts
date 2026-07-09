@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/supabase/server", () => ({
+  hasSupabaseEnvironment: () => true,
   createServiceSupabaseClient: () => ({
     from: mocks.from,
   }),
@@ -181,6 +182,7 @@ describe("calculatePlanRecommendations", () => {
           city_code: "beijing",
           total_price_cny: 800,
           avg_price_cny: 400,
+          labels: expect.arrayContaining(["cheapest", "balanced", "fastest"]),
           explanation: "北京比较均衡。",
           risk_summary: "含估算",
         }),

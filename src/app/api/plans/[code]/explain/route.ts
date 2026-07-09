@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { explainRecommendation } from "@/lib/ai/recommendation-explainer";
-import { createServiceSupabaseClient } from "@/lib/supabase/server";
+import { explainFallbackLatestRun } from "@/lib/fallback/mvp-store";
+import {
+  createServiceSupabaseClient,
+  hasSupabaseEnvironment,
+} from "@/lib/supabase/server";
 import type { CityRecommendation } from "@/types/domain";
 
 type RecommendationRow = {
@@ -45,6 +49,18 @@ export async function POST(
   { params }: { params: Promise<{ code: string }> },
 ) {
   const { code } = await params;
+
+  if (!hasSupabaseEnvironment()) {
+    const result = await explainFallbackLatestRun(code);
+    if (!result.ok) {
+      return NextResponse.json(
+        { error: result.error },
+        { status: result.status },
+      );
+    }
+    return NextResponse.json({ ok: true, count: result.count });
+  }
+
   const supabase = createServiceSupabaseClient();
   const { data: plan } = await supabase
     .from("plans")

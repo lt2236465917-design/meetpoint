@@ -5,10 +5,12 @@ const mocks = vi.hoisted(() => ({
   from: vi.fn(),
   planSingle: vi.fn(),
   candidatesSelectEq: vi.fn(),
+  deleteEq: vi.fn(),
   upsert: vi.fn(),
 }));
 
 vi.mock("@/lib/supabase/server", () => ({
+  hasSupabaseEnvironment: () => true,
   createServiceSupabaseClient: () => ({
     from: mocks.from,
   }),
@@ -22,6 +24,22 @@ function mockPlanLookup(
   const eq = vi.fn(() => ({ single }));
   const select = vi.fn(() => ({ eq }));
   return { select, eq, single };
+}
+
+function deleteCandidateBySource() {
+  const sourceEq = vi.fn(() => mocks.deleteEq());
+  const cityCodeEq = vi.fn(() => ({ eq: sourceEq }));
+  const planIdEq = vi.fn(() => ({ eq: cityCodeEq }));
+  const deleteFn = vi.fn(() => ({ eq: planIdEq }));
+  return { delete: deleteFn, planIdEq, cityCodeEq, sourceEq };
+}
+
+function candidateMutation() {
+  const oppositeDelete = deleteCandidateBySource();
+  return {
+    ...oppositeDelete,
+    upsert: mocks.upsert,
+  };
 }
 
 describe("management token verification primitive", () => {
@@ -113,6 +131,7 @@ describe("POST /api/plans/[code]/candidates", () => {
     mocks.from.mockReset();
     mocks.planSingle.mockReset();
     mocks.candidatesSelectEq.mockReset();
+    mocks.deleteEq.mockReset();
     mocks.upsert.mockReset();
   });
 
@@ -138,15 +157,17 @@ describe("POST /api/plans/[code]/candidates", () => {
     expect(mocks.upsert).not.toHaveBeenCalled();
   });
 
-  it("upserts manual candidate city controls for a verified host", async () => {
+  it("deletes the opposite candidate action before upserting a verified host action", async () => {
     const planLookup = mockPlanLookup({
       id: "plan-1",
       management_token_hash: await hashToken("manage-secret"),
     });
+    const mutation = candidateMutation();
+    mocks.deleteEq.mockResolvedValue({ error: null });
     mocks.upsert.mockResolvedValue({ error: null });
     mocks.from
       .mockReturnValueOnce({ select: planLookup.select })
-      .mockReturnValueOnce({ upsert: mocks.upsert });
+      .mockReturnValueOnce(mutation);
 
     const { POST } = await import("@/app/api/plans/[code]/candidates/route");
     const response = await POST(
@@ -167,6 +188,16 @@ describe("POST /api/plans/[code]/candidates", () => {
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({ ok: true });
+    expect(mutation.delete).toHaveBeenCalledWith();
+    expect(mutation.planIdEq).toHaveBeenCalledWith("plan_id", "plan-1");
+    expect(mutation.cityCodeEq).toHaveBeenCalledWith(
+      "city_code",
+      "hangzhou",
+    );
+    expect(mutation.sourceEq).toHaveBeenCalledWith(
+      "source",
+      "manual_add",
+    );
     expect(mocks.upsert).toHaveBeenCalledWith(
       {
         plan_id: "plan-1",
@@ -186,6 +217,7 @@ describe("GET /api/plans/[code]/candidates", () => {
     mocks.from.mockReset();
     mocks.planSingle.mockReset();
     mocks.candidatesSelectEq.mockReset();
+    mocks.deleteEq.mockReset();
     mocks.upsert.mockReset();
   });
 

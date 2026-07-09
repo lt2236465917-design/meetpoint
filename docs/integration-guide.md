@@ -6,8 +6,23 @@ This guide is the quick reference for running and calling the MVP locally.
 
 1. Install dependencies with `npm install`.
 2. Copy `.env.example` to `.env.local`.
-3. Fill Supabase variables before calling persistence-backed routes.
+3. Fill Supabase variables for persistent Supabase-backed runs. Without Supabase variables, the app uses an in-memory fallback store for local smoke testing.
 4. Run the app with `npm run dev`.
+
+The same user-facing routes are mobile-first and desktop responsive. On desktop, they should open as a centered phone-sized H5 canvas, not as a wide document page.
+
+## Local Fallback Mode
+
+If `NEXT_PUBLIC_SUPABASE_URL` or `SUPABASE_SERVICE_ROLE_KEY` is missing, create, participant, candidate, calculate, and result routes use the server-side in-memory fallback store.
+
+Use this mode to test the product flow before provisioning Supabase:
+
+1. Open `/create` and create a plan.
+2. Use the public link to submit at least two participants.
+3. Open `/p/[code]/manage`, enter the returned management token, and calculate.
+4. Open `/p/[code]/result`.
+
+Fallback data is cleared when the dev server restarts. Use Supabase variables for persistent handoff or deployment testing.
 
 ## Environment Variables
 
@@ -163,3 +178,12 @@ Returns:
 3. Open `/p/[code]/manage`, enter the management token, optionally edit candidate cities, and start calculation.
 4. Open `/p/[code]/result`, confirm recommendation cards render explanations and stale-result warnings appear when applicable.
 5. Optionally call `POST /api/plans/[code]/explain` and confirm the response count matches the latest run's recommendation rows.
+
+## Responsive UI Checks
+
+Use these checks after layout or component changes:
+
+1. Open `/` at a desktop viewport around `1440x1000`; confirm the page appears as a centered phone-sized H5 canvas and no bottom-left Next.js `N` indicator appears.
+2. Open `/create` at a mobile viewport around `390x844`; confirm the shell fills the visible screen height and the form remains a single-column H5 workflow.
+3. Open `/p/[code]`, `/p/[code]/join`, `/p/[code]/manage`, and `/p/[code]/result` on desktop; confirm each route stays in the centered H5 canvas and does not switch to multi-column desktop layout.
+4. Confirm no browser or framework overlay visually covers the right side of the app. If a red overlay appears while the DOM has no app-level fixed red element, check browser extensions before changing app CSS.

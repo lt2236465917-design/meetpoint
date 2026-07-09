@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/supabase/server", () => ({
+  hasSupabaseEnvironment: () => true,
   createServiceSupabaseClient: () => ({
     from: mocks.from,
   }),

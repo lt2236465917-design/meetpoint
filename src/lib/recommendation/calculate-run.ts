@@ -1,7 +1,14 @@
 import { generateCandidateCities } from "@/lib/city/candidate-generator";
 import { explainRecommendation } from "@/lib/ai/recommendation-explainer";
-import { scoreCandidateCity } from "@/lib/recommendation/scoring";
-import { createServiceSupabaseClient } from "@/lib/supabase/server";
+import { calculateFallbackRecommendations } from "@/lib/fallback/mvp-store";
+import {
+  pickPrimaryRecommendations,
+  scoreCandidateCity,
+} from "@/lib/recommendation/scoring";
+import {
+  createServiceSupabaseClient,
+  hasSupabaseEnvironment,
+} from "@/lib/supabase/server";
 import { FlyAITravelProvider } from "@/lib/travel/flyai-provider";
 import type { TravelOption } from "@/types/domain";
 
@@ -50,6 +57,10 @@ export async function calculatePlanRecommendations({
 }: {
   code: string;
 }) {
+  if (!hasSupabaseEnvironment()) {
+    return calculateFallbackRecommendations(code);
+  }
+
   const supabase = createServiceSupabaseClient();
   const { data: plan } = await supabase
     .from("plans")
@@ -124,7 +135,7 @@ export async function calculatePlanRecommendations({
       .insert(allOptions.map((option) => toTravelOptionInsert(run.id, option)));
   }
 
-  const recommendations = candidates.map((candidate) =>
+  const scoredRecommendations = candidates.map((candidate) =>
     scoreCandidateCity({
       cityCode: candidate.code,
       cityName: candidate.name,
@@ -132,6 +143,16 @@ export async function calculatePlanRecommendations({
         (option) => option.candidateCityCode === candidate.code,
       ),
     }),
+  );
+  const primaryByCityCode = new Map(
+    pickPrimaryRecommendations(scoredRecommendations).map((item) => [
+      item.cityCode,
+      item,
+    ]),
+  );
+  const recommendations = scoredRecommendations.map(
+    (recommendation) =>
+      primaryByCityCode.get(recommendation.cityCode) ?? recommendation,
   );
 
   const recommendationInserts = await Promise.all(

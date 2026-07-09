@@ -1,6 +1,6 @@
 # Cross-City MeetPoint
 
-Mobile-first H5 MVP for choosing a fair cross-city meeting city for 2-6 people in China.
+Mobile-first H5 MVP for choosing a fair cross-city meeting city for 2-6 people in China. The same routes render as a centered phone-sized H5 canvas on desktop, and the app has a development fallback mode that can run the create-to-result flow without Supabase credentials.
 
 ## Scripts
 
@@ -30,6 +30,7 @@ Mobile-first H5 MVP for choosing a fair cross-city meeting city for 2-6 people i
 
 - `src/lib/city/candidate-generator.ts`: deterministic candidate-city generation from participant cities and host controls.
 - `src/lib/city/city-provider.ts`: local-first city search shell; Amap key is reserved for autocomplete/validation fallback.
+- `src/lib/fallback/mvp-store.ts`: server-side in-memory fallback store for local create-to-result smoke testing when Supabase variables are missing.
 - `src/lib/travel/types.ts`: normalized travel-provider boundary for provider adapters.
 - `src/lib/travel/estimate-provider.ts`: deterministic estimated travel option fallback using city distance and transport mode.
 - `src/lib/travel/flyai-provider.ts`: FlyAI provider shell that currently falls back to estimated options until production access is configured.
@@ -39,7 +40,9 @@ Mobile-first H5 MVP for choosing a fair cross-city meeting city for 2-6 people i
 
 ## Environment
 
-Copy `.env.example` to `.env.local` and fill server-side keys locally.
+Copy `.env.example` to `.env.local` and fill server-side keys locally for persistent Supabase-backed runs.
+
+If `NEXT_PUBLIC_SUPABASE_URL` or `SUPABASE_SERVICE_ROLE_KEY` is missing, the app uses the in-memory fallback store. This is only for local smoke testing: data is kept in the dev server process and is cleared when the server restarts.
 
 Supabase variables:
 
@@ -62,6 +65,8 @@ npm run build
 ```
 
 In managed sandboxes, `npm run build` can fail if Next/Turbopack is blocked from creating a process and binding a local port. Re-run the same command in an environment that permits local port binding before release.
+
+For UI changes, also verify a mobile viewport around `390x844` and a desktop viewport around `1440x1000`. The desktop routes should render as a centered phone-sized H5 canvas, not a wide document page or marketing page.
 
 ## MVP Verification
 
