@@ -91,8 +91,11 @@ describe("fallbackExplanation", () => {
     const explanation = fallbackExplanation(baseRecommendation);
 
     expect(explanation.short_reason).toContain("武汉");
+    expect(explanation.short_reason).toContain("团队总路费约 ¥900");
+    expect(explanation.short_reason).toContain("总耗时约 12小时");
+    expect(explanation.short_reason).toContain("费用差约 ¥120");
     expect(explanation.risk_badges).toEqual(["含估算", "含中转", "等待较久"]);
-    expect(explanation.share_summary).toContain("人均约 ¥300");
+    expect(explanation.share_summary).toContain("团队总路费约 ¥900");
     expect(explanation.detail_explanation).toContain("请在购票前重新核对实时价格");
   });
 });

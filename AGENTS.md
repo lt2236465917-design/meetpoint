@@ -9,6 +9,7 @@ This project is a mobile-first Web H5 app for multi-person cross-city meeting pl
 - Use Chinese for user-facing copy.
 - Use English for code, files, variables, and commit messages.
 - Keep ticket lookup, city ranking, and scoring deterministic.
+- Treat result rankings as shared team decisions: score one selected route per participant for each candidate city, show per-participant travel details, and do not use average fare as a UI decision metric.
 - Use DeepSeek only for explanation, risk summaries, and share text.
 - Keep secrets in server-side environment variables only.
 - Keep browser Supabase access limited to the anon client; use the service-role client only in server-side code.

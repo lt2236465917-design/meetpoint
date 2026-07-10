@@ -1,25 +1,58 @@
 "use client";
 
-import { use, useState } from "react";
-import { CityCombobox } from "@/components/forms/CityCombobox";
-import { TransportModePicker } from "@/components/forms/TransportModePicker";
+import { use, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { ResponsiveShell } from "@/components/layout/ResponsiveShell";
+import { JoinParticipantForm } from "@/components/plan/JoinParticipantForm";
 import { getApiErrorMessage } from "@/lib/ui/api-error-message";
+import { rememberMeetingHistoryItem } from "@/lib/ui/meeting-history";
 import type { TransportMode } from "@/types/domain";
 
 type JoinPlanPageProps = {
   params: Promise<{ code: string }>;
 };
 
+type PlanSummary = {
+  title: string;
+  meeting_date: string;
+  target_arrival_time: string;
+};
+
 export default function JoinPlanPage({ params }: JoinPlanPageProps) {
   const { code } = use(params);
+  const router = useRouter();
+  const [planSummary, setPlanSummary] = useState<PlanSummary | null>(null);
   const [name, setName] = useState("");
   const [city, setCity] = useState<{ code: string; name: string } | null>(null);
   const [acceptedModes, setAcceptedModes] = useState<TransportMode[]>([
     "high_speed_rail",
   ]);
   const [message, setMessage] = useState("");
+  const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadPlanSummary() {
+      try {
+        const response = await fetch(`/api/plans/${code}`, {
+          cache: "no-store",
+        });
+        if (!response.ok) return;
+        const data = (await response.json()) as { plan?: PlanSummary };
+        if (active && data.plan) setPlanSummary(data.plan);
+      } catch {
+        // Local history can fall back to the plan code if this background read fails.
+      }
+    }
+
+    void loadPlanSummary();
+
+    return () => {
+      active = false;
+    };
+  }, [code]);
 
   async function submit() {
     if (loading) return;
@@ -30,6 +63,7 @@ export default function JoinPlanPage({ params }: JoinPlanPageProps) {
 
     setLoading(true);
     setMessage("");
+    setSubmitted(false);
 
     try {
       const res = await fetch(`/api/plans/${code}/participants`, {
@@ -46,7 +80,19 @@ export default function JoinPlanPage({ params }: JoinPlanPageProps) {
 
       if (res.ok) {
         localStorage.setItem(`participant:${code}`, JSON.stringify(json));
-        setMessage("已提交，可以返回计划页查看进度。");
+        rememberMeetingHistoryItem({
+          code,
+          title: planSummary?.title ?? `见面计划 ${code}`,
+          meetingDate: planSummary?.meeting_date ?? "",
+          targetArrivalTime: planSummary?.target_arrival_time ?? "",
+          role: "participant",
+          participantEditToken: json.editToken,
+          latestRun: false,
+          lastVisitedAt: new Date().toISOString(),
+        });
+        setMessage("已提交成功，正在返回计划页。");
+        setSubmitted(true);
+        router.replace(`/p/${code}`);
         return;
       }
 
@@ -62,37 +108,27 @@ export default function JoinPlanPage({ params }: JoinPlanPageProps) {
     <ResponsiveShell
       title="填写出发信息"
       description="只需要你的出发城市和可接受交通方式，用来一起计算合适的见面城市。"
+      backHref={`/p/${code}`}
+      backLabel="返回计划页"
       aside={
         <p className="text-center text-xs leading-5 text-gray-500">
           交通方式只影响你的可接受路线，不会替别人做选择。
         </p>
       }
     >
-      <div className="space-y-4 rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-        <input
-          className="w-full rounded-lg border px-4 py-3"
-          placeholder="你的名字"
-          value={name}
-          onChange={(event) => setName(event.target.value)}
-        />
-        <CityCombobox value={city} onChange={setCity} />
-        <TransportModePicker
-          value={acceptedModes}
-          onChange={setAcceptedModes}
-        />
-        <button
-          className="w-full rounded-lg bg-black py-3 font-medium text-white disabled:opacity-60"
-          disabled={loading}
-          onClick={submit}
-        >
-          {loading ? "提交中" : "提交"}
-        </button>
-        {message && (
-          <p className="rounded-lg bg-gray-50 px-3 py-2 text-sm text-gray-700">
-            {message}
-          </p>
-        )}
-      </div>
+      <JoinParticipantForm
+        code={code}
+        name={name}
+        city={city}
+        acceptedModes={acceptedModes}
+        loading={loading}
+        submitted={submitted}
+        message={message}
+        onNameChange={setName}
+        onCityChange={setCity}
+        onAcceptedModesChange={setAcceptedModes}
+        onSubmit={submit}
+      />
     </ResponsiveShell>
   );
 }

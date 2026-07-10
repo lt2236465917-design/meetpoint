@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { ResponsiveShell } from "@/components/layout/ResponsiveShell";
 import { RecommendationCard } from "@/components/result/RecommendationCard";
 import { Notice } from "@/components/ui/Notice";
@@ -8,17 +7,35 @@ import {
   hasSupabaseEnvironment,
 } from "@/lib/supabase/server";
 
+import type { TransportMode, TravelSource } from "@/types/domain";
+
 type Recommendation = {
   id: string;
+  city_code: string;
   city_name: string;
   total_price_cny: number;
-  avg_price_cny: number;
   labels: string[];
   explanation: string | null;
   risk_summary: string | null;
   estimate_penalty: number;
   transfer_penalty: number;
   waiting_penalty: number;
+  total_duration_minutes: number;
+  fairness_gap: number;
+  participant_options?: ParticipantTravelOption[];
+};
+
+type ParticipantTravelOption = {
+  participant_name: string;
+  departure_city_name: string;
+  mode: TransportMode;
+  price_cny: number | null;
+  duration_minutes: number | null;
+  depart_at: string | null;
+  arrive_at: string | null;
+  booking_url: string | null;
+  service_name: string | null;
+  source: TravelSource;
 };
 
 function ResultContent({
@@ -40,13 +57,12 @@ function ResultContent({
     <ResponsiveShell
       title={title}
       description="优先看前三个城市：均衡、费用和风险都放在同一张卡里。"
+      backHref={`/p/${code}`}
+      backLabel="返回计划页"
       aside={
-        <div className="flex items-center justify-between gap-3 text-xs text-gray-500">
-          <span>{isStale ? "票价可能已变化" : "结果仍可参考"}</span>
-          <Link className="font-medium text-gray-700" href={`/p/${code}`}>
-            返回计划页
-          </Link>
-        </div>
+        <p className="text-center text-xs text-gray-500">
+          {isStale ? "票价可能已变化" : "结果仍可参考"}
+        </p>
       }
     >
       <div className="space-y-4">
@@ -82,6 +98,8 @@ export default async function ResultPage({
         <ResponsiveShell
           title="计划不存在"
           description="这个计划可能已失效，或链接里的计划码不正确。"
+          backHref="/"
+          backLabel="返回首页"
         >
           <Notice>请让发起人重新确认公开链接。</Notice>
         </ResponsiveShell>
@@ -115,6 +133,8 @@ export default async function ResultPage({
       <ResponsiveShell
         title="计划不存在"
         description="这个计划可能已失效，或链接里的计划码不正确。"
+        backHref="/"
+        backLabel="返回首页"
       >
         <Notice>请让发起人重新确认公开链接。</Notice>
       </ResponsiveShell>
@@ -135,6 +155,14 @@ export default async function ResultPage({
         .eq("run_id", run.id)
         .order("score_balanced", { ascending: true })
     : { data: [] };
+  const { data: travelOptions } = run
+    ? await supabase
+        .from("travel_options")
+        .select(
+          "participant_id,candidate_city_code,mode,source,price_cny,depart_at,arrive_at,duration_minutes,booking_url,service_name,participants(name,departure_city_name)",
+        )
+        .eq("run_id", run.id)
+    : { data: [] };
   const isStale =
     Boolean(run?.stale_after) &&
     new Date(run.stale_after).getTime() < new Date().getTime();
@@ -145,7 +173,79 @@ export default async function ResultPage({
       title={plan.title}
       hasRun={Boolean(run)}
       isStale={isStale}
-      recommendations={recommendations ?? []}
+      recommendations={attachParticipantOptions(
+        recommendations ?? [],
+        travelOptions ?? [],
+      )}
     />
   );
+}
+
+function attachParticipantOptions(
+  recommendations: Recommendation[],
+  travelOptions: Array<{
+    participant_id: string;
+    candidate_city_code: string;
+    mode: TransportMode;
+    source: TravelSource;
+    price_cny: number | null;
+    depart_at: string | null;
+    arrive_at: string | null;
+    duration_minutes: number | null;
+    booking_url: string | null;
+    service_name: string | null;
+    participants?:
+      | { name: string; departure_city_name: string }
+      | Array<{ name: string; departure_city_name: string }>
+      | null;
+  }>,
+) {
+  return recommendations.map((recommendation) => ({
+    ...recommendation,
+    participant_options: selectParticipantOptions(
+      travelOptions.filter(
+        (option) => option.candidate_city_code === recommendation.city_code,
+      ),
+    ),
+  }));
+}
+
+function selectParticipantOptions(
+  options: Parameters<typeof attachParticipantOptions>[1],
+): ParticipantTravelOption[] {
+  const selected = new Map<string, (typeof options)[number]>();
+
+  for (const option of options) {
+    const existing = selected.get(option.participant_id);
+    if (!existing || optionScore(option) < optionScore(existing)) {
+      selected.set(option.participant_id, option);
+    }
+  }
+
+  return Array.from(selected.values()).map((option) => {
+    const participant = Array.isArray(option.participants)
+      ? option.participants[0]
+      : option.participants;
+    return {
+      participant_name: participant?.name ?? "参与者",
+      departure_city_name: participant?.departure_city_name ?? "出发城市",
+      mode: option.mode,
+      price_cny: option.price_cny,
+      duration_minutes: option.duration_minutes,
+      depart_at: option.depart_at,
+      arrive_at: option.arrive_at,
+      booking_url: option.booking_url,
+      service_name: option.service_name,
+      source: option.source,
+    };
+  });
+}
+
+function optionScore(option: {
+  source: TravelSource;
+  price_cny: number | null;
+  duration_minutes: number | null;
+}) {
+  if (option.source === "unavailable") return 999_999;
+  return (option.price_cny ?? 0) + (option.duration_minutes ?? 0);
 }

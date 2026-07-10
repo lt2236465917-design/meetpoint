@@ -1,5 +1,4 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { verifyToken } from "@/lib/security/tokens";
 
 const mocks = vi.hoisted(() => ({
   from: vi.fn(),
@@ -35,7 +34,7 @@ describe("POST /api/plans", () => {
     expect(mocks.insert).not.toHaveBeenCalled();
   });
 
-  it("creates a plan and returns management details", async () => {
+  it("creates a plan and returns only the public share details", async () => {
     const { POST } = await import("@/app/api/plans/route");
     const response = await POST(
       new Request("http://localhost/api/plans", {
@@ -54,7 +53,7 @@ describe("POST /api/plans", () => {
 
     expect(response.status).toBe(200);
     expect(json.code).toMatch(/^[A-Z0-9]{6}$/);
-    expect(json.manageToken).toMatch(/^[A-Za-z0-9_-]{32,}$/);
+    expect(json.manageToken).toBeUndefined();
     expect(json.shareUrl).toBe(`/p/${json.code}`);
     expect(mocks.from).toHaveBeenCalledWith("plans");
     expect(mocks.insert).toHaveBeenCalledTimes(1);
@@ -67,8 +66,31 @@ describe("POST /api/plans", () => {
       participant_limit: 4,
       status: "collecting",
     });
-    await expect(
-      verifyToken(json.manageToken, inserted.management_token_hash),
-    ).resolves.toBe(true);
+    expect(inserted.management_token_hash).toBeUndefined();
+  });
+
+  it("returns a LAN share URL when a local dev request comes from localhost", async () => {
+    const { POST } = await import("@/app/api/plans/route");
+    const response = await POST(
+      new Request("http://localhost:3000/api/plans", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          host: "localhost:3000",
+        },
+        body: JSON.stringify({
+          title: "上海周末见面",
+          meetingDate: "2026-08-15",
+          targetArrivalTime: "18:00",
+          participantLimit: 4,
+        }),
+      }),
+    );
+
+    const json = await response.json();
+
+    expect(json.shareUrl).toMatch(
+      /^http:\/\/(?!localhost)(?!127\.0\.0\.1).+\/p\/[A-Z0-9]{6}$/,
+    );
   });
 });

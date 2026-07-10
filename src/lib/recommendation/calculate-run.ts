@@ -47,6 +47,7 @@ function toTravelOptionInsert(runId: string, option: TravelOption) {
     is_direct: option.isDirect,
     has_transfer: option.hasTransfer,
     transfer_count: option.transferCount,
+    service_name: option.serviceName,
     booking_url: option.bookingUrl,
     failure_reason: option.failureReason,
   };

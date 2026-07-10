@@ -6,19 +6,23 @@ import { searchLocalCities } from "@/data/cities";
 export function CityCombobox({
   value,
   onChange,
+  label,
   placeholder = "选择城市",
 }: {
   value: { code: string; name: string } | null;
   onChange: (city: { code: string; name: string } | null) => void;
+  label?: string;
   placeholder?: string;
 }) {
   const [query, setQuery] = useState(value?.name ?? "");
   const results = useMemo(() => searchLocalCities(query), [query]);
+  const showResults = results.length > 0 && query.trim() !== value?.name;
 
   return (
-    <div className="relative">
+    <div className="space-y-1.5">
       <input
         className="w-full rounded-lg border px-4 py-3"
+        aria-label={label ?? placeholder}
         placeholder={placeholder}
         value={query}
         onChange={(event) => {
@@ -27,8 +31,8 @@ export function CityCombobox({
           if (value && nextQuery !== value.name) onChange(null);
         }}
       />
-      {results.length > 0 && (
-        <div className="absolute z-10 mt-1 max-h-64 w-full overflow-auto rounded-lg border bg-white shadow-lg">
+      {showResults && (
+        <div className="max-h-48 w-full overflow-auto rounded-lg border bg-white shadow-sm">
           {results.map((city) => (
             <button
               type="button"

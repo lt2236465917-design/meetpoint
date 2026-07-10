@@ -11,6 +11,8 @@ This guide is the quick reference for running and calling the MVP locally.
 
 The same user-facing routes are mobile-first and desktop responsive. On desktop, they should open as a centered phone-sized H5 canvas, not as a wide document page.
 
+For real-phone testing, open the Network URL printed by `npm run dev`, for example `http://192.168.31.69:3000`. That LAN origin is allowed in `next.config.ts` so the phone can load Next.js development resources and keep client-side form submission behavior.
+
 ## Local Fallback Mode
 
 If `NEXT_PUBLIC_SUPABASE_URL` or `SUPABASE_SERVICE_ROLE_KEY` is missing, create, participant, candidate, calculate, and result routes use the server-side in-memory fallback store.
@@ -18,11 +20,15 @@ If `NEXT_PUBLIC_SUPABASE_URL` or `SUPABASE_SERVICE_ROLE_KEY` is missing, create,
 Use this mode to test the product flow before provisioning Supabase:
 
 1. Open `/create` and create a plan.
-2. Use the public link to submit at least two participants.
-3. Open `/p/[code]/manage`, enter the returned management token, and calculate.
-4. Open `/p/[code]/result`.
+2. Return to `/` and confirm the plan appears in recent meeting records on the same device.
+3. Use the public link to submit participants until the plan reaches its participant limit.
+4. Keep `/p/[code]` open and confirm the filling records refresh without manually reloading the browser.
+5. On a device that filled the plan, use `/p/[code]` to calculate after the plan is full.
+6. Open `/p/[code]/result`.
 
 Fallback data is cleared when the dev server restarts. Use Supabase variables for persistent handoff or deployment testing.
+
+Recent meeting records are browser-local convenience data stored in `localStorage`. They help the same device return to plans that were created, opened, or joined, but they are not shared across devices and are not a security boundary.
 
 ## Environment Variables
 
@@ -56,10 +62,11 @@ Returns:
 ```json
 {
   "code": "ABC123",
-  "manageToken": "host-management-token",
-  "shareUrl": "/p/ABC123"
+  "shareUrl": "http://192.168.31.69:3000/p/ABC123"
 }
 ```
+
+When the create request comes from `localhost` in local development, `shareUrl` uses the first available LAN IPv4 address so the copied link can open on a phone on the same network. In non-localhost environments, it uses the request host. If no host or LAN address is available, it falls back to `/p/[code]`.
 
 ### Read Plan
 
@@ -104,23 +111,7 @@ Returns stored manual add/exclude controls.
 
 `POST /api/plans/[code]/candidates`
 
-Requires header:
-
-```text
-x-management-token: <manageToken>
-```
-
-Body:
-
-```json
-{
-  "cityCode": "hangzhou",
-  "cityName": "杭州",
-  "enabled": true
-}
-```
-
-Set `enabled` to `false` to exclude a city.
+Currently returns `410` with `CANDIDATE_EDITING_UNAVAILABLE`. Manual candidate editing needs a new non-management-token permission model before it is re-enabled.
 
 ### Calculate Recommendations
 
@@ -129,8 +120,10 @@ Set `enabled` to `false` to exclude a city.
 Requires header:
 
 ```text
-x-management-token: <manageToken>
+x-participant-token: <editToken>
 ```
+
+The token must belong to a participant who filled this plan, and the participant count must have reached the plan's participant limit.
 
 Returns:
 
@@ -142,6 +135,8 @@ Returns:
 ```
 
 Calculation also stores recommendation `explanation` and `risk_summary` fields for the result page.
+
+Result rankings are shared for the whole plan. The result page shows the same top city recommendations to every participant, then breaks each card down into selected per-participant routes. In estimate mode these rows use deterministic fallback prices; after FlyAI/Amap or another ticket source is wired, the same `travel_options` rows can carry train or flight service names, real prices, and booking URLs.
 
 ### Regenerate Recommendation Explanations
 
@@ -165,19 +160,22 @@ Returns:
 | `INVALID_INPUT` | Request body failed validation. |
 | `PLAN_NOT_FOUND` | The plan code does not exist. |
 | `PARTICIPANT_LIMIT_REACHED` | The plan already has the maximum participant count. |
-| `MANAGEMENT_TOKEN_REQUIRED` | Host-only route was called without `x-management-token`. |
-| `INVALID_MANAGEMENT_TOKEN` | Host token did not match the stored hash. |
-| `SAVE_CANDIDATE_FAILED` | Candidate-city control persistence failed. |
+| `PARTICIPANT_TOKEN_REQUIRED` | Calculation was called without `x-participant-token`. |
+| `INVALID_PARTICIPANT_TOKEN` | The participant token does not belong to this plan. |
+| `PARTICIPANT_LIMIT_NOT_REACHED` | The plan is not full yet, so calculation is not allowed. |
+| `CANDIDATE_EDITING_UNAVAILABLE` | Manual candidate editing is disabled in the current flow. |
 | `CALCULATION_FAILED` | Recommendation calculation failed. |
 | `RUN_NOT_FOUND` | No recommendation run exists for the plan. |
 
 ## Manual Smoke Path
 
-1. Open `/create`, create a plan, and save the management token.
-2. Open `/p/[code]/join`, submit at least two participants.
-3. Open `/p/[code]/manage`, enter the management token, optionally edit candidate cities, and start calculation.
-4. Open `/p/[code]/result`, confirm recommendation cards render explanations and stale-result warnings appear when applicable.
-5. Optionally call `POST /api/plans/[code]/explain` and confirm the response count matches the latest run's recommendation rows.
+1. Open `/create`, create a plan, and copy the public link.
+2. Return to `/` and confirm the created plan appears in recent meeting records.
+3. Open `/p/[code]/join`, submit participants until the plan reaches its participant limit.
+4. After each participant submit, confirm the browser returns to `/p/[code]` and the filling records update without a manual refresh.
+5. When the participant limit is reached on a device that filled the plan, use the public plan page's direct "开始计算" action.
+6. Open `/p/[code]/result`, confirm recommendation cards render explanations, team total fare, total duration, fairness gap, per-participant travel details, and stale-result warnings when applicable.
+7. Optionally call `POST /api/plans/[code]/explain` and confirm the response count matches the latest run's recommendation rows.
 
 ## Responsive UI Checks
 
@@ -185,5 +183,6 @@ Use these checks after layout or component changes:
 
 1. Open `/` at a desktop viewport around `1440x1000`; confirm the page appears as a centered phone-sized H5 canvas and no bottom-left Next.js `N` indicator appears.
 2. Open `/create` at a mobile viewport around `390x844`; confirm the shell fills the visible screen height and the form remains a single-column H5 workflow.
-3. Open `/p/[code]`, `/p/[code]/join`, `/p/[code]/manage`, and `/p/[code]/result` on desktop; confirm each route stays in the centered H5 canvas and does not switch to multi-column desktop layout.
-4. Confirm no browser or framework overlay visually covers the right side of the app. If a red overlay appears while the DOM has no app-level fixed red element, check browser extensions before changing app CSS.
+3. Open `/p/[code]`, `/p/[code]/join`, and `/p/[code]/result` on desktop; confirm each route stays in the centered H5 canvas and does not switch to multi-column desktop layout.
+4. On `/p/[code]/join`, type a departure city, confirm city candidates do not cover the transport-mode buttons, then select a city and confirm the candidates disappear.
+5. Confirm no browser or framework overlay visually covers the right side of the app. If a red overlay appears while the DOM has no app-level fixed red element, check browser extensions before changing app CSS.

@@ -18,7 +18,7 @@ describe("fallback MVP flow without Supabase environment variables", () => {
           title: "上海周末见面",
           meetingDate: "2026-08-15",
           targetArrivalTime: "18:00",
-          participantLimit: 4,
+          participantLimit: 2,
         }),
       }),
     );
@@ -26,11 +26,12 @@ describe("fallback MVP flow without Supabase environment variables", () => {
 
     expect(createResponse.status).toBe(200);
     expect(created.code).toMatch(/^[A-Z0-9]{6}$/);
-    expect(created.manageToken).toMatch(/^[A-Za-z0-9_-]{32,}$/);
+    expect(created.manageToken).toBeUndefined();
 
     const { POST: joinPlan } = await import(
       "@/app/api/plans/[code]/participants/route"
     );
+    let participantToken = "";
     for (const participant of [
       {
         name: "李雷",
@@ -58,10 +59,12 @@ describe("fallback MVP flow without Supabase environment variables", () => {
       );
 
       expect(joinResponse.status).toBe(200);
-      await expect(joinResponse.json()).resolves.toEqual({
+      const joined = await joinResponse.json();
+      expect(joined).toEqual({
         participantId: expect.any(String),
         editToken: expect.stringMatching(/^[A-Za-z0-9_-]{32,}$/),
       });
+      participantToken ||= joined.editToken;
     }
 
     const { POST: calculate } = await import(
@@ -70,7 +73,7 @@ describe("fallback MVP flow without Supabase environment variables", () => {
     const calculateResponse = await calculate(
       new Request(`http://localhost/api/plans/${created.code}/calculate`, {
         method: "POST",
-        headers: { "x-management-token": created.manageToken },
+        headers: { "x-participant-token": participantToken },
       }),
       { params: Promise.resolve({ code: created.code }) },
     );
@@ -148,25 +151,25 @@ describe("fallback MVP flow without Supabase environment variables", () => {
       "@/app/api/plans/[code]/candidates/route"
     );
 
-    for (const enabled of [false, true]) {
-      const response = await saveCandidate(
-        new Request(`http://localhost/api/plans/${created.code}/candidates`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-management-token": created.manageToken,
-          },
-          body: JSON.stringify({
-            cityCode: "hangzhou",
-            cityName: "杭州",
-            enabled,
-          }),
+    const response = await saveCandidate(
+      new Request(`http://localhost/api/plans/${created.code}/candidates`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          cityCode: "hangzhou",
+          cityName: "杭州",
+          enabled: true,
         }),
-        { params: Promise.resolve({ code: created.code }) },
-      );
+      }),
+      { params: Promise.resolve({ code: created.code }) },
+    );
 
-      expect(response.status).toBe(200);
-    }
+    expect(response.status).toBe(410);
+    await expect(response.json()).resolves.toEqual({
+      error: "CANDIDATE_EDITING_UNAVAILABLE",
+    });
 
     const readResponse = await readCandidates(
       new Request(`http://localhost/api/plans/${created.code}/candidates`),
@@ -174,12 +177,6 @@ describe("fallback MVP flow without Supabase environment variables", () => {
     );
     const read = await readResponse.json();
 
-    expect(read.candidates.filter((item: { city_code: string }) => item.city_code === "hangzhou")).toEqual([
-      expect.objectContaining({
-        city_code: "hangzhou",
-        source: "manual_add",
-        enabled: true,
-      }),
-    ]);
+    expect(read.candidates).toEqual([]);
   });
 });

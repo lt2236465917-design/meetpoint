@@ -129,6 +129,7 @@ describe("calculatePlanRecommendations", () => {
           isDirect: true,
           hasTransfer: false,
           transferCount: 0,
+          serviceName: null,
           bookingUrl: null,
           failureReason: null,
         },

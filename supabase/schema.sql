@@ -7,7 +7,6 @@ create table if not exists plans (
   meeting_date date not null,
   target_arrival_time text not null,
   participant_limit integer not null check (participant_limit between 2 and 6),
-  management_token_hash text not null,
   status text not null default 'collecting',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
@@ -64,6 +63,7 @@ create table if not exists travel_options (
   is_direct boolean not null default false,
   has_transfer boolean not null default false,
   transfer_count integer not null default 0,
+  service_name text,
   booking_url text,
   failure_reason text,
   raw_payload_ref text

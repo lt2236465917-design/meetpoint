@@ -1,16 +1,16 @@
 import { NextResponse } from "next/server";
 import { calculatePlanRecommendations } from "@/lib/recommendation/calculate-run";
-import { verifyManagementTokenForPlan } from "@/lib/security/management-token";
+import { verifyParticipantCanCalculatePlan } from "@/lib/security/participant-calculation";
 
 export async function POST(
   req: Request,
   { params }: { params: Promise<{ code: string }> },
 ) {
   const { code } = await params;
-  const verified = await verifyManagementTokenForPlan(
+  const verified = await verifyParticipantCanCalculatePlan({
     code,
-    req.headers.get("x-management-token"),
-  );
+    participantToken: req.headers.get("x-participant-token"),
+  });
 
   if (!verified.ok) {
     return NextResponse.json(

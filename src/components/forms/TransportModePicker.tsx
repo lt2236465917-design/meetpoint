@@ -1,11 +1,12 @@
 "use client";
 
 import type { TransportMode } from "@/types/domain";
+import { transportModeLabels } from "@/lib/ui/transport-modes";
 
 const modes: Array<{ value: TransportMode; label: string }> = [
-  { value: "flight", label: "飞机" },
-  { value: "high_speed_rail", label: "高铁/动车" },
-  { value: "normal_train", label: "普速火车" },
+  { value: "flight", label: transportModeLabels.flight },
+  { value: "high_speed_rail", label: transportModeLabels.high_speed_rail },
+  { value: "normal_train", label: transportModeLabels.normal_train },
 ];
 
 export function TransportModePicker({

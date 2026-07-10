@@ -14,12 +14,12 @@ This document is the stable technical map for the MVP. Detailed task history liv
 
 | Route | Purpose |
 | --- | --- |
-| `/` | Focused creation entry for the H5 app. |
-| `/create` | Host creates a plan and receives the public link plus management token. |
-| `/p/[code]` | Public plan summary, participant completion state, join entry, and result entry. |
-| `/p/[code]/join` | Participant submits name, departure city, and accepted transport modes. |
-| `/p/[code]/manage` | Host enters the management token, edits candidate-city controls, and starts calculation. |
-| `/p/[code]/result` | Shows the latest recommendation run, stale-result warning, and top recommendation cards. |
+| `/` | Focused creation entry plus browser-local recent meeting records for plans opened on this device. |
+| `/create` | Host creates a plan, receives a phone-openable public link, and saves the plan to local recent records. |
+| `/p/[code]` | Public plan summary, auto-refreshed participant completion state, filling records, join entry, result entry, and direct calculation for local participants once the participant limit is reached. |
+| `/p/[code]/join` | Participant submits name, departure city, and accepted transport modes, then returns to the public plan page automatically. |
+| `/p/[code]/manage` | Legacy route that points users back to the public plan page. |
+| `/p/[code]/result` | Shows the latest shared team recommendation run, stale-result warning, team total fare, total duration, fairness gap, and per-participant travel details. |
 
 ## API Routes
 
@@ -29,22 +29,23 @@ This document is the stable technical map for the MVP. Detailed task history liv
 | `/api/plans/[code]` | `GET` | Read plan metadata, participants, and latest run. | None |
 | `/api/plans/[code]/participants` | `POST` | Submit participant city and transport preferences. | None |
 | `/api/plans/[code]/candidates` | `GET` | Read stored candidate-city controls. | None |
-| `/api/plans/[code]/candidates` | `POST` | Add or exclude a candidate city. | `x-management-token` |
-| `/api/plans/[code]/calculate` | `POST` | Run deterministic recommendation calculation. | `x-management-token` |
+| `/api/plans/[code]/candidates` | `POST` | Currently unavailable for manual edits. | None |
+| `/api/plans/[code]/calculate` | `POST` | Run deterministic recommendation calculation after the participant limit is reached. | `x-participant-token` |
 | `/api/plans/[code]/explain` | `POST` | Regenerate explanations for the latest recommendation run. | None |
 | `/api/cities/search` | `GET` | Search built-in city data by query. | None |
 
 ## Data Flow
 
-1. Host creates a row in `plans`; the management token is returned once and only its hash is stored.
-2. Participants submit rows in `participants`; each edit token is returned once and only its hash is stored.
-3. Host candidate controls are stored in `candidate_cities` as `manual_add` or `manual_exclude`.
-4. Manual calculation generates candidate cities, queries the travel provider boundary, scores candidates, and writes:
+1. Host creates a row in `plans`; the public share URL is returned and the creating browser stores the plan in local recent records.
+2. Participants submit rows in `participants`; each edit token is returned once and only its hash is stored. The public plan page polls `GET /api/plans/[code]` so filling records appear without a manual browser refresh.
+3. Candidate controls can be read from `candidate_cities`; manual candidate editing is disabled in the current no-management-token flow.
+4. Manual calculation generates candidate cities, queries the travel provider boundary, scores each candidate city from one selected route per participant, and writes:
    - `recommendation_runs`
    - `travel_options`
    - `city_recommendations`, including DeepSeek/fallback explanation fields
 5. The explain API can regenerate explanation and risk-summary fields for the latest run without changing deterministic scores.
-6. Result pages read the latest run and city recommendations. Results become stale after 30 minutes.
+6. Result pages read the latest run, city recommendations, and matching `travel_options`. Every viewer sees the same shared city ranking for the plan; each card expands the decision with selected per-participant routes. Results become stale after 30 minutes.
+7. The browser stores local recent meeting records in `localStorage` when a plan is created, opened, or joined. Participant records keep the participant edit token on the filling device so the public plan page can show direct calculation after the plan is full. This is a convenience layer only and is not a server-side history.
 
 In fallback mode, the same logical records are kept in process memory instead of Supabase. Fallback mode is non-persistent and exists only for local smoke testing.
 
@@ -53,22 +54,29 @@ In fallback mode, the same logical records are kept in process memory instead of
 | Module | Responsibility |
 | --- | --- |
 | `src/components/layout/ResponsiveShell.tsx` | Shared mobile-first page shell with a viewport-height H5 canvas, centered on desktop. |
+| `src/components/plan/PublicPlanContent.tsx` | Client public-plan content that keeps participant status fresh by polling the read-plan API. |
+| `src/components/plan/JoinParticipantForm.tsx` | Participant submission form with labeled controls and a post-submit return action. |
+| `src/components/plan/RecentMeetingRecords.tsx` | Homepage local recent-record list backed by `useSyncExternalStore` and cached snapshots. |
 | `src/lib/city/candidate-generator.ts` | Deterministic candidate-city generation from participant cities and host controls. |
 | `src/lib/city/city-provider.ts` | Local-first city search; Amap is reserved for autocomplete/validation fallback. |
 | `src/lib/fallback/mvp-store.ts` | In-memory local fallback persistence for create-to-result smoke testing without Supabase credentials. |
-| `src/lib/travel/types.ts` | Vendor-neutral travel-provider interface and normalized option types. |
+| `src/lib/travel/types.ts` | Vendor-neutral travel-provider interface and normalized option types, including service names and booking URLs for real ticket sources. |
 | `src/lib/travel/estimate-provider.ts` | Deterministic estimated option fallback. |
 | `src/lib/travel/flyai-provider.ts` | FlyAI provider shell; falls back to estimates until production access is configured. |
-| `src/lib/recommendation/scoring.ts` | Deterministic scoring and primary recommendation selection. |
+| `src/lib/recommendation/scoring.ts` | Deterministic scoring and primary recommendation selection from one selected route per participant for each candidate city. |
 | `src/lib/recommendation/calculate-run.ts` | Calculation orchestration, explanation generation, and Supabase persistence. |
 | `src/lib/ai/recommendation-explainer.ts` | DeepSeek explanation shell with deterministic fallback copy. |
+| `src/lib/ui/meeting-history.ts` | Browser-local recent-record parsing, dedupe, snapshot caching, and storage helpers. |
 
 ## Security Boundaries
 
 - Keep service-role Supabase access in server-side code only.
 - Keep `SUPABASE_SERVICE_ROLE_KEY`, `AMAP_API_KEY`, `DEEPSEEK_API_KEY`, `FLYAI_API_KEY`, and `FLYAI_CLI_PATH` out of browser code.
-- Management and participant edit tokens are stored as hashes only.
+- Participant edit tokens are stored as hashes only.
+- Calculation requires a participant edit token from a participant in the plan, and the server checks that the participant limit has been reached before calculating.
+- Local participant permissions are a same-device convenience and not an auth boundary; server-side calculation still verifies the participant edit token hash.
 - Core ranking, ticket lookup normalization, and scoring must remain deterministic; DeepSeek may explain computed results but must not decide rankings.
+- Result recommendations are plan-level shared decisions, not personalized rankings. The UI should surface team total fare and per-person route choices instead of average fare.
 - Fallback mode is local-only and must not be treated as durable storage.
 
 ## UI Boundaries
@@ -76,7 +84,10 @@ In fallback mode, the same logical records are kept in process memory instead of
 - Keep user-facing copy in Chinese on both mobile and desktop.
 - Target routes must stay usable as product workflows on desktop; do not replace them with a marketing landing page.
 - `ResponsiveShell` is the default page shell for the main user routes. It keeps the workflow as a single-column, viewport-height H5 canvas on mobile and desktop, with the main content scrolling inside the canvas instead of stretching into a long document page.
+- Main flow pages use the `ResponsiveShell` top-left back action instead of mixing back navigation into bottom business actions.
+- City combobox candidates render in normal document flow and disappear after a city is selected so transport-mode controls remain reachable.
 - Next.js development indicators are disabled in `next.config.ts` so local browser checks do not show the bottom-left `N` overlay.
+- `next.config.ts` allows the local LAN development origin used for phone testing so client-side forms keep working when opened from the printed Network URL.
 
 ## Verification
 

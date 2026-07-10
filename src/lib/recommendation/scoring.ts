@@ -1,4 +1,8 @@
-import type { CityRecommendation, TravelOption } from "@/types/domain";
+import type {
+  CityRecommendation,
+  SelectedParticipantTravelOption,
+  TravelOption,
+} from "@/types/domain";
 
 export type ScoreCandidateCityInput = {
   cityCode: string;
@@ -13,7 +17,8 @@ function valueOrZero(value: number | null): number {
 export function scoreCandidateCity(
   input: ScoreCandidateCityInput,
 ): CityRecommendation {
-  const usableOptions = input.options.filter(
+  const selectedOptions = selectBestOptionPerParticipant(input.options);
+  const usableOptions = selectedOptions.filter(
     (option) => option.source !== "unavailable",
   );
   const prices = usableOptions.map((option) => valueOrZero(option.priceCny));
@@ -29,22 +34,22 @@ export function scoreCandidateCity(
     ? Math.round(totalPriceCny / usableOptions.length)
     : 0;
   const fairnessGap = prices.length ? Math.max(...prices) - Math.min(...prices) : 9999;
-  const waitingPenalty = input.options.reduce((sum, option) => {
+  const waitingPenalty = selectedOptions.reduce((sum, option) => {
     const wait = option.waitMinutes ?? 0;
     if (wait <= 360) return sum;
     if (wait <= 720) return sum + Math.round((wait - 360) / 10);
     return sum + 9999;
   }, 0);
-  const transferPenalty = input.options.reduce(
+  const transferPenalty = selectedOptions.reduce(
     (sum, option) =>
       sum + (option.hasTransfer ? 120 * Math.max(1, option.transferCount) : 0),
     0,
   );
-  const estimatePenalty = input.options.reduce(
+  const estimatePenalty = selectedOptions.reduce(
     (sum, option) => sum + (option.source === "estimated" ? 200 : 0),
     0,
   );
-  const missingPenalty = input.options.reduce(
+  const missingPenalty = selectedOptions.reduce(
     (sum, option) => sum + (option.source === "unavailable" ? 9999 : 0),
     0,
   );
@@ -76,7 +81,38 @@ export function scoreCandidateCity(
       estimatePenalty +
       missingPenalty,
     labels: [],
+    selectedOptions,
   };
+}
+
+function selectBestOptionPerParticipant(
+  options: TravelOption[],
+): SelectedParticipantTravelOption[] {
+  const byParticipant = new Map<string, SelectedParticipantTravelOption>();
+
+  for (const option of options) {
+    const candidate = {
+      ...option,
+      selectionScore: optionSelectionScore(option),
+    };
+    const existing = byParticipant.get(option.participantId);
+    if (!existing || candidate.selectionScore < existing.selectionScore) {
+      byParticipant.set(option.participantId, candidate);
+    }
+  }
+
+  return Array.from(byParticipant.values());
+}
+
+function optionSelectionScore(option: TravelOption): number {
+  if (option.source === "unavailable") return 999_999;
+  const price = valueOrZero(option.priceCny);
+  const duration = valueOrZero(option.durationMinutes);
+  const estimatePenalty = option.source === "estimated" ? 200 : 0;
+  const transferPenalty = option.hasTransfer
+    ? 120 * Math.max(1, option.transferCount)
+    : 0;
+  return price + duration + estimatePenalty + transferPenalty;
 }
 
 export function pickPrimaryRecommendations(

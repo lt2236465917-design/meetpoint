@@ -9,6 +9,9 @@ describe("getApiErrorMessage", () => {
     expect(getApiErrorMessage("PLAN_NOT_FOUND", "打开失败")).toBe(
       "计划不存在或已失效",
     );
+    expect(getApiErrorMessage("PARTICIPANT_LIMIT_NOT_REACHED", "计算失败")).toBe(
+      "人数填满后才能开始计算",
+    );
   });
 
   it("uses fallback copy for unknown errors", () => {

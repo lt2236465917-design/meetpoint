@@ -44,8 +44,13 @@ export type TravelOption = {
   isDirect: boolean;
   hasTransfer: boolean;
   transferCount: number;
+  serviceName: string | null;
   bookingUrl: string | null;
   failureReason: string | null;
+};
+
+export type SelectedParticipantTravelOption = TravelOption & {
+  selectionScore: number;
 };
 
 export type CityRecommendation = {
@@ -63,6 +68,7 @@ export type CityRecommendation = {
   scoreBalanced: number;
   scoreFastest: number;
   labels: Array<"cheapest" | "balanced" | "fastest">;
+  selectedOptions?: SelectedParticipantTravelOption[];
   explanation?: string;
   riskSummary?: string;
 };

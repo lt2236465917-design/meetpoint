@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  verifyManagementTokenForPlan: vi.fn(),
+  verifyParticipantCanCalculatePlan: vi.fn(),
   calculatePlanRecommendations: vi.fn(),
 }));
 
-vi.mock("@/lib/security/management-token", () => ({
-  verifyManagementTokenForPlan: mocks.verifyManagementTokenForPlan,
+vi.mock("@/lib/security/participant-calculation", () => ({
+  verifyParticipantCanCalculatePlan: mocks.verifyParticipantCanCalculatePlan,
 }));
 
 vi.mock("@/lib/recommendation/calculate-run", () => ({
@@ -16,15 +16,15 @@ vi.mock("@/lib/recommendation/calculate-run", () => ({
 describe("POST /api/plans/[code]/calculate", () => {
   beforeEach(() => {
     vi.resetModules();
-    mocks.verifyManagementTokenForPlan.mockReset();
+    mocks.verifyParticipantCanCalculatePlan.mockReset();
     mocks.calculatePlanRecommendations.mockReset();
   });
 
-  it("rejects requests without a valid management token", async () => {
-    mocks.verifyManagementTokenForPlan.mockResolvedValue({
+  it("rejects requests from browsers that have not filled the plan", async () => {
+    mocks.verifyParticipantCanCalculatePlan.mockResolvedValue({
       ok: false,
-      status: 403,
-      error: "INVALID_MANAGEMENT_TOKEN",
+      status: 401,
+      error: "PARTICIPANT_TOKEN_REQUIRED",
     });
 
     const { POST } = await import("@/app/api/plans/[code]/calculate/route");
@@ -35,21 +35,45 @@ describe("POST /api/plans/[code]/calculate", () => {
       { params: Promise.resolve({ code: "ABC123" }) },
     );
 
-    expect(response.status).toBe(403);
+    expect(response.status).toBe(401);
     await expect(response.json()).resolves.toEqual({
-      error: "INVALID_MANAGEMENT_TOKEN",
+      error: "PARTICIPANT_TOKEN_REQUIRED",
     });
-    expect(mocks.verifyManagementTokenForPlan).toHaveBeenCalledWith(
-      "ABC123",
-      null,
-    );
+    expect(mocks.verifyParticipantCanCalculatePlan).toHaveBeenCalledWith({
+      code: "ABC123",
+      participantToken: null,
+    });
     expect(mocks.calculatePlanRecommendations).not.toHaveBeenCalled();
   });
 
-  it("calculates recommendations for verified hosts", async () => {
-    mocks.verifyManagementTokenForPlan.mockResolvedValue({
+  it("rejects filled participants until the plan reaches its participant limit", async () => {
+    mocks.verifyParticipantCanCalculatePlan.mockResolvedValue({
+      ok: false,
+      status: 409,
+      error: "PARTICIPANT_LIMIT_NOT_REACHED",
+    });
+
+    const { POST } = await import("@/app/api/plans/[code]/calculate/route");
+    const response = await POST(
+      new Request("http://localhost/api/plans/ABC123/calculate", {
+        method: "POST",
+        headers: { "x-participant-token": "edit-token" },
+      }),
+      { params: Promise.resolve({ code: "ABC123" }) },
+    );
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toEqual({
+      error: "PARTICIPANT_LIMIT_NOT_REACHED",
+    });
+    expect(mocks.calculatePlanRecommendations).not.toHaveBeenCalled();
+  });
+
+  it("calculates recommendations for filled participants after the plan is full", async () => {
+    mocks.verifyParticipantCanCalculatePlan.mockResolvedValue({
       ok: true,
       planId: "plan-1",
+      participantId: "participant-1",
     });
     mocks.calculatePlanRecommendations.mockResolvedValue({
       runId: "run-1",
@@ -60,7 +84,7 @@ describe("POST /api/plans/[code]/calculate", () => {
     const response = await POST(
       new Request("http://localhost/api/plans/ABC123/calculate", {
         method: "POST",
-        headers: { "x-management-token": "secret-token" },
+        headers: { "x-participant-token": "edit-token" },
       }),
       { params: Promise.resolve({ code: "ABC123" }) },
     );
@@ -70,10 +94,10 @@ describe("POST /api/plans/[code]/calculate", () => {
       runId: "run-1",
       candidateCount: 12,
     });
-    expect(mocks.verifyManagementTokenForPlan).toHaveBeenCalledWith(
-      "ABC123",
-      "secret-token",
-    );
+    expect(mocks.verifyParticipantCanCalculatePlan).toHaveBeenCalledWith({
+      code: "ABC123",
+      participantToken: "edit-token",
+    });
     expect(mocks.calculatePlanRecommendations).toHaveBeenCalledWith({
       code: "ABC123",
     });

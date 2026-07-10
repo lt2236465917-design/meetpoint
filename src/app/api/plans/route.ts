@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
+import { networkInterfaces } from "os";
 import { createFallbackPlan } from "@/lib/fallback/mvp-store";
-import { generateToken, hashToken } from "@/lib/security/tokens";
 import {
   createServiceSupabaseClient,
   hasSupabaseEnvironment,
@@ -20,13 +20,15 @@ export async function POST(req: Request) {
   }
 
   if (!hasSupabaseEnvironment()) {
-    return NextResponse.json(await createFallbackPlan(parsed.data));
+    const result = await createFallbackPlan(parsed.data);
+    return NextResponse.json({
+      ...result,
+      shareUrl: createShareUrl(req, result.code),
+    });
   }
 
   const supabase = createServiceSupabaseClient();
   const code = generateCode();
-  const manageToken = generateToken();
-  const managementTokenHash = await hashToken(manageToken);
 
   const { error } = await supabase.from("plans").insert({
     code,
@@ -34,7 +36,6 @@ export async function POST(req: Request) {
     meeting_date: parsed.data.meetingDate,
     target_arrival_time: parsed.data.targetArrivalTime,
     participant_limit: parsed.data.participantLimit,
-    management_token_hash: managementTokenHash,
     status: "collecting",
   });
 
@@ -48,7 +49,43 @@ export async function POST(req: Request) {
 
   return NextResponse.json({
     code,
-    manageToken,
-    shareUrl: `/p/${code}`,
+    shareUrl: createShareUrl(req, code),
   });
+}
+
+function createShareUrl(req: Request, code: string): string {
+  const host = req.headers.get("host");
+  if (!host) return `/p/${code}`;
+
+  const [hostname, port] = host.split(":");
+  if (!isLocalhost(hostname)) {
+    const protocol = req.headers.get("x-forwarded-proto") ?? "http";
+    return `${protocol}://${host}/p/${code}`;
+  }
+
+  const lanAddress = getLanAddress();
+  if (!lanAddress) return `/p/${code}`;
+  return `http://${lanAddress}${port ? `:${port}` : ""}/p/${code}`;
+}
+
+function isLocalhost(hostname: string | undefined): boolean {
+  return (
+    hostname === "localhost" ||
+    hostname === "127.0.0.1" ||
+    hostname === "0.0.0.0" ||
+    hostname === "::1" ||
+    hostname === "[::1]"
+  );
+}
+
+function getLanAddress(): string | null {
+  for (const networks of Object.values(networkInterfaces())) {
+    for (const network of networks ?? []) {
+      if (network.family === "IPv4" && !network.internal) {
+        return network.address;
+      }
+    }
+  }
+
+  return null;
 }

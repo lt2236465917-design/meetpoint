@@ -39,6 +39,7 @@ export function estimateTravelOption(
     isDirect: true,
     hasTransfer: false,
     transferCount: 0,
+    serviceName: null,
     bookingUrl: null,
     failureReason: "真实报价暂不可用，使用距离和交通方式粗估",
   };

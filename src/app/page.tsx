@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ResponsiveShell } from "@/components/layout/ResponsiveShell";
+import { RecentMeetingRecords } from "@/components/plan/RecentMeetingRecords";
 
 export default function HomePage() {
   return (
@@ -12,17 +13,21 @@ export default function HomePage() {
         </p>
       }
     >
-      <div className="space-y-5 rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-        <p className="text-sm font-medium text-gray-950">开始一个计划</p>
-        <p className="mt-2 text-sm leading-6 text-gray-600">
-          先创建计划，再把链接发给朋友填写。
-        </p>
-        <Link
-          className="block rounded-lg bg-black py-3 text-center font-medium text-white"
-          href="/create"
-        >
-          创建见面计划
-        </Link>
+      <div className="space-y-5">
+        <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+          <p className="text-sm font-medium text-gray-950">开始一个计划</p>
+          <p className="mt-2 text-sm leading-6 text-gray-600">
+            先创建计划，再把链接发给朋友填写。
+          </p>
+          <Link
+            className="mt-5 block rounded-lg bg-black py-3 text-center font-medium text-white"
+            href="/create"
+          >
+            创建见面计划
+          </Link>
+        </section>
+
+        <RecentMeetingRecords />
       </div>
     </ResponsiveShell>
   );

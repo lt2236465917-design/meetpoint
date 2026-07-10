@@ -19,6 +19,7 @@ const baseOption: TravelOption = {
   isDirect: true,
   hasTransfer: false,
   transferCount: 0,
+  serviceName: null,
   bookingUrl: null,
   failureReason: null,
 };
@@ -46,6 +47,39 @@ function recommendation(
 }
 
 describe("scoreCandidateCity", () => {
+  it("uses one best route per participant instead of summing every transport mode", () => {
+    const scored = scoreCandidateCity({
+      cityCode: "wuhan",
+      cityName: "武汉",
+      options: [
+        {
+          ...baseOption,
+          participantId: "p1",
+          mode: "flight",
+          priceCny: 900,
+          durationMinutes: 120,
+        },
+        {
+          ...baseOption,
+          participantId: "p1",
+          mode: "high_speed_rail",
+          priceCny: 300,
+          durationMinutes: 240,
+        },
+        {
+          ...baseOption,
+          participantId: "p2",
+          priceCny: 200,
+          durationMinutes: 180,
+        },
+      ],
+    });
+
+    expect(scored.totalPriceCny).toBe(500);
+    expect(scored.totalDurationMinutes).toBe(420);
+    expect(scored.fairnessGap).toBe(100);
+  });
+
   it("penalizes estimates, transfers, and unavailable options", () => {
     const scored = scoreCandidateCity({
       cityCode: "wuhan",

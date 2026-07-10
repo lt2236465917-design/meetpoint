@@ -11,19 +11,19 @@ Mobile-first H5 MVP for choosing a fair cross-city meeting city for 2-6 people i
 
 ## Current Flow
 
-- `/`: focused creation entry for the H5 app.
-- `/create`: host creates a meeting plan and receives a public link plus a management token.
-- `/p/[code]`: public plan page with meeting summary, participant completion state, join entry, and result entry.
-- `/p/[code]/join`: participant submits name, departure city, and accepted transport modes.
-- `/p/[code]/manage`: host enters the management token, edits candidate cities, and manually starts calculation.
-- `/p/[code]/result`: decision-first result page showing the latest recommendation run and stale-result warning.
-- `POST /api/plans`: creates a plan from `{ title, meetingDate, targetArrivalTime, participantLimit }` and returns `{ code, manageToken, shareUrl }`.
+- `/`: focused creation entry plus local recent meeting records saved on this device.
+- `/create`: host creates a meeting plan, receives a phone-openable public link, and saves the plan to local recent records.
+- `/p/[code]`: public plan page with meeting summary, participant completion state, filling records, join entry, result entry, automatic participant-status refresh, and a direct calculate action for local participants when the participant limit is reached.
+- `/p/[code]/join`: participant submits name, departure city, and accepted transport modes, then returns to the public plan page automatically.
+- `/p/[code]/manage`: legacy route that points users back to the public plan page.
+- `/p/[code]/result`: shared team result page showing the latest recommendation run, stale-result warning, team total fare, total duration, fairness gap, and per-participant travel details.
+- `POST /api/plans`: creates a plan from `{ title, meetingDate, targetArrivalTime, participantLimit }` and returns `{ code, shareUrl }`; local development requests from `localhost` return a LAN `shareUrl` when available.
 - `GET /api/plans/[code]`: returns `{ plan, participants, latestRun }` for public plan reads.
 - `GET /api/cities/search?q=...`: searches built-in city data and returns `{ cities }`.
 - `POST /api/plans/[code]/participants`: creates a participant and returns `{ participantId, editToken }`.
 - `GET /api/plans/[code]/candidates`: returns stored candidate city controls for a plan.
-- `POST /api/plans/[code]/candidates`: saves a host candidate-city add/exclude control from `{ cityCode, cityName, enabled }`; requires `x-management-token`.
-- `POST /api/plans/[code]/calculate`: manually calculates recommendations for a plan and returns `{ runId, candidateCount }`; requires `x-management-token`.
+- `POST /api/plans/[code]/candidates`: currently returns `CANDIDATE_EDITING_UNAVAILABLE`.
+- `POST /api/plans/[code]/calculate`: manually calculates recommendations for a full plan and returns `{ runId, candidateCount }`; requires `x-participant-token` from a participant who filled the plan.
 - `POST /api/plans/[code]/explain`: regenerates DeepSeek/fallback explanations for the latest run and returns `{ ok, count }`.
 
 ## Core Modules
@@ -31,18 +31,21 @@ Mobile-first H5 MVP for choosing a fair cross-city meeting city for 2-6 people i
 - `src/lib/city/candidate-generator.ts`: deterministic candidate-city generation from participant cities and host controls.
 - `src/lib/city/city-provider.ts`: local-first city search shell; Amap key is reserved for autocomplete/validation fallback.
 - `src/lib/fallback/mvp-store.ts`: server-side in-memory fallback store for local create-to-result smoke testing when Supabase variables are missing.
-- `src/lib/travel/types.ts`: normalized travel-provider boundary for provider adapters.
+- `src/lib/travel/types.ts`: normalized travel-provider boundary for provider adapters, including service names and booking URLs when a real ticket source provides them.
 - `src/lib/travel/estimate-provider.ts`: deterministic estimated travel option fallback using city distance and transport mode.
 - `src/lib/travel/flyai-provider.ts`: FlyAI provider shell that currently falls back to estimated options until production access is configured.
-- `src/lib/recommendation/scoring.ts`: deterministic city scoring and primary recommendation selection.
+- `src/lib/recommendation/scoring.ts`: deterministic city scoring and primary recommendation selection; each candidate city is scored from one selected route per participant rather than summing every accepted transport mode.
 - `src/lib/recommendation/calculate-run.ts`: manual calculation orchestration that generates candidates, queries travel options, stores recommendation explanations, and marks results stale after 30 minutes.
 - `src/lib/ai/recommendation-explainer.ts`: DeepSeek explanation shell with deterministic fallback copy for missing, failed, or malformed model output.
+- `src/lib/ui/meeting-history.ts`: browser-only local recent-record storage; it caches `useSyncExternalStore` snapshots so the homepage does not trigger React update loops.
 
 ## Environment
 
 Copy `.env.example` to `.env.local` and fill server-side keys locally for persistent Supabase-backed runs.
 
 If `NEXT_PUBLIC_SUPABASE_URL` or `SUPABASE_SERVICE_ROLE_KEY` is missing, the app uses the in-memory fallback store. This is only for local smoke testing: data is kept in the dev server process and is cleared when the server restarts.
+
+For mobile-device testing against the local dev server, use the Network URL printed by `npm run dev`, such as `http://192.168.31.69:3000`. `next.config.ts` allows that development origin so mobile browsers can load Next.js dev resources instead of degrading client forms to ordinary GET submissions.
 
 Supabase variables:
 
@@ -81,8 +84,10 @@ npm run build
 Manual H5 acceptance:
 
 1. Create a plan.
-2. Open the public link.
-3. Submit two participants from different cities.
-4. Start calculation from the manage page.
-5. Open result page and verify recommendation cards render.
-6. Confirm estimates are visually marked and stale results show a warning after `stale_after`.
+2. Return to `/` and confirm the created plan appears in recent meeting records on the same device.
+3. Open the public link.
+4. Submit two participants from different cities.
+5. Confirm the public plan page updates filling records without a manual browser refresh.
+6. After the participant limit is reached, start calculation from the public plan page on a device that has filled the plan.
+7. Open result page and verify all participants see the same top city recommendations, with per-participant travel details inside each card.
+8. Confirm estimates are visually marked and stale results show a warning after `stale_after`.

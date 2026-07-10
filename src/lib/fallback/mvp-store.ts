@@ -4,7 +4,11 @@ import {
   pickPrimaryRecommendations,
   scoreCandidateCity,
 } from "@/lib/recommendation/scoring";
-import { generateToken, hashToken, verifyToken } from "@/lib/security/tokens";
+import {
+  generateToken,
+  hashToken,
+  verifyToken,
+} from "@/lib/security/tokens";
 import { FlyAITravelProvider } from "@/lib/travel/flyai-provider";
 import type {
   CityRecommendation,
@@ -19,7 +23,6 @@ type PlanRow = {
   meeting_date: string;
   target_arrival_time: string;
   participant_limit: number;
-  management_token_hash: string;
   status: "collecting" | "completed";
   created_at: string;
   updated_at: string;
@@ -145,7 +148,6 @@ export async function createFallbackPlan(input: {
     code = generateCode();
   }
 
-  const manageToken = generateToken();
   const timestamp = now();
   const plan: PlanRow = {
     id: id("plan"),
@@ -154,7 +156,6 @@ export async function createFallbackPlan(input: {
     meeting_date: input.meetingDate,
     target_arrival_time: input.targetArrivalTime,
     participant_limit: input.participantLimit,
-    management_token_hash: await hashToken(manageToken),
     status: "collecting",
     created_at: timestamp,
     updated_at: timestamp,
@@ -164,7 +165,6 @@ export async function createFallbackPlan(input: {
 
   return {
     code,
-    manageToken,
     shareUrl: `/p/${code}`,
   };
 }
@@ -190,15 +190,65 @@ export function readFallbackPlan(code: string) {
 export function readFallbackResult(code: string) {
   const data = readFallbackPlan(code);
   if (!data) return null;
+  const store = state();
   const recommendations = data.latestRun
-    ? state()
-        .recommendations.filter(
+    ? store.recommendations
+        .filter(
           (recommendation) => recommendation.run_id === data.latestRun?.id,
         )
         .sort((a, b) => a.score_balanced - b.score_balanced)
     : [];
+  const participantById = new Map(
+    store.participants.map((participant) => [participant.id, participant]),
+  );
+  const recommendationsWithOptions = recommendations.map((recommendation) => ({
+    ...recommendation,
+    participant_options: selectFallbackParticipantOptions(
+      store.travelOptions.filter(
+        (option) =>
+          option.run_id === recommendation.run_id &&
+          option.candidateCityCode === recommendation.city_code,
+      ),
+      participantById,
+    ),
+  }));
 
-  return { ...data, recommendations };
+  return { ...data, recommendations: recommendationsWithOptions };
+}
+
+function selectFallbackParticipantOptions(
+  options: Array<TravelOption & { id: string; run_id: string }>,
+  participantById: Map<string, ParticipantRow>,
+) {
+  const selected = new Map<string, TravelOption & { id: string; run_id: string }>();
+
+  for (const option of options) {
+    const existing = selected.get(option.participantId);
+    if (!existing || fallbackOptionScore(option) < fallbackOptionScore(existing)) {
+      selected.set(option.participantId, option);
+    }
+  }
+
+  return Array.from(selected.values()).map((option) => {
+    const participant = participantById.get(option.participantId);
+    return {
+      participant_name: participant?.name ?? "参与者",
+      departure_city_name: participant?.departure_city_name ?? "出发城市",
+      mode: option.mode,
+      price_cny: option.priceCny,
+      duration_minutes: option.durationMinutes,
+      depart_at: option.departAt,
+      arrive_at: option.arriveAt,
+      booking_url: option.bookingUrl,
+      service_name: option.serviceName,
+      source: option.source,
+    };
+  });
+}
+
+function fallbackOptionScore(option: TravelOption) {
+  if (option.source === "unavailable") return 999_999;
+  return (option.priceCny ?? 0) + (option.durationMinutes ?? 0);
 }
 
 export async function createFallbackParticipant(
@@ -248,32 +298,39 @@ export async function createFallbackParticipant(
   };
 }
 
-export async function verifyFallbackManagementToken(
+export async function verifyFallbackParticipantCanCalculate(
   code: string,
-  token: string | null,
+  token: string,
 ) {
-  if (!token) {
-    return {
-      ok: false as const,
-      status: 401,
-      error: "MANAGEMENT_TOKEN_REQUIRED",
-    };
-  }
-
   const plan = state().plans.find((item) => item.code === code);
-  if (!plan) {
-    return { ok: false as const, status: 404, error: "PLAN_NOT_FOUND" };
-  }
+  if (!plan) return { ok: false as const, status: 404, error: "PLAN_NOT_FOUND" };
 
-  if (!(await verifyToken(token, plan.management_token_hash))) {
+  const participants = state().participants.filter(
+    (participant) => participant.plan_id === plan.id,
+  );
+  if (participants.length < plan.participant_limit) {
     return {
       ok: false as const,
-      status: 403,
-      error: "INVALID_MANAGEMENT_TOKEN",
+      status: 409,
+      error: "PARTICIPANT_LIMIT_NOT_REACHED",
     };
   }
 
-  return { ok: true as const, planId: plan.id };
+  for (const participant of participants) {
+    if (await verifyToken(token, participant.edit_token_hash)) {
+      return {
+        ok: true as const,
+        planId: plan.id,
+        participantId: participant.id,
+      };
+    }
+  }
+
+  return {
+    ok: false as const,
+    status: 403,
+    error: "INVALID_PARTICIPANT_TOKEN",
+  };
 }
 
 export function readFallbackCandidates(code: string) {

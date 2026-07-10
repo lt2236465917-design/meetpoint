@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { generateToken, hashToken, verifyToken } from "@/lib/security/tokens";
+import {
+  generateToken,
+  hashToken,
+  verifyToken,
+} from "@/lib/security/tokens";
 
 describe("token utilities", () => {
   it("generates url-safe high-entropy tokens", () => {
