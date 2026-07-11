@@ -1,13 +1,22 @@
 import { z } from "zod";
 import type { CityRecommendation } from "@/types/domain";
-import { createDeepSeekClient } from "./deepseek-client";
+import { createDeepSeekClient, getDeepSeekModel } from "./deepseek-client";
 
 const explanationSchema = z.object({
-  short_reason: z.string(),
-  risk_badges: z.array(z.string()),
-  share_summary: z.string(),
-  detail_explanation: z.string(),
-});
+  short_reason: z.string().trim().min(1),
+  risk_badges: z.array(z.string().trim().min(1)),
+  share_summary: z.string().trim().min(1),
+  detail_explanation: z.string().trim().min(1),
+}).strict();
+
+const explanationSystemPrompt = `你只根据输入的结构化推荐结果生成中文解释，不编造票价、车次、航班、时刻或其他事实。
+必须输出 JSON，且只能包含以下结构：
+{
+  "short_reason": "一句简短推荐理由",
+  "risk_badges": ["风险标签"],
+  "share_summary": "一句可分享摘要",
+  "detail_explanation": "一段详细解释"
+}`;
 
 export type RecommendationExplanation = z.infer<typeof explanationSchema>;
 
@@ -46,14 +55,11 @@ export async function explainRecommendation(
 
   try {
     const response = await client.chat.completions.create({
-      model: "deepseek-v4-flash",
+      model: getDeepSeekModel(),
       response_format: { type: "json_object" },
+      max_tokens: 800,
       messages: [
-        {
-          role: "system",
-          content:
-            "你只根据输入的结构化推荐结果生成中文解释，不编造票价、车次或事实。输出 JSON。",
-        },
+        { role: "system", content: explanationSystemPrompt },
         { role: "user", content: JSON.stringify(recommendation) },
       ],
     });

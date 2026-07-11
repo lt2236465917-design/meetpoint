@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { searchCities } from "@/lib/city/city-provider";
-import { createDeepSeekClient } from "@/lib/ai/deepseek-client";
+import {
+  createDeepSeekClient,
+  getDeepSeekModel,
+} from "@/lib/ai/deepseek-client";
 import {
   explainRecommendation,
   fallbackExplanation,
@@ -10,6 +13,7 @@ import type { CityRecommendation } from "@/types/domain";
 
 vi.mock("@/lib/ai/deepseek-client", () => ({
   createDeepSeekClient: vi.fn(),
+  getDeepSeekModel: vi.fn(() => "deepseek-v4-flash"),
 }));
 
 const originalEnv = process.env;
@@ -101,6 +105,68 @@ describe("fallbackExplanation", () => {
 });
 
 describe("explainRecommendation", () => {
+  it("requests strict JSON from the configured model", async () => {
+    const expected = {
+      short_reason: "武汉兼顾团队费用与时间。",
+      risk_badges: ["含估算"],
+      share_summary: "推荐武汉作为本次见面城市。",
+      detail_explanation: "数据均来自已计算结果。",
+    };
+    const create = vi.fn().mockResolvedValue({
+      choices: [{ message: { content: JSON.stringify(expected) } }],
+    });
+    vi.mocked(createDeepSeekClient).mockReturnValue({
+      chat: { completions: { create } },
+    } as never);
+
+    await expect(explainRecommendation(baseRecommendation)).resolves.toEqual(expected);
+    expect(getDeepSeekModel).toHaveBeenCalled();
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({
+      model: "deepseek-v4-flash",
+      response_format: { type: "json_object" },
+      max_tokens: 800,
+    }));
+    const request = create.mock.calls[0][0];
+    expect(request.messages[0].content).toContain("JSON");
+    expect(request.messages[0].content).toContain("short_reason");
+    expect(request.messages[0].content).toContain("detail_explanation");
+  });
+
+  it.each([
+    ["empty content", { choices: [{ message: { content: "" } }] }],
+    ["missing fields", { choices: [{ message: { content: JSON.stringify({ short_reason: "武汉" }) } }] }],
+    ["extra fields", { choices: [{ message: { content: JSON.stringify({
+      short_reason: "武汉",
+      risk_badges: [],
+      share_summary: "武汉",
+      detail_explanation: "武汉",
+      ranking_override: 1,
+    }) } }] }],
+  ])("falls back for %s", async (_name, response) => {
+    vi.mocked(createDeepSeekClient).mockReturnValue({
+      chat: { completions: { create: vi.fn().mockResolvedValue(response) } },
+    } as never);
+    await expect(explainRecommendation(baseRecommendation)).resolves.toEqual(
+      fallbackExplanation(baseRecommendation),
+    );
+  });
+
+  it("falls back when the request fails", async () => {
+    vi.mocked(createDeepSeekClient).mockReturnValue({
+      chat: { completions: { create: vi.fn().mockRejectedValue(new Error("network")) } },
+    } as never);
+    await expect(explainRecommendation(baseRecommendation)).resolves.toEqual(
+      fallbackExplanation(baseRecommendation),
+    );
+  });
+
+  it("falls back without a configured client", async () => {
+    vi.mocked(createDeepSeekClient).mockReturnValue(null);
+    await expect(explainRecommendation(baseRecommendation)).resolves.toEqual(
+      fallbackExplanation(baseRecommendation),
+    );
+  });
+
   it("falls back to deterministic copy when DeepSeek returns malformed JSON", async () => {
     vi.mocked(createDeepSeekClient).mockReturnValue({
       chat: {
