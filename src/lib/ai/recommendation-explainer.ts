@@ -2,11 +2,13 @@ import { z } from "zod";
 import type { CityRecommendation } from "@/types/domain";
 import { createDeepSeekClient, getDeepSeekModel } from "./deepseek-client";
 
+const chineseTextSchema = z.string().trim().min(1).regex(/\p{Script=Han}/u);
+
 const explanationSchema = z.object({
-  short_reason: z.string().trim().min(1),
-  risk_badges: z.array(z.string().trim().min(1)),
-  share_summary: z.string().trim().min(1),
-  detail_explanation: z.string().trim().min(1),
+  short_reason: chineseTextSchema,
+  risk_badges: z.array(chineseTextSchema),
+  share_summary: chineseTextSchema,
+  detail_explanation: chineseTextSchema,
 }).strict();
 
 const explanationSystemPrompt = `你只根据输入的结构化推荐结果生成中文解释，不编造票价、车次、航班、时刻或其他事实。

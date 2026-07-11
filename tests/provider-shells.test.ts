@@ -151,6 +151,35 @@ describe("explainRecommendation", () => {
     );
   });
 
+  it.each([
+    ["English-only prose", {
+      short_reason: "Wuhan balances cost and time.",
+      risk_badges: ["含估算"],
+      share_summary: "Wuhan is the recommended meeting city.",
+      detail_explanation: "The explanation uses calculated results only.",
+    }],
+    ["an English-only risk badge", {
+      short_reason: "武汉兼顾团队费用与时间。",
+      risk_badges: ["Estimated fare"],
+      share_summary: "推荐武汉作为本次见面城市。",
+      detail_explanation: "数据均来自已计算结果。",
+    }],
+  ])("falls back for %s", async (_name, response) => {
+    vi.mocked(createDeepSeekClient).mockReturnValue({
+      chat: {
+        completions: {
+          create: vi.fn().mockResolvedValue({
+            choices: [{ message: { content: JSON.stringify(response) } }],
+          }),
+        },
+      },
+    } as never);
+
+    await expect(explainRecommendation(baseRecommendation)).resolves.toEqual(
+      fallbackExplanation(baseRecommendation),
+    );
+  });
+
   it("falls back when the request fails", async () => {
     vi.mocked(createDeepSeekClient).mockReturnValue({
       chat: { completions: { create: vi.fn().mockRejectedValue(new Error("network")) } },

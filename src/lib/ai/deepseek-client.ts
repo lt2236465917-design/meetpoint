@@ -9,5 +9,10 @@ export function getDeepSeekModel(): string {
 export function createDeepSeekClient() {
   const apiKey = process.env.DEEPSEEK_API_KEY;
   if (!apiKey) return null;
-  return new OpenAI({ baseURL: "https://api.deepseek.com", apiKey });
+  return new OpenAI({
+    baseURL: "https://api.deepseek.com",
+    apiKey,
+    timeout: 15_000,
+    maxRetries: 1,
+  });
 }
