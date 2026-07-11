@@ -186,3 +186,14 @@ Use these checks after layout or component changes:
 3. Open `/p/[code]`, `/p/[code]/join`, and `/p/[code]/result` on desktop; confirm each route stays in the centered H5 canvas and does not switch to multi-column desktop layout.
 4. On `/p/[code]/join`, type a departure city, confirm city candidates do not cover the transport-mode buttons, then select a city and confirm the candidates disappear.
 5. Confirm no browser or framework overlay visually covers the right side of the app. If a red overlay appears while the DOM has no app-level fixed red element, check browser extensions before changing app CSS.
+
+## Real Ticket And Amap Acceptance
+
+Use these checks after wiring FlyAI/Fliggy or another ticket source and Amap city data:
+
+1. Create a full plan with at least two departure cities and both flight and high-speed-rail preferences.
+2. Confirm each selected per-participant route stores the provider source, real `price_cny`, `duration_minutes`, `depart_at`, `arrive_at`, and `service_name` in `travel_options`.
+3. Open `/p/[code]/result` and confirm every recommendation card still shows the same shared city ranking to all viewers, plus each person's departure city, transport mode, real price, duration, and train number or flight number.
+4. Confirm routes with a provider booking URL show the "去购票" action and open the provider URL; routes without a booking URL must keep the card usable and not show a broken purchase action.
+5. Confirm real provider rows are not visually described as estimated prices. Mixed real and fallback rows must still mark the fallback rows clearly.
+6. Search city names through `/api/cities/search?q=...` and the join-page city combobox; confirm Amap-backed results normalize to the same city code/name shape used by recommendation and ticket lookup.
