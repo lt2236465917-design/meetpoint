@@ -65,8 +65,18 @@ In fallback mode, the same logical records are kept in process memory instead of
 | `src/lib/travel/flyai-provider.ts` | FlyAI provider shell; falls back to estimates until production access is configured. |
 | `src/lib/recommendation/scoring.ts` | Deterministic scoring and primary recommendation selection from one selected route per participant for each candidate city. |
 | `src/lib/recommendation/calculate-run.ts` | Calculation orchestration, explanation generation, and Supabase persistence. |
-| `src/lib/ai/recommendation-explainer.ts` | DeepSeek explanation shell with deterministic fallback copy. |
+| `src/lib/ai/deepseek-client.ts` | Server-only DeepSeek client and model configuration; each SDK attempt has a 15-second timeout and at most one retry. |
+| `src/lib/ai/recommendation-explainer.ts` | Strict Chinese JSON prompt, validation, and deterministic fallback for recommendation explanations. |
 | `src/lib/ui/meeting-history.ts` | Browser-local recent-record parsing, dedupe, snapshot caching, and storage helpers. |
+
+## AI Explanation Flow
+
+1. Calculation or `POST /api/plans/[code]/explain` passes an already-computed `CityRecommendation` to `explainRecommendation`.
+2. The server-only client uses `DEEPSEEK_MODEL` or defaults to `deepseek-v4-flash`; each request attempt times out after 15 seconds and the SDK retries at most once.
+3. DeepSeek is asked for a JSON object containing exactly `short_reason`, `risk_badges`, `share_summary`, and `detail_explanation`.
+4. Zod rejects unknown fields, blank values, and prose or badge values without a Han character.
+5. Missing credentials, request errors or timeouts, empty content, malformed JSON, and schema-invalid output all return deterministic fallback copy.
+6. Only explanation-related fields may be persisted; tickets, candidates, scores, and recommendation ordering remain unchanged.
 
 ## Security Boundaries
 

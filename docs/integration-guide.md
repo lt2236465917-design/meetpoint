@@ -145,6 +145,8 @@ Result rankings are shared for the whole plan. The result page shows the same to
 
 Regenerates explanations for the latest recommendation run. The route uses DeepSeek when `DEEPSEEK_API_KEY` is configured and deterministic fallback copy otherwise.
 
+The server requests exactly four Chinese JSON fields: `short_reason`, `risk_badges`, `share_summary`, and `detail_explanation`. Unknown fields, blank values, or values without a Han character are rejected. Each provider attempt has a 15-second timeout and the SDK retries at most once; missing credentials, timeouts, request failures, empty content, malformed JSON, and schema-invalid output all use deterministic fallback copy without failing the endpoint.
+
 Returns:
 
 ```json
@@ -204,5 +206,5 @@ Use these checks after wiring FlyAI/Fliggy or another ticket source and Amap cit
 1. Store a valid `DEEPSEEK_API_KEY` only in `.env.local` and optionally set `DEEPSEEK_MODEL`; never paste the key into commands, logs, or documentation.
 2. Run the local app, complete a fallback-mode plan calculation, and call `POST /api/plans/[code]/explain`.
 3. Confirm the response is `{ "ok": true, "count": <latest recommendation count> }`.
-4. Confirm the latest recommendations contain non-empty explanations while rankings, scores, and travel options remain unchanged.
+4. Confirm the latest recommendations contain non-empty Chinese explanations while rankings, scores, and travel options remain unchanged.
 5. Temporarily use an invalid key and repeat; confirm deterministic fallback explanations are stored and the endpoint still succeeds.

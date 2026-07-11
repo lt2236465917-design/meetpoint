@@ -36,7 +36,7 @@ Mobile-first H5 MVP for choosing a fair cross-city meeting city for 2-6 people i
 - `src/lib/travel/flyai-provider.ts`: FlyAI provider shell that currently falls back to estimated options until production access is configured.
 - `src/lib/recommendation/scoring.ts`: deterministic city scoring and primary recommendation selection; each candidate city is scored from one selected route per participant rather than summing every accepted transport mode.
 - `src/lib/recommendation/calculate-run.ts`: manual calculation orchestration that generates candidates, queries travel options, stores recommendation explanations, and marks results stale after 30 minutes.
-- `src/lib/ai/recommendation-explainer.ts`: DeepSeek explanation shell with deterministic fallback copy for missing, failed, or malformed model output.
+- `src/lib/ai/recommendation-explainer.ts`: DeepSeek explanation boundary with strict Chinese JSON validation and deterministic fallback copy for missing, failed, timed-out, or malformed model output.
 - `src/lib/ui/meeting-history.ts`: browser-only local recent-record storage; it caches `useSyncExternalStore` snapshots so the homepage does not trigger React update loops.
 
 ## Environment
@@ -57,6 +57,8 @@ Supabase variables:
 - `DEEPSEEK_MODEL`: optional server-side model override; defaults to `deepseek-v4-flash`.
 - `FLYAI_API_KEY`: server-side FlyAI key reserved for real ticket provider access.
 - `FLYAI_CLI_PATH`: optional server-side FlyAI CLI path; the MVP shell returns estimates until production access is wired.
+
+DeepSeek requests use a 15-second timeout and at most one SDK retry. Provider failures never fail recommendation calculation or change deterministic rankings; they return local fallback explanations instead.
 
 ## Verification
 

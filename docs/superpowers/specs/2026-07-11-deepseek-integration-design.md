@@ -48,6 +48,8 @@ The calculation flow and `POST /api/plans/[code]/explain` continue calling `expl
 - API format: OpenAI-compatible Chat Completions.
 - Response format: `{ "type": "json_object" }`.
 - Output length: an explicit bounded `max_tokens` sufficient for the four short Chinese fields.
+- Per-attempt timeout: 15 seconds.
+- SDK retries: at most one.
 - Prompt: explicitly contains the word `JSON`, lists every required field, and includes a complete example object.
 
 The system instruction states that the model may only explain supplied structured values and must not invent prices, schedules, service names, or other facts.
@@ -61,7 +63,7 @@ The response must be a JSON object with exactly these fields:
 - `share_summary`: non-empty Chinese string;
 - `detail_explanation`: non-empty Chinese string.
 
-Zod validates the parsed value. Unknown fields are rejected to keep the model contract narrow. The returned object is used only for explanation-related persistence.
+Zod validates the parsed value. Every prose field and each risk badge must contain at least one Han character. Unknown fields are rejected to keep the model contract narrow. The returned object is used only for explanation-related persistence.
 
 ## Failure Handling
 
@@ -108,7 +110,9 @@ Automated tests will cover:
 6. empty content returns fallback copy;
 7. schema-invalid output returns fallback copy;
 8. SDK failure returns fallback copy;
-9. the explain route preserves its existing persistence and response behavior.
+9. English-only prose or risk badges return fallback copy;
+10. the client uses the 15-second timeout and one-retry limit;
+11. the explain route preserves its existing persistence and response behavior.
 
 Tests will mock the SDK boundary and will not access the network. After automated verification, one local smoke command will use the configured key to request an explanation and validate the response without printing the key or raw response.
 
