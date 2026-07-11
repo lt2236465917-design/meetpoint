@@ -54,6 +54,7 @@ Supabase variables:
 - `SUPABASE_SERVICE_ROLE_KEY`: server-only service-role key for route handlers and background calculations.
 - `AMAP_API_KEY`: server-side Amap key reserved for city autocomplete and validation fallback.
 - `DEEPSEEK_API_KEY`: server-side DeepSeek key for explanation and share-copy generation only.
+- `DEEPSEEK_MODEL`: optional server-side model override; defaults to `deepseek-v4-flash`.
 - `FLYAI_API_KEY`: server-side FlyAI key reserved for real ticket provider access.
 - `FLYAI_CLI_PATH`: optional server-side FlyAI CLI path; the MVP shell returns estimates until production access is wired.
 

@@ -39,6 +39,7 @@ Recent meeting records are browser-local convenience data stored in `localStorag
 | `SUPABASE_SERVICE_ROLE_KEY` | Server only | Service-role key for route handlers and calculations. |
 | `AMAP_API_KEY` | Server only | Reserved for Amap autocomplete and validation fallback. |
 | `DEEPSEEK_API_KEY` | Server only | DeepSeek explanations and share copy only. |
+| `DEEPSEEK_MODEL` | Server only | Optional server-side model override; defaults to `deepseek-v4-flash`. |
 | `FLYAI_API_KEY` | Server only | Reserved for real ticket provider access. |
 | `FLYAI_CLI_PATH` | Server only | Optional FlyAI CLI path. |
 
@@ -197,3 +198,11 @@ Use these checks after wiring FlyAI/Fliggy or another ticket source and Amap cit
 4. Confirm routes with a provider booking URL show the "去购票" action and open the provider URL; routes without a booking URL must keep the card usable and not show a broken purchase action.
 5. Confirm real provider rows are not visually described as estimated prices. Mixed real and fallback rows must still mark the fallback rows clearly.
 6. Search city names through `/api/cities/search?q=...` and the join-page city combobox; confirm Amap-backed results normalize to the same city code/name shape used by recommendation and ticket lookup.
+
+## DeepSeek Acceptance
+
+1. Store a valid `DEEPSEEK_API_KEY` only in `.env.local` and optionally set `DEEPSEEK_MODEL`; never paste the key into commands, logs, or documentation.
+2. Run the local app, complete a fallback-mode plan calculation, and call `POST /api/plans/[code]/explain`.
+3. Confirm the response is `{ "ok": true, "count": <latest recommendation count> }`.
+4. Confirm the latest recommendations contain non-empty explanations while rankings, scores, and travel options remain unchanged.
+5. Temporarily use an invalid key and repeat; confirm deterministic fallback explanations are stored and the endpoint still succeeds.
