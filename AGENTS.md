@@ -24,7 +24,7 @@ This project is a mobile-first Web H5 app for multi-person cross-city meeting pl
 
 - `supabase/`: database schema, RLS policies, and Realtime publication setup.
 - `src/lib/travel/`: vendor adapters and normalized travel option types.
-- `gateway/`: isolated server-side travel-provider access; it must follow the travel gateway ownership and safety rules above.
+- `services/travel-provider-gateway/`: isolated server-side travel-provider access; it must follow the travel gateway ownership and safety rules above.
 - `src/lib/recommendation/`: deterministic scoring and calculation orchestration.
 - `src/lib/city/`: city search, distance, and candidate generation.
 - `src/lib/ai/`: DeepSeek explanation helpers.
