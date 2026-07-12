@@ -243,6 +243,8 @@ function selectFallbackParticipantOptions(
       booking_url: option.bookingUrl,
       service_name: option.serviceName,
       source: option.source,
+      provider: option.provider,
+      queried_at: option.queriedAt,
     };
   });
 }

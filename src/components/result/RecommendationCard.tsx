@@ -1,5 +1,10 @@
 import { transportModeLabels } from "@/lib/ui/transport-modes";
-import type { TransportMode, TravelSource } from "@/types/domain";
+import { isApprovedBookingUrl } from "@/lib/travel/booking-url";
+import type {
+  TransportMode,
+  TravelProviderName,
+  TravelSource,
+} from "@/types/domain";
 
 type ParticipantOption = {
   participant_name: string;
@@ -12,6 +17,8 @@ type ParticipantOption = {
   booking_url: string | null;
   service_name: string | null;
   source: TravelSource;
+  provider: TravelProviderName;
+  queried_at: string | null;
 };
 
 type Recommendation = {
@@ -41,7 +48,7 @@ export function RecommendationCard({
   recommendation: Recommendation;
 }) {
   const badges = [
-    recommendation.estimate_penalty > 0 ? "含估算" : null,
+    recommendation.estimate_penalty > 0 ? "部分数据为估算" : null,
     recommendation.transfer_penalty > 0 ? "含中转" : null,
     recommendation.waiting_penalty > 0 ? "等待较久" : null,
   ].filter((badge): badge is string => Boolean(badge));
@@ -100,45 +107,57 @@ export function RecommendationCard({
       {recommendation.participant_options?.length ? (
         <div className="mt-3 space-y-2">
           <p className="text-xs font-medium text-gray-500">每人出行明细</p>
-          {recommendation.participant_options.map((option) => (
-            <div
-              className="rounded-lg border border-gray-100 px-3 py-2 text-xs leading-5 text-gray-600"
-              key={`${option.participant_name}-${option.departure_city_name}-${option.mode}`}
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="font-medium text-gray-900">
-                    {option.participant_name}
-                  </p>
-                  <p>
-                    {option.departure_city_name}出发 ·{" "}
-                    {transportModeLabels[option.mode]}
-                    {option.service_name ? ` · ${option.service_name}` : ""}
+          {recommendation.participant_options.map((option) => {
+            const bookingUrl = approvedBookingUrl(option);
+
+            return (
+              <div
+                className="rounded-lg border border-gray-100 px-3 py-2 text-xs leading-5 text-gray-600"
+                key={`${option.participant_name}-${option.departure_city_name}-${option.mode}`}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="font-medium text-gray-900">
+                      {option.participant_name}
+                    </p>
+                    <p>
+                      {option.departure_city_name}出发 ·{" "}
+                      {transportModeLabels[option.mode]}
+                      {option.service_name ? ` · ${option.service_name}` : ""}
+                    </p>
+                  </div>
+                  <p className="shrink-0 font-medium text-gray-900">
+                    {formatPrice(option.price_cny)}
                   </p>
                 </div>
-                <p className="shrink-0 font-medium text-gray-900">
-                  {formatPrice(option.price_cny)}
+                <p className="mt-1 text-gray-500">{formatSource(option)}</p>
+                <p className="mt-1">
+                  {formatTimeRange(option.depart_at, option.arrive_at)} ·{" "}
+                  {formatDuration(option.duration_minutes ?? 0)}
                 </p>
+                {bookingUrl && (
+                  <div className="mt-1">
+                    <a
+                      className="inline-block font-medium text-gray-950 underline underline-offset-2"
+                      href={bookingUrl}
+                      rel="noreferrer noopener"
+                      target="_blank"
+                    >
+                      去飞猪查看
+                    </a>
+                    <p className="mt-1 text-gray-500">
+                      价格和余票以跳转页面为准
+                    </p>
+                  </div>
+                )}
               </div>
-              <p className="mt-1">
-                {formatTimeRange(option.depart_at, option.arrive_at)} ·{" "}
-                {formatDuration(option.duration_minutes ?? 0)}
-              </p>
-              {option.booking_url && (
-                <a
-                  className="mt-1 inline-block font-medium text-gray-950 underline underline-offset-2"
-                  href={option.booking_url}
-                >
-                  去购票
-                </a>
-              )}
-            </div>
-          ))}
+            );
+          })}
         </div>
       ) : null}
       {recommendation.estimate_penalty > 0 && (
         <p className="mt-2 text-xs leading-5 text-gray-500">
-          估算价：价格来自距离和交通方式粗估，接入实时票务后会替换为真实报价。
+          部分数据为估算：价格来自距离和交通方式粗估，请以实际购票页面为准。
         </p>
       )}
     </article>
@@ -157,6 +176,41 @@ function formatTimeRange(departAt: string | null, arriveAt: string | null) {
 function formatClock(value: string): string {
   const match = value.match(/T(\d{2}:\d{2})/);
   return match?.[1] ?? value;
+}
+
+function formatSource(option: ParticipantOption): string {
+  if (option.source === "real" && option.provider === "flyai") {
+    const queriedAt = formatChinaDateTime(option.queried_at);
+    return queriedAt ? `飞猪参考价 · 查询于 ${queriedAt}` : "飞猪参考价";
+  }
+  if (option.source === "unavailable") return "暂无可行班次";
+  return "估算";
+}
+
+function approvedBookingUrl(option: ParticipantOption): string | null {
+  if (
+    option.source === "real" &&
+    option.provider === "flyai" &&
+    isApprovedBookingUrl(option.booking_url)
+  ) {
+    return option.booking_url;
+  }
+  return null;
+}
+
+function formatChinaDateTime(value: string | null): string | null {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return new Intl.DateTimeFormat("zh-CN", {
+    timeZone: "Asia/Shanghai",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).format(date);
 }
 
 function formatDuration(minutes: number): string {

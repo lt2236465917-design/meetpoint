@@ -7,7 +7,11 @@ import {
   hasSupabaseEnvironment,
 } from "@/lib/supabase/server";
 
-import type { TransportMode, TravelSource } from "@/types/domain";
+import type {
+  TransportMode,
+  TravelProviderName,
+  TravelSource,
+} from "@/types/domain";
 
 type Recommendation = {
   id: string;
@@ -36,9 +40,11 @@ type ParticipantTravelOption = {
   booking_url: string | null;
   service_name: string | null;
   source: TravelSource;
+  provider: TravelProviderName;
+  queried_at: string | null;
 };
 
-function ResultContent({
+export function ResultContent({
   code,
   title,
   hasRun,
@@ -52,6 +58,7 @@ function ResultContent({
   recommendations: Recommendation[];
 }) {
   const topRecommendations = recommendations.slice(0, 3);
+  const hasPrimary = hasPrimaryRecommendations(recommendations);
 
   return (
     <ResponsiveShell
@@ -69,7 +76,13 @@ function ResultContent({
         {!hasRun && <Notice>还没有计算结果。</Notice>}
         {isStale && <Notice>票价可能已变化，建议重新计算。</Notice>}
 
-        {topRecommendations.length > 0 && (
+        {hasRun && !hasPrimary && (
+          <Notice>
+            按当前到达时间，没有找到全员可行城市。请调整目标到达时间或会议日期后重新计算。
+          </Notice>
+        )}
+
+        {hasPrimary && topRecommendations.length > 0 && (
           <div className="grid gap-4">
             {topRecommendations.map((recommendation) => (
               <RecommendationCard
@@ -159,7 +172,7 @@ export default async function ResultPage({
     ? await supabase
         .from("travel_options")
         .select(
-          "participant_id,candidate_city_code,mode,source,price_cny,depart_at,arrive_at,duration_minutes,booking_url,service_name,participants(name,departure_city_name)",
+          "participant_id,candidate_city_code,mode,source,provider,queried_at,price_cny,depart_at,arrive_at,duration_minutes,booking_url,service_name,participants(name,departure_city_name)",
         )
         .eq("run_id", run.id)
     : { data: [] };
@@ -188,6 +201,8 @@ function attachParticipantOptions(
     candidate_city_code: string;
     mode: TransportMode;
     source: TravelSource;
+    provider: TravelProviderName;
+    queried_at: string | null;
     price_cny: number | null;
     depart_at: string | null;
     arrive_at: string | null;
@@ -237,8 +252,16 @@ function selectParticipantOptions(
       booking_url: option.booking_url,
       service_name: option.service_name,
       source: option.source,
+      provider: option.provider,
+      queried_at: option.queried_at,
     };
   });
+}
+
+export function hasPrimaryRecommendations(
+  recommendations: Pick<Recommendation, "labels">[],
+) {
+  return recommendations.some((recommendation) => recommendation.labels.length > 0);
 }
 
 function optionScore(option: {
