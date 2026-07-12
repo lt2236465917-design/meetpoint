@@ -71,6 +71,7 @@ describe("FlyAITravelProvider", () => {
           mode: "high_speed_rail",
           source: "estimated",
           provider: "estimate",
+          queriedAt: null,
         }),
       ]),
     );

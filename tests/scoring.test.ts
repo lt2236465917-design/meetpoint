@@ -92,6 +92,7 @@ describe("scoreCandidateCity", () => {
           participantId: "p2",
           source: "estimated",
           provider: "estimate",
+          queriedAt: null,
           priceCny: 500,
         },
         {
@@ -105,6 +106,8 @@ describe("scoreCandidateCity", () => {
           ...baseOption,
           participantId: "p4",
           source: "unavailable",
+          provider: "flyai",
+          queriedAt: null,
           priceCny: null,
           durationMinutes: null,
         },
