@@ -210,7 +210,7 @@ The gateway defaults to `PORT=8080`, matching the documented container port; an 
 - `POST /v1/search` requires `Authorization: Bearer <TRAVEL_GATEWAY_TOKEN>` and a strict normalized request. It returns normalized `options` and an ISO `queriedAt`; the gateway's own cache remains an internal detail.
 - Stable gateway errors are `UNAUTHORIZED`, `INVALID_REQUEST`, `PROVIDER_TIMEOUT`, `PROVIDER_UNAVAILABLE`, `PROVIDER_INVALID_RESPONSE`, and `INTERNAL_ERROR`. The service does not return provider exception text or raw response bodies.
 
-The gateway contract, cache/retry/concurrency behavior, and container policy are locally verified with fixtures. It is not yet proof of live FlyAI compatibility. Run `npm run probe:providers` from the repository root only with operator-managed keys; it outputs only redacted status/count/latency/field-name summaries. A real Docker image build remains unverified because the local Docker daemon was unavailable.
+The gateway contract, cache/retry/concurrency behavior, and container policy are locally verified with fixtures. Run `npm run probe:providers` from the repository root only with operator-managed keys; it outputs only redacted status/count/latency/field-name summaries. A 2026-07-12 credentialed probe confirmed Amap key access and FlyAI train field summaries. Direct gateway smoke confirmed live FlyAI flight/train rows, real source/provider fields, numeric string prices normalized to integer CNY, China-time departure/arrival timestamps, query freshness, and `a.feizhu.com` booking hosts. Full main-app calculations can still fall back under the current multi-candidate concurrency and timeout budget, so production enablement remains blocked on quota/load behavior and user-flow acceptance. A real Docker image build remains unverified because the local Docker daemon was unavailable.
 
 ## Real Ticket And Amap Acceptance
 
@@ -219,7 +219,7 @@ Use these checks after wiring FlyAI/Fliggy or another ticket source and Amap cit
 1. Create a full plan with at least two departure cities and both flight and high-speed-rail preferences.
 2. Confirm each selected per-participant route stores the provider source, real `price_cny`, `duration_minutes`, `depart_at`, `arrive_at`, and `service_name` in `travel_options`.
 3. Open `/p/[code]/result` and confirm every recommendation card still shows the same shared city ranking to all viewers, plus each person's departure city, transport mode, real price, duration, and train number or flight number.
-4. Confirm routes with an approved HTTPS Fliggy/Alitrip booking URL show the "去飞猪查看" action and the "价格和余票以跳转页面为准" note. Routes without an approved URL, and all estimated rows, must keep the card usable and show no booking action.
+4. Confirm routes with an approved HTTPS Fliggy/Alitrip/Feizhu booking URL show the "去飞猪查看" action and the "价格和余票以跳转页面为准" note. Routes without an approved URL, and all estimated rows, must keep the card usable and show no booking action.
 5. Confirm real FlyAI rows show "飞猪参考价" and a China-time query timestamp. Estimated rows show "估算"; mixed real and fallback cards show "部分数据为估算".
 6. Search city names through `/api/cities/search?q=...` and the join-page city combobox; confirm Amap-backed results normalize to the same city code/name shape used by recommendation and ticket lookup.
 

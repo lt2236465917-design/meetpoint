@@ -68,7 +68,7 @@ DeepSeek requests use a 15-second timeout and at most one SDK retry. Provider fa
 
 Tasks 1-10 of the [Amap and FlyAI implementation plan](docs/superpowers/plans/2026-07-12-amap-flyai-integration.md) are complete: Amap city validation, travel query freshness persistence, the isolated gateway, main-app authenticated client, deterministic travel-search orchestration, and source/freshness result UI are fixture-verified. The app uses real normalized route facts when the gateway succeeds; per-mode failures fall back to deterministic estimates, while successful empty results remain unavailable rather than pretending to be estimates.
 
-Result cards show real FlyAI rows as `飞猪参考价` with the China-time query timestamp. Estimates are marked `估算`, mixed cards show `部分数据为估算`, and booking actions appear only for real FlyAI rows with approved HTTPS Fliggy/Alitrip links. If the latest run has no primary recommendation label because no candidate is feasible for every participant, the result page asks the organizer to adjust the target arrival time or meeting date instead of presenting an unlabeled city as a recommendation.
+Result cards show real FlyAI rows as `飞猪参考价` with the China-time query timestamp. Estimates are marked `估算`, mixed cards show `部分数据为估算`, and booking actions appear only for real FlyAI rows with approved HTTPS Fliggy/Alitrip/Feizhu links. If the latest run has no primary recommendation label because no candidate is feasible for every participant, the result page asks the organizer to adjust the target arrival time or meeting date instead of presenting an unlabeled city as a recommendation.
 
 The gateway has its own environment file at `services/travel-provider-gateway/.env.example` and commands:
 
@@ -82,7 +82,7 @@ npm run build
 
 The gateway exposes `GET /healthz` and authenticated `POST /v1/search`. It accepts only supported normalized requests, calls FlyAI through an argument-array CLI invocation with shell execution disabled, and returns stable error codes. Its 5-minute cache, four-call concurrency limit, 12-second provider timeout, and one retry are process-local.
 
-Run `npm run probe:providers` only with operator-managed keys. It prints a single redacted JSON summary (status, latency, count, and field names), never provider payload values. Production enablement remains blocked until authorization, quota, actual field semantics, price units, timestamp behavior, and booking-link hosts are confirmed with a credentialed probe. The Dockerfile policy and gateway build are verified; an actual Docker image build still needs a running Docker daemon.
+Run `npm run probe:providers` only with operator-managed keys. It prints a single redacted JSON summary (status, latency, count, and field names), never provider payload values. A credentialed probe on 2026-07-12 confirmed Amap key access and FlyAI train field summaries, including the live `data.itemList` shape. Direct gateway smoke confirmed real FlyAI flight/train rows, numeric string prices normalized to CNY integers, China-time timestamps, query freshness, and `a.feizhu.com` booking hosts. Full main-app calculations can still fall back under the current multi-candidate concurrency and timeout budget, so production enablement remains blocked on quota/load behavior and user-flow acceptance. The Dockerfile policy and gateway build are verified; an actual Docker image build still needs a running Docker daemon.
 
 ## Verification
 

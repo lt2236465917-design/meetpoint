@@ -56,7 +56,8 @@ In fallback mode, the same logical records are kept in process memory instead of
 2. `TravelOption.queriedAt` is nullable. Real gateway prices carry the gateway query timestamp; deterministic estimates and unavailable options use `null`. Supabase persists this as `travel_options.queried_at`.
 3. `services/travel-provider-gateway/` owns FlyAI credentials and CLI execution. Its HTTP boundary is `GET /healthz` and bearer-authenticated `POST /v1/search`; requests and responses are strict Zod schemas.
 4. The gateway uses argument-array `execFile` calls with shell execution disabled, a 12-second provider timeout, one retry only for timeout/unavailability, a five-minute route-facts cache, and FIFO concurrency limited to four calls. It does not receive participant identity, generate candidates, select routes, score cities, call DeepSeek, or persist plans.
-5. The main application sends one authenticated JSON request per distinct accepted mode. It strictly validates responses, maps facts to the participant only after the gateway response, deterministically orders valid route facts before scoring, and keeps per-mode failures as estimates. Real FlyAI schema/field semantics, authorization, quota, and booking host acceptance remain external gates.
+5. The gateway accepts both the fixture-era normalized FlyAI rows and the live FlyAI `data.itemList` response shape. Live price strings are normalized to integer CNY values, local China-time strings are converted to offset timestamps, and `jumpUrl` is admitted only through the booking URL allowlist.
+6. The main application sends one authenticated JSON request per distinct accepted mode. It strictly validates responses, maps facts to the participant only after the gateway response, deterministically orders valid route facts before scoring, and keeps per-mode failures as estimates. A 2026-07-12 credentialed gateway smoke confirmed real FlyAI flight/train rows and `a.feizhu.com` booking hosts; production enablement still depends on quota/load behavior and full user-flow acceptance.
 
 ## Core Modules
 
@@ -72,9 +73,9 @@ In fallback mode, the same logical records are kept in process memory instead of
 | `src/lib/travel/types.ts` | Vendor-neutral travel-provider interface plus main-app gateway request/response types. |
 | `src/lib/travel/estimate-provider.ts` | Deterministic estimated option fallback. |
 | `src/lib/travel/gateway-client.ts`, `src/lib/travel/flyai-provider.ts` | Server-only authenticated gateway client and per-mode fallback provider; no participant identity crosses this boundary. |
-| `src/lib/travel/booking-url.ts` | Result-page booking URL allowlist for HTTPS Fliggy/Alitrip actions. |
+| `src/lib/travel/booking-url.ts` | Result-page booking URL allowlist for HTTPS Fliggy/Alitrip/Feizhu actions. |
 | `services/travel-provider-gateway/src/contracts.ts` | Strict normalized gateway request, option, response, and stable error contracts. |
-| `services/travel-provider-gateway/src/flyai-adapter.ts` | Safe FlyAI CLI adapter and fixture-side response normalization. |
+| `services/travel-provider-gateway/src/flyai-adapter.ts` | Safe FlyAI CLI adapter with fixture and live `data.itemList` response normalization. |
 | `services/travel-provider-gateway/src/service.ts`, `src/server.ts` | Cache/retry/concurrency orchestration and authenticated internal HTTP service. |
 | `src/lib/recommendation/scoring.ts` | Deterministic scoring and primary recommendation selection from one selected route per participant for each candidate city. |
 | `src/lib/recommendation/calculate-run.ts` | Calculation orchestration, explanation generation, and Supabase persistence. |
@@ -101,7 +102,7 @@ In fallback mode, the same logical records are kept in process memory instead of
 - Core ranking, ticket lookup normalization, and scoring must remain deterministic; DeepSeek may explain computed results but must not decide rankings.
 - Result recommendations are plan-level shared decisions, not personalized rankings. The UI should surface team total fare and per-person route choices instead of average fare.
 - Fallback mode is local-only and must not be treated as durable storage.
-- Gateway logs and errors must exclude credentials, authorization headers, participant names, raw provider payloads, and complete booking URLs. Booking URLs are accepted only when HTTPS and on the approved `fliggy.com` or `alitrip.com` hosts (including subdomains).
+- Gateway logs and errors must exclude credentials, authorization headers, participant names, raw provider payloads, and complete booking URLs. Booking URLs are accepted only when HTTPS and on the approved `fliggy.com`, `alitrip.com`, or `feizhu.com` hosts (including subdomains).
 
 ## UI Boundaries
 
