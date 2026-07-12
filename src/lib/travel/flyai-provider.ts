@@ -15,12 +15,42 @@ function toGatewayRequest(input: TravelSearchInput, mode: GatewaySearchRequest["
   };
 }
 
+function routeTieBreakKey(option: TravelOption): string {
+  return JSON.stringify([
+    option.mode,
+    option.serviceName,
+    option.departAt,
+    option.priceCny,
+    option.durationMinutes,
+    option.isDirect,
+    option.hasTransfer,
+    option.transferCount,
+    option.bookingUrl,
+    option.arriveAt,
+    option.queriedAt,
+    option.participantId,
+    option.candidateCityCode,
+    option.source,
+    option.provider,
+    option.waitMinutes,
+    option.failureReason,
+  ]);
+}
+
+function compareRouteFacts(left: TravelOption, right: TravelOption): number {
+  const leftKey = routeTieBreakKey(left);
+  const rightKey = routeTieBreakKey(right);
+  return leftKey === rightKey ? 0 : leftKey < rightKey ? -1 : 1;
+}
+
 async function searchMode(
   input: TravelSearchInput,
   mode: GatewaySearchRequest["mode"],
 ): Promise<TravelOption[]> {
   try {
     const response = await searchGateway(toGatewayRequest(input, mode));
+    // The scorer keeps the first route when selection scores tie, so do not let
+    // provider response order decide the shared recommendation.
     const options = response.options
       .filter((option) => option.mode === mode)
       .map((option) => ({
@@ -30,7 +60,8 @@ async function searchMode(
         queriedAt: response.queriedAt,
         waitMinutes: null,
         failureReason: null,
-      }));
+      }))
+      .sort(compareRouteFacts);
 
     return options.length > 0
       ? options

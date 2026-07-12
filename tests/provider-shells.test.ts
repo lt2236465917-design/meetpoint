@@ -10,6 +10,7 @@ import {
 } from "@/lib/ai/recommendation-explainer";
 import { FlyAITravelProvider } from "@/lib/travel/flyai-provider";
 import { GatewayClientError, searchGateway } from "@/lib/travel/gateway-client";
+import { scoreCandidateCity } from "@/lib/recommendation/scoring";
 import { createUnavailableTravelOption } from "@/lib/travel/unavailable-option";
 import type { CityRecommendation, TransportMode } from "@/types/domain";
 import type { TravelSearchInput } from "@/lib/travel/types";
@@ -99,6 +100,24 @@ describe("searchGateway", () => {
     expect(error).toMatchObject({ code: "GATEWAY_TIMEOUT", message: "GATEWAY_TIMEOUT" });
     expect((error as Error).message).not.toContain("gateway-secret-token");
   });
+
+  it("uses a stable unavailable error without exposing a token from a normal fetch rejection", async () => {
+    const token = "gateway-secret-token";
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(
+      new Error(`connection failed with Authorization: Bearer ${token}`),
+    ));
+
+    const error = await searchGateway(gatewaySearchRequest, {
+      gatewayUrl: "http://gateway.internal:8080",
+      token,
+    }).then(() => null, (caught: unknown) => caught);
+
+    expect(error).toMatchObject({
+      code: "GATEWAY_UNAVAILABLE",
+      message: "GATEWAY_UNAVAILABLE",
+    });
+    expect(String(error)).not.toContain(token);
+  });
 });
 
 describe("FlyAITravelProvider", () => {
@@ -141,6 +160,51 @@ describe("FlyAITravelProvider", () => {
       waitMinutes: null,
       failureReason: null,
     })]);
+  });
+
+  it("selects the same real route when viable gateway results arrive in reverse order", async () => {
+    const viableRoutes = [
+      {
+        ...gatewayResponse().options[0],
+        serviceName: "CA100",
+        priceCny: 500,
+        durationMinutes: 300,
+        departAt: "2026-08-01T06:00:00+08:00",
+        arriveAt: "2026-08-01T11:00:00+08:00",
+      },
+      {
+        ...gatewayResponse().options[0],
+        serviceName: "MU200",
+        priceCny: 600,
+        durationMinutes: 200,
+        departAt: "2026-08-01T07:00:00+08:00",
+        arriveAt: "2026-08-01T10:20:00+08:00",
+      },
+    ];
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        ...gatewayResponse(),
+        options: [...viableRoutes].reverse(),
+      }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        ...gatewayResponse(),
+        options: viableRoutes,
+      }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    vi.stubEnv("TRAVEL_GATEWAY_URL", "http://gateway.internal:8080");
+    vi.stubEnv("TRAVEL_GATEWAY_TOKEN", "gateway-token");
+
+    const provider = new FlyAITravelProvider();
+    const reverseOrderOptions = await provider.search(travelSearchInput);
+    const forwardOrderOptions = await provider.search(travelSearchInput);
+    const score = (options: typeof reverseOrderOptions) => scoreCandidateCity({
+      cityCode: "wuhan",
+      cityName: "武汉",
+      options,
+    }).selectedOptions?.[0];
+
+    expect(score(reverseOrderOptions)).toMatchObject({ serviceName: "CA100" });
+    expect(score(forwardOrderOptions)).toEqual(score(reverseOrderOptions));
   });
 
   it.each([
