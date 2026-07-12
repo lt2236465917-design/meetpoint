@@ -37,6 +37,7 @@ const baseRecommendation: CityRecommendation = {
 
 afterEach(() => {
   vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
   process.env = originalEnv;
 });
 
@@ -76,11 +77,54 @@ describe("FlyAITravelProvider", () => {
 
 describe("searchCities", () => {
   it("uses built-in city search before external Amap lookup", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
     vi.stubEnv("AMAP_API_KEY", "test-key");
 
     const cities = await searchCities("武汉");
 
     expect(cities.map((city) => city.code)).toEqual(["wuhan"]);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("maps an Amap city tip to the built-in city library", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      status: "1",
+      tips: [{ name: "武汉市", district: "湖北省", adcode: "420100" }],
+    }), { status: 200 })));
+    vi.stubEnv("AMAP_API_KEY", "test-key");
+
+    await expect(searchCities("武汉市")).resolves.toEqual([
+      expect.objectContaining({ code: "wuhan", name: "武汉" }),
+    ]);
+  });
+
+  it("does not make unsupported Amap cities selectable", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      status: "1",
+      tips: [{ name: "苏州市", district: "江苏省", adcode: "320500" }],
+    }), { status: 200 })));
+    vi.stubEnv("AMAP_API_KEY", "test-key");
+
+    await expect(searchCities("苏州市")).resolves.toEqual([]);
+  });
+
+  it.each([
+    ["HTTP failure", () => new Response("unavailable", { status: 503 })],
+    ["Amap status 0", () => new Response(JSON.stringify({ status: "0", tips: [] }), { status: 200 })],
+    ["invalid JSON", () => new Response("not-json", { status: 200 })],
+  ])("returns an empty list after %s", async (_name, responseFactory) => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(responseFactory()));
+    vi.stubEnv("AMAP_API_KEY", "test-key");
+
+    await expect(searchCities("武汉市")).resolves.toEqual([]);
+  });
+
+  it("returns an empty list when the Amap request aborts", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new DOMException("aborted", "AbortError")));
+    vi.stubEnv("AMAP_API_KEY", "test-key");
+
+    await expect(searchCities("武汉市")).resolves.toEqual([]);
   });
 
   it("returns an empty list for unknown cities when Amap is not configured", async () => {
