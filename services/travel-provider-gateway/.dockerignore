@@ -1,0 +1,11 @@
+node_modules/
+dist/
+coverage/
+.cache/
+probe-output/
+.env
+.env.*
+!.env.example
+npm-debug.log*
+*.tsbuildinfo
+.git/

@@ -40,3 +40,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# travel provider gateway generated artifacts
+/services/travel-provider-gateway/dist/
+/services/travel-provider-gateway/coverage/
+/services/travel-provider-gateway/probe-output/
+/services/travel-provider-gateway/.cache/
