@@ -9,6 +9,7 @@ This document is the stable technical map for the MVP. Detailed task history liv
 - When Supabase server variables are missing, route handlers use the server-side in-memory fallback store in `src/lib/fallback/mvp-store.ts` so the local create-to-result MVP can be smoke-tested without external credentials.
 - Browser-side Supabase access must use only the anon client from `src/lib/supabase/client.ts`.
 - Deterministic business logic lives in `src/lib/`; route handlers orchestrate validation, persistence, and service calls.
+- Amap is called only from the Next.js server-side city provider after a local city miss. The isolated travel gateway is a separate Node service under `services/travel-provider-gateway/`; the main application will call it in Task 8, not before.
 
 ## User-Facing Routes
 
@@ -49,6 +50,14 @@ This document is the stable technical map for the MVP. Detailed task history liv
 
 In fallback mode, the same logical records are kept in process memory instead of Supabase. Fallback mode is non-persistent and exists only for local smoke testing.
 
+## External Provider Boundary
+
+1. City search returns built-in-library results immediately. On a local miss, the server calls Amap input tips with a 3-second limit, validates the narrow response, and maps only exact supported city names back to the built-in library. Amap failures, invalid responses, missing keys, and unsupported places return no remote selectable city.
+2. `TravelOption.queriedAt` is nullable. Real gateway prices carry the gateway query timestamp; deterministic estimates and unavailable options use `null`. Supabase persists this as `travel_options.queried_at`.
+3. `services/travel-provider-gateway/` owns FlyAI credentials and CLI execution. Its HTTP boundary is `GET /healthz` and bearer-authenticated `POST /v1/search`; requests and responses are strict Zod schemas.
+4. The gateway uses argument-array `execFile` calls with shell execution disabled, a 12-second provider timeout, one retry only for timeout/unavailability, a five-minute route-facts cache, and FIFO concurrency limited to four calls. It does not receive participant identity, generate candidates, select routes, score cities, call DeepSeek, or persist plans.
+5. The gateway is fixture-verified, but the main application still uses estimates until Task 8 adds the HTTP client. Real FlyAI schema/field semantics, authorization, quota, and booking host acceptance remain external gates.
+
 ## Core Modules
 
 | Module | Responsibility |
@@ -58,11 +67,14 @@ In fallback mode, the same logical records are kept in process memory instead of
 | `src/components/plan/JoinParticipantForm.tsx` | Participant submission form with labeled controls and a post-submit return action. |
 | `src/components/plan/RecentMeetingRecords.tsx` | Homepage local recent-record list backed by `useSyncExternalStore` and cached snapshots. |
 | `src/lib/city/candidate-generator.ts` | Deterministic candidate-city generation from participant cities and host controls. |
-| `src/lib/city/city-provider.ts` | Local-first city search; Amap is reserved for autocomplete/validation fallback. |
+| `src/lib/city/amap-client.ts`, `src/lib/city/city-provider.ts` | Local-first city search and Amap validation; unsupported remote places never enter scoring. |
 | `src/lib/fallback/mvp-store.ts` | In-memory local fallback persistence for create-to-result smoke testing without Supabase credentials. |
-| `src/lib/travel/types.ts` | Vendor-neutral travel-provider interface and normalized option types, including service names and booking URLs for real ticket sources. |
+| `src/lib/travel/types.ts` | Vendor-neutral travel-provider interface plus main-app gateway request/response types. |
 | `src/lib/travel/estimate-provider.ts` | Deterministic estimated option fallback. |
-| `src/lib/travel/flyai-provider.ts` | FlyAI provider shell; falls back to estimates until production access is configured. |
+| `src/lib/travel/flyai-provider.ts` | Main-app provider shell; remains estimate-only until Task 8 connects the gateway. |
+| `services/travel-provider-gateway/src/contracts.ts` | Strict normalized gateway request, option, response, and stable error contracts. |
+| `services/travel-provider-gateway/src/flyai-adapter.ts` | Safe FlyAI CLI adapter and fixture-side response normalization. |
+| `services/travel-provider-gateway/src/service.ts`, `src/server.ts` | Cache/retry/concurrency orchestration and authenticated internal HTTP service. |
 | `src/lib/recommendation/scoring.ts` | Deterministic scoring and primary recommendation selection from one selected route per participant for each candidate city. |
 | `src/lib/recommendation/calculate-run.ts` | Calculation orchestration, explanation generation, and Supabase persistence. |
 | `src/lib/ai/deepseek-client.ts` | Server-only DeepSeek client and model configuration; each SDK attempt has a 15-second timeout and at most one retry. |
@@ -81,13 +93,14 @@ In fallback mode, the same logical records are kept in process memory instead of
 ## Security Boundaries
 
 - Keep service-role Supabase access in server-side code only.
-- Keep `SUPABASE_SERVICE_ROLE_KEY`, `AMAP_API_KEY`, `DEEPSEEK_API_KEY`, `FLYAI_API_KEY`, and `FLYAI_CLI_PATH` out of browser code.
+- Keep `SUPABASE_SERVICE_ROLE_KEY`, `AMAP_API_KEY`, `DEEPSEEK_API_KEY`, `TRAVEL_GATEWAY_TOKEN`, and all gateway `FLYAI_API_KEY` values out of browser code. The FlyAI key belongs only to the gateway environment.
 - Participant edit tokens are stored as hashes only.
 - Calculation requires a participant edit token from a participant in the plan, and the server checks that the participant limit has been reached before calculating.
 - Local participant permissions are a same-device convenience and not an auth boundary; server-side calculation still verifies the participant edit token hash.
 - Core ranking, ticket lookup normalization, and scoring must remain deterministic; DeepSeek may explain computed results but must not decide rankings.
 - Result recommendations are plan-level shared decisions, not personalized rankings. The UI should surface team total fare and per-person route choices instead of average fare.
 - Fallback mode is local-only and must not be treated as durable storage.
+- Gateway logs and errors must exclude credentials, authorization headers, participant names, raw provider payloads, and complete booking URLs. Booking URLs are accepted only when HTTPS and on the approved `fliggy.com` or `alitrip.com` hosts (including subdomains).
 
 ## UI Boundaries
 
@@ -108,5 +121,7 @@ npm run lint
 npm run test
 npm run build
 ```
+
+For the isolated gateway, run the same three commands from `services/travel-provider-gateway/`. The current Dockerfile is a Node 20 multi-stage, non-root image; it receives secrets only at runtime. The image build itself remains unverified until a Docker daemon is available.
 
 In managed sandboxes, `npm run build` can fail if Turbopack cannot create a process and bind a local port. Re-run the same command in an environment that permits local port binding before release.

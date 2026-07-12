@@ -19,7 +19,7 @@ Mobile-first H5 MVP for choosing a fair cross-city meeting city for 2-6 people i
 - `/p/[code]/result`: shared team result page showing the latest recommendation run, stale-result warning, team total fare, total duration, fairness gap, and per-participant travel details.
 - `POST /api/plans`: creates a plan from `{ title, meetingDate, targetArrivalTime, participantLimit }` and returns `{ code, shareUrl }`; local development requests from `localhost` return a LAN `shareUrl` when available.
 - `GET /api/plans/[code]`: returns `{ plan, participants, latestRun }` for public plan reads.
-- `GET /api/cities/search?q=...`: searches built-in city data and returns `{ cities }`.
+- `GET /api/cities/search?q=...`: searches the built-in city library first, then uses Amap only to validate and map a local miss back to a supported city; returns `{ cities }`.
 - `POST /api/plans/[code]/participants`: creates a participant and returns `{ participantId, editToken }`.
 - `GET /api/plans/[code]/candidates`: returns stored candidate city controls for a plan.
 - `POST /api/plans/[code]/candidates`: currently returns `CANDIDATE_EDITING_UNAVAILABLE`.
@@ -29,11 +29,12 @@ Mobile-first H5 MVP for choosing a fair cross-city meeting city for 2-6 people i
 ## Core Modules
 
 - `src/lib/city/candidate-generator.ts`: deterministic candidate-city generation from participant cities and host controls.
-- `src/lib/city/city-provider.ts`: local-first city search shell; Amap key is reserved for autocomplete/validation fallback.
+- `src/lib/city/amap-client.ts` and `src/lib/city/city-provider.ts`: local-first city search with a 3-second server-side Amap validation fallback; only cities in the built-in library are selectable.
 - `src/lib/fallback/mvp-store.ts`: server-side in-memory fallback store for local create-to-result smoke testing when Supabase variables are missing.
-- `src/lib/travel/types.ts`: normalized travel-provider boundary for provider adapters, including service names and booking URLs when a real ticket source provides them.
+- `src/lib/travel/types.ts`: normalized travel-provider boundary, including gateway request/response types and query timestamps for real prices.
 - `src/lib/travel/estimate-provider.ts`: deterministic estimated travel option fallback using city distance and transport mode.
-- `src/lib/travel/flyai-provider.ts`: FlyAI provider shell that currently falls back to estimated options until production access is configured.
+- `src/lib/travel/flyai-provider.ts`: main-app provider shell, which still returns estimates until Task 8 connects it to the gateway.
+- `services/travel-provider-gateway/`: independently runnable FlyAI gateway with strict contracts, safe CLI execution, cache, concurrency limit, retry, authenticated HTTP API, and container configuration.
 - `src/lib/recommendation/scoring.ts`: deterministic city scoring and primary recommendation selection; each candidate city is scored from one selected route per participant rather than summing every accepted transport mode.
 - `src/lib/recommendation/calculate-run.ts`: manual calculation orchestration that generates candidates, queries travel options, stores recommendation explanations, and marks results stale after 30 minutes.
 - `src/lib/ai/recommendation-explainer.ts`: DeepSeek explanation boundary with strict Chinese JSON validation and deterministic fallback copy for missing, failed, timed-out, or malformed model output.
@@ -52,23 +53,49 @@ Supabase variables:
 - `NEXT_PUBLIC_SUPABASE_URL`: public Supabase project URL used by browser and server clients.
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`: public anon key for browser-side reads.
 - `SUPABASE_SERVICE_ROLE_KEY`: server-only service-role key for route handlers and background calculations.
-- `AMAP_API_KEY`: server-side Amap key reserved for city autocomplete and validation fallback.
+- `AMAP_API_KEY`: server-side Amap key for local-miss city validation and mapping; it never expands the scoring city library.
 - `DEEPSEEK_API_KEY`: server-side DeepSeek key for explanation and share-copy generation only.
 - `DEEPSEEK_MODEL`: optional server-side model override; defaults to `deepseek-v4-flash`.
-- `FLYAI_API_KEY`: server-side FlyAI key reserved for real ticket provider access.
-- `FLYAI_CLI_PATH`: optional server-side FlyAI CLI path; the MVP shell returns estimates until production access is wired.
+- `FLYAI_PROBE_CLI_PATH`: optional operator-only executable override for the redacted FlyAI capability probe.
+- `TRAVEL_GATEWAY_URL`: server-side internal gateway URL; defined now, but not consumed by the main app until Task 8.
+- `TRAVEL_GATEWAY_TOKEN`: server-side bearer token for the internal gateway; defined now, but not consumed by the main app until Task 8.
+- `TRAVEL_GATEWAY_TIMEOUT_MS`: optional main-app gateway request timeout; defaults to `30000` when Task 8 is connected.
+- `TRAVEL_CALCULATION_TIMEOUT_MS`: optional total travel-query budget; defaults to `45000` when Task 9 is connected.
 
 DeepSeek requests use a 15-second timeout and at most one SDK retry. Provider failures never fail recommendation calculation or change deterministic rankings; they return local fallback explanations instead.
 
-## Approved Next Work
+## Travel Provider Status
 
-The Amap and FlyAI production-shaped integration is approved but not implemented. Use the [design specification](docs/superpowers/specs/2026-07-12-amap-flyai-integration-design.md) and [implementation plan](docs/superpowers/plans/2026-07-12-amap-flyai-integration.md) as the execution source of truth. Public-beta FlyAI enablement remains blocked until the capability probe confirms authorization, quota, response fields, and booking-link behavior.
+Tasks 1-7 of the [Amap and FlyAI implementation plan](docs/superpowers/plans/2026-07-12-amap-flyai-integration.md) are complete: Amap city validation, travel query freshness persistence, and the isolated gateway have been built and fixture-verified. The main application is deliberately **not yet connected** to that gateway, so user calculations still use deterministic estimates.
+
+The gateway has its own environment file at `services/travel-provider-gateway/.env.example` and commands:
+
+```bash
+cd services/travel-provider-gateway
+npm ci
+npm run lint
+npm run test
+npm run build
+```
+
+The gateway exposes `GET /healthz` and authenticated `POST /v1/search`. It accepts only supported normalized requests, calls FlyAI through an argument-array CLI invocation with shell execution disabled, and returns stable error codes. Its 5-minute cache, four-call concurrency limit, 12-second provider timeout, and one retry are process-local.
+
+Run `npm run probe:providers` only with operator-managed keys. It prints a single redacted JSON summary (status, latency, count, and field names), never provider payload values. Production enablement remains blocked until authorization, quota, actual field semantics, price units, timestamp behavior, and booking-link hosts are confirmed with a credentialed probe. The Dockerfile policy and gateway build are verified; an actual Docker image build still needs a running Docker daemon.
 
 ## Verification
 
 Run after code changes:
 
 ```bash
+npm run lint
+npm run test
+npm run build
+```
+
+For gateway changes, also run:
+
+```bash
+cd services/travel-provider-gateway
 npm run lint
 npm run test
 npm run build

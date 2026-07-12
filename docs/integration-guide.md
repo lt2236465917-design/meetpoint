@@ -37,11 +37,14 @@ Recent meeting records are browser-local convenience data stored in `localStorag
 | `NEXT_PUBLIC_SUPABASE_URL` | Browser and server | Supabase project URL. |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Browser and server | Public anon key for browser reads. |
 | `SUPABASE_SERVICE_ROLE_KEY` | Server only | Service-role key for route handlers and calculations. |
-| `AMAP_API_KEY` | Server only | Reserved for Amap autocomplete and validation fallback. |
+| `AMAP_API_KEY` | Server only | Local-miss Amap city validation; results must map back to the built-in city library. |
 | `DEEPSEEK_API_KEY` | Server only | DeepSeek explanations and share copy only. |
 | `DEEPSEEK_MODEL` | Server only | Optional server-side model override; defaults to `deepseek-v4-flash`. |
-| `FLYAI_API_KEY` | Server only | Reserved for real ticket provider access. |
-| `FLYAI_CLI_PATH` | Server only | Optional FlyAI CLI path. |
+| `FLYAI_PROBE_CLI_PATH` | Server only | Optional operator-only executable override for the redacted FlyAI probe. |
+| `TRAVEL_GATEWAY_URL` | Server only | Internal gateway URL, reserved for the upcoming main-app gateway client. |
+| `TRAVEL_GATEWAY_TOKEN` | Server only | Bearer token for the internal gateway, reserved for the upcoming main-app gateway client. |
+| `TRAVEL_GATEWAY_TIMEOUT_MS` | Server only | Main-app gateway request timeout; planned default `30000` ms. |
+| `TRAVEL_CALCULATION_TIMEOUT_MS` | Server only | Total travel-query budget; planned default `45000` ms. |
 
 ## API Quick Reference
 
@@ -87,7 +90,7 @@ Returns:
 
 `GET /api/cities/search?q=上海`
 
-Returns `{ "cities": [] }` from the built-in city library.
+Returns `{ "cities": [] }`. Built-in city matches return immediately. On a local miss and with `AMAP_API_KEY` configured, the server requests Amap input tips with a 3-second timeout, then returns only exact matches mapped back to the built-in city library. Amap failure, invalid data, missing credentials, and unsupported locations safely return no remote selectable city.
 
 ### Submit Participant
 
@@ -137,7 +140,7 @@ Returns:
 
 Calculation also stores recommendation `explanation` and `risk_summary` fields for the result page.
 
-Result rankings are shared for the whole plan. The result page shows the same top city recommendations to every participant, then breaks each card down into selected per-participant routes. In estimate mode these rows use deterministic fallback prices; after FlyAI/Amap or another ticket source is wired, the same `travel_options` rows can carry train or flight service names, real prices, and booking URLs.
+Result rankings are shared for the whole plan. The result page shows the same top city recommendations to every participant, then breaks each card down into selected per-participant routes. The current main application remains in deterministic estimate mode. The schema supports `queried_at` for future real gateway prices, but the UI/client connection and real-price presentation are deferred to Tasks 8-10.
 
 ### Regenerate Recommendation Explanations
 
@@ -190,7 +193,26 @@ Use these checks after layout or component changes:
 4. On `/p/[code]/join`, type a departure city, confirm city candidates do not cover the transport-mode buttons, then select a city and confirm the candidates disappear.
 5. Confirm no browser or framework overlay visually covers the right side of the app. If a red overlay appears while the DOM has no app-level fixed red element, check browser extensions before changing app CSS.
 
-## Real Ticket And Amap Acceptance
+## Gateway Setup And Contract (internal service)
+
+The gateway is independently deployable. Before starting it, copy `services/travel-provider-gateway/.env.example` to a local `.env` in that directory and set `FLYAI_API_KEY` and `TRAVEL_GATEWAY_TOKEN`; never commit either value. The gateway does not load `.env` itself, so export that file into the process environment before starting it.
+
+```bash
+cd services/travel-provider-gateway
+npm ci
+set -a && source .env && set +a
+npm run dev
+```
+
+Set `PORT=8080` explicitly for the documented container port. If `PORT` is omitted, the current server implementation falls back to `3000`; aligning that default is an outstanding maintenance fix.
+
+- `GET /healthz` returns `{ "status": "ok" }` without authentication or secrets.
+- `POST /v1/search` requires `Authorization: Bearer <TRAVEL_GATEWAY_TOKEN>` and a strict normalized request. It returns normalized `options` and an ISO `queriedAt`; the gateway's own cache remains an internal detail.
+- Stable gateway errors are `UNAUTHORIZED`, `INVALID_REQUEST`, `PROVIDER_TIMEOUT`, `PROVIDER_UNAVAILABLE`, `PROVIDER_INVALID_RESPONSE`, and `INTERNAL_ERROR`. The service does not return provider exception text or raw response bodies.
+
+The gateway contract, cache/retry/concurrency behavior, and container policy are locally verified with fixtures. It is not yet proof of live FlyAI compatibility. Run `npm run probe:providers` from the repository root only with operator-managed keys; it outputs only redacted status/count/latency/field-name summaries. A real Docker image build remains unverified because the local Docker daemon was unavailable.
+
+## Real Ticket And Amap Acceptance (after Tasks 8-10)
 
 Use these checks after wiring FlyAI/Fliggy or another ticket source and Amap city data:
 
