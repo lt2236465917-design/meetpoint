@@ -96,7 +96,7 @@ export function startGatewayServer(): Server {
   const token = process.env.TRAVEL_GATEWAY_TOKEN;
   if (token === undefined || token.length === 0) throw new Error("TRAVEL_GATEWAY_TOKEN is required");
   const server = createGatewayServer({ token, service: createTravelSearchService() });
-  const port = Number(process.env.PORT ?? 3_000);
+  const port = Number(process.env.PORT ?? 8_080);
   server.listen(port);
   return server;
 }

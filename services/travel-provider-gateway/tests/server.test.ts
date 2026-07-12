@@ -1,9 +1,10 @@
 import type { AddressInfo } from "node:net";
+import { Server } from "node:http";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { GatewaySearchRequest, GatewaySearchResponse } from "../src/contracts.js";
 import { GatewayServiceError } from "../src/service.js";
-import { createGatewayServer } from "../src/server.js";
+import { createGatewayServer, startGatewayServer } from "../src/server.js";
 
 const request: GatewaySearchRequest = {
   originCityCode: "beijing", originCityName: "北京", destinationCityCode: "shanghai",
@@ -20,9 +21,13 @@ async function start(search = vi.fn().mockResolvedValue(response), token = "gate
   return { baseUrl: `http://127.0.0.1:${port}`, search };
 }
 
-afterEach(async () => Promise.all(servers.splice(0).map((server) => new Promise<void>((resolve, reject) => {
-  server.close((error) => error ? reject(error) : resolve());
-}))));
+afterEach(async () => {
+  vi.unstubAllEnvs();
+  vi.restoreAllMocks();
+  await Promise.all(servers.splice(0).map((server) => new Promise<void>((resolve, reject) => {
+    server.close((error) => error ? reject(error) : resolve());
+  })));
+});
 
 describe("createGatewayServer", () => {
   it("returns a secret-free health response without authentication", async () => {
@@ -79,5 +84,27 @@ describe("createGatewayServer", () => {
     expect(result.status).toBe(status);
     expect(body).toMatchObject({ code });
     expect(text).not.toMatch(/secret|raw provider/);
+  });
+});
+
+describe("startGatewayServer", () => {
+  it("listens on 8080 when PORT is unset", () => {
+    vi.stubEnv("TRAVEL_GATEWAY_TOKEN", "gateway-secret");
+    vi.stubEnv("PORT", undefined);
+    const listen = vi.spyOn(Server.prototype, "listen").mockReturnThis();
+
+    startGatewayServer();
+
+    expect(listen).toHaveBeenCalledWith(8080);
+  });
+
+  it("uses the supplied PORT value", () => {
+    vi.stubEnv("TRAVEL_GATEWAY_TOKEN", "gateway-secret");
+    vi.stubEnv("PORT", "9123");
+    const listen = vi.spyOn(Server.prototype, "listen").mockReturnThis();
+
+    startGatewayServer();
+
+    expect(listen).toHaveBeenCalledWith(9123);
   });
 });
