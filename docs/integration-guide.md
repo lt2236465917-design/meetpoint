@@ -140,7 +140,7 @@ Returns:
 
 Calculation also stores recommendation `explanation` and `risk_summary` fields for the result page.
 
-Result rankings are shared for the whole plan. The calculation service queries the gateway from server-side code once per distinct accepted mode, validates and deterministically orders valid real route facts, then maps them back to each participant. Gateway failures use estimates per mode; a successful empty result is unavailable. The schema supports `queried_at`; result-page source, freshness, and booking presentation remain Task 10 work.
+Result rankings are shared for the whole plan. The calculation service queries the gateway from server-side code once per distinct accepted mode, validates and deterministically orders valid real route facts, then maps them back to each participant. Gateway failures use estimates per mode; a successful empty result is unavailable. Result cards show provider source, query freshness, and safe booking actions from `travel_options.provider`, `queried_at`, and approved booking URLs.
 
 ### Regenerate Recommendation Explanations
 
@@ -180,7 +180,7 @@ Returns:
 3. Open `/p/[code]/join`, submit participants until the plan reaches its participant limit.
 4. After each participant submit, confirm the browser returns to `/p/[code]` and the filling records update without a manual refresh.
 5. When the participant limit is reached on a device that filled the plan, use the public plan page's direct "开始计算" action.
-6. Open `/p/[code]/result`, confirm recommendation cards render explanations, team total fare, total duration, fairness gap, per-participant travel details, and stale-result warnings when applicable.
+6. Open `/p/[code]/result`, confirm recommendation cards render explanations, team total fare, total duration, fairness gap, source labels, query freshness where available, per-participant travel details, and stale-result warnings when applicable.
 7. Optionally call `POST /api/plans/[code]/explain` and confirm the response count matches the latest run's recommendation rows.
 
 ## Responsive UI Checks
