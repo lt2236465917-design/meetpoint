@@ -9,7 +9,7 @@ This document is the stable technical map for the MVP. Detailed task history liv
 - When Supabase server variables are missing, route handlers use the server-side in-memory fallback store in `src/lib/fallback/mvp-store.ts` so the local create-to-result MVP can be smoke-tested without external credentials.
 - Browser-side Supabase access must use only the anon client from `src/lib/supabase/client.ts`.
 - Deterministic business logic lives in `src/lib/`; route handlers orchestrate validation, persistence, and service calls.
-- Amap is called only from the Next.js server-side city provider after a local city miss. The isolated travel gateway is a separate Node service under `services/travel-provider-gateway/`; the main application will call it in Task 8, not before.
+- Amap is called only from the Next.js server-side city provider after a local city miss. The main application calls the isolated Node travel gateway at `services/travel-provider-gateway/` only from server-side calculation code.
 
 ## User-Facing Routes
 
@@ -56,7 +56,7 @@ In fallback mode, the same logical records are kept in process memory instead of
 2. `TravelOption.queriedAt` is nullable. Real gateway prices carry the gateway query timestamp; deterministic estimates and unavailable options use `null`. Supabase persists this as `travel_options.queried_at`.
 3. `services/travel-provider-gateway/` owns FlyAI credentials and CLI execution. Its HTTP boundary is `GET /healthz` and bearer-authenticated `POST /v1/search`; requests and responses are strict Zod schemas.
 4. The gateway uses argument-array `execFile` calls with shell execution disabled, a 12-second provider timeout, one retry only for timeout/unavailability, a five-minute route-facts cache, and FIFO concurrency limited to four calls. It does not receive participant identity, generate candidates, select routes, score cities, call DeepSeek, or persist plans.
-5. The gateway is fixture-verified, but the main application still uses estimates until Task 8 adds the HTTP client. Real FlyAI schema/field semantics, authorization, quota, and booking host acceptance remain external gates.
+5. The main application sends one authenticated JSON request per distinct accepted mode. It strictly validates responses, maps facts to the participant only after the gateway response, deterministically orders valid route facts before scoring, and keeps per-mode failures as estimates. Real FlyAI schema/field semantics, authorization, quota, and booking host acceptance remain external gates.
 
 ## Core Modules
 
@@ -71,7 +71,7 @@ In fallback mode, the same logical records are kept in process memory instead of
 | `src/lib/fallback/mvp-store.ts` | In-memory local fallback persistence for create-to-result smoke testing without Supabase credentials. |
 | `src/lib/travel/types.ts` | Vendor-neutral travel-provider interface plus main-app gateway request/response types. |
 | `src/lib/travel/estimate-provider.ts` | Deterministic estimated option fallback. |
-| `src/lib/travel/flyai-provider.ts` | Main-app provider shell; remains estimate-only until Task 8 connects the gateway. |
+| `src/lib/travel/gateway-client.ts`, `src/lib/travel/flyai-provider.ts` | Server-only authenticated gateway client and per-mode fallback provider; no participant identity crosses this boundary. |
 | `services/travel-provider-gateway/src/contracts.ts` | Strict normalized gateway request, option, response, and stable error contracts. |
 | `services/travel-provider-gateway/src/flyai-adapter.ts` | Safe FlyAI CLI adapter and fixture-side response normalization. |
 | `services/travel-provider-gateway/src/service.ts`, `src/server.ts` | Cache/retry/concurrency orchestration and authenticated internal HTTP service. |

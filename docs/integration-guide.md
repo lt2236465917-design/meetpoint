@@ -41,10 +41,10 @@ Recent meeting records are browser-local convenience data stored in `localStorag
 | `DEEPSEEK_API_KEY` | Server only | DeepSeek explanations and share copy only. |
 | `DEEPSEEK_MODEL` | Server only | Optional server-side model override; defaults to `deepseek-v4-flash`. |
 | `FLYAI_PROBE_CLI_PATH` | Server only | Optional operator-only executable override for the redacted FlyAI probe. |
-| `TRAVEL_GATEWAY_URL` | Server only | Internal gateway URL, reserved for the upcoming main-app gateway client. |
-| `TRAVEL_GATEWAY_TOKEN` | Server only | Bearer token for the internal gateway, reserved for the upcoming main-app gateway client. |
-| `TRAVEL_GATEWAY_TIMEOUT_MS` | Server only | Main-app gateway request timeout; planned default `30000` ms. |
-| `TRAVEL_CALCULATION_TIMEOUT_MS` | Server only | Total travel-query budget; planned default `45000` ms. |
+| `TRAVEL_GATEWAY_URL` | Server only | Internal gateway URL used by the main-app travel provider. |
+| `TRAVEL_GATEWAY_TOKEN` | Server only | Bearer token for the internal gateway. |
+| `TRAVEL_GATEWAY_TIMEOUT_MS` | Server only | Main-app gateway request timeout; defaults to `30000` ms. |
+| `TRAVEL_CALCULATION_TIMEOUT_MS` | Server only | Total travel-query budget; defaults to `45000` ms. |
 
 ## API Quick Reference
 
@@ -140,7 +140,7 @@ Returns:
 
 Calculation also stores recommendation `explanation` and `risk_summary` fields for the result page.
 
-Result rankings are shared for the whole plan. The result page shows the same top city recommendations to every participant, then breaks each card down into selected per-participant routes. The current main application remains in deterministic estimate mode. The schema supports `queried_at` for future real gateway prices, but the UI/client connection and real-price presentation are deferred to Tasks 8-10.
+Result rankings are shared for the whole plan. The calculation service queries the gateway from server-side code once per distinct accepted mode, validates and deterministically orders valid real route facts, then maps them back to each participant. Gateway failures use estimates per mode; a successful empty result is unavailable. The schema supports `queried_at`; result-page source, freshness, and booking presentation remain Task 10 work.
 
 ### Regenerate Recommendation Explanations
 
@@ -204,7 +204,7 @@ set -a && source .env && set +a
 npm run dev
 ```
 
-Set `PORT=8080` explicitly for the documented container port. If `PORT` is omitted, the current server implementation falls back to `3000`; aligning that default is an outstanding maintenance fix.
+The gateway defaults to `PORT=8080`, matching the documented container port; an explicitly supplied `PORT` overrides it.
 
 - `GET /healthz` returns `{ "status": "ok" }` without authentication or secrets.
 - `POST /v1/search` requires `Authorization: Bearer <TRAVEL_GATEWAY_TOKEN>` and a strict normalized request. It returns normalized `options` and an ISO `queriedAt`; the gateway's own cache remains an internal detail.
@@ -212,7 +212,7 @@ Set `PORT=8080` explicitly for the documented container port. If `PORT` is omitt
 
 The gateway contract, cache/retry/concurrency behavior, and container policy are locally verified with fixtures. It is not yet proof of live FlyAI compatibility. Run `npm run probe:providers` from the repository root only with operator-managed keys; it outputs only redacted status/count/latency/field-name summaries. A real Docker image build remains unverified because the local Docker daemon was unavailable.
 
-## Real Ticket And Amap Acceptance (after Tasks 8-10)
+## Real Ticket And Amap Acceptance (after Tasks 9-10)
 
 Use these checks after wiring FlyAI/Fliggy or another ticket source and Amap city data:
 

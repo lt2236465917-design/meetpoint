@@ -33,7 +33,7 @@ Mobile-first H5 MVP for choosing a fair cross-city meeting city for 2-6 people i
 - `src/lib/fallback/mvp-store.ts`: server-side in-memory fallback store for local create-to-result smoke testing when Supabase variables are missing.
 - `src/lib/travel/types.ts`: normalized travel-provider boundary, including gateway request/response types and query timestamps for real prices.
 - `src/lib/travel/estimate-provider.ts`: deterministic estimated travel option fallback using city distance and transport mode.
-- `src/lib/travel/flyai-provider.ts`: main-app provider shell, which still returns estimates until Task 8 connects it to the gateway.
+- `src/lib/travel/gateway-client.ts` and `src/lib/travel/flyai-provider.ts`: server-side authenticated gateway client and per-mode provider fallback; real route facts are deterministically ordered before scoring.
 - `services/travel-provider-gateway/`: independently runnable FlyAI gateway with strict contracts, safe CLI execution, cache, concurrency limit, retry, authenticated HTTP API, and container configuration.
 - `src/lib/recommendation/scoring.ts`: deterministic city scoring and primary recommendation selection; each candidate city is scored from one selected route per participant rather than summing every accepted transport mode.
 - `src/lib/recommendation/calculate-run.ts`: manual calculation orchestration that generates candidates, queries travel options, stores recommendation explanations, and marks results stale after 30 minutes.
@@ -57,16 +57,16 @@ Supabase variables:
 - `DEEPSEEK_API_KEY`: server-side DeepSeek key for explanation and share-copy generation only.
 - `DEEPSEEK_MODEL`: optional server-side model override; defaults to `deepseek-v4-flash`.
 - `FLYAI_PROBE_CLI_PATH`: optional operator-only executable override for the redacted FlyAI capability probe.
-- `TRAVEL_GATEWAY_URL`: server-side internal gateway URL; defined now, but not consumed by the main app until Task 8.
-- `TRAVEL_GATEWAY_TOKEN`: server-side bearer token for the internal gateway; defined now, but not consumed by the main app until Task 8.
-- `TRAVEL_GATEWAY_TIMEOUT_MS`: optional main-app gateway request timeout; defaults to `30000` when Task 8 is connected.
-- `TRAVEL_CALCULATION_TIMEOUT_MS`: optional total travel-query budget; defaults to `45000` when Task 9 is connected.
+- `TRAVEL_GATEWAY_URL`: server-side internal gateway URL used by the main-app travel provider.
+- `TRAVEL_GATEWAY_TOKEN`: server-side bearer token for the internal gateway.
+- `TRAVEL_GATEWAY_TIMEOUT_MS`: optional main-app gateway request timeout; defaults to `30000` ms.
+- `TRAVEL_CALCULATION_TIMEOUT_MS`: optional total travel-query budget; defaults to `45000` ms.
 
 DeepSeek requests use a 15-second timeout and at most one SDK retry. Provider failures never fail recommendation calculation or change deterministic rankings; they return local fallback explanations instead.
 
 ## Travel Provider Status
 
-Tasks 1-7 of the [Amap and FlyAI implementation plan](docs/superpowers/plans/2026-07-12-amap-flyai-integration.md) are complete: Amap city validation, travel query freshness persistence, and the isolated gateway have been built and fixture-verified. The main application is deliberately **not yet connected** to that gateway, so user calculations still use deterministic estimates.
+Tasks 1-8 of the [Amap and FlyAI implementation plan](docs/superpowers/plans/2026-07-12-amap-flyai-integration.md) are complete: Amap city validation, travel query freshness persistence, the isolated gateway, and the main-app authenticated client are fixture-verified. The app uses real normalized route facts when the gateway succeeds; per-mode failures fall back to deterministic estimates, while successful empty results remain unavailable rather than pretending to be estimates.
 
 The gateway has its own environment file at `services/travel-provider-gateway/.env.example` and commands:
 
