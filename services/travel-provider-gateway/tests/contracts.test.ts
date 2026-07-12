@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  gatewayErrorBodySchema,
+  gatewayErrorCodeSchema,
   gatewaySearchRequestSchema,
   gatewaySearchResponseSchema,
   gatewayTravelOptionSchema,
@@ -63,7 +65,38 @@ describe("gatewayTravelOptionSchema", () => {
     expect(() => gatewayTravelOptionSchema.parse({ ...validOption, serviceName: " " })).toThrow();
     expect(() => gatewayTravelOptionSchema.parse({ ...validOption, bookingUrl: "http://www.fliggy.com/booking" })).toThrow();
     expect(() => gatewayTravelOptionSchema.parse({ ...validOption, bookingUrl: "https://evil.example/booking" })).toThrow();
+    expect(() => gatewayTravelOptionSchema.parse({ ...validOption, bookingUrl: "https://fliggy.com.evil/booking" })).toThrow();
     expect(gatewayTravelOptionSchema.parse({ ...validOption, bookingUrl: null }).bookingUrl).toBeNull();
+  });
+});
+
+describe("gateway error schema", () => {
+  it("keeps the public error code set stable", () => {
+    const codes = [
+      "UNAUTHORIZED",
+      "INVALID_REQUEST",
+      "PROVIDER_TIMEOUT",
+      "PROVIDER_UNAVAILABLE",
+      "PROVIDER_INVALID_RESPONSE",
+      "INTERNAL_ERROR",
+    ] as const;
+
+    for (const code of codes) {
+      expect(gatewayErrorCodeSchema.parse(code)).toBe(code);
+    }
+    expect(() => gatewayErrorCodeSchema.parse("UNKNOWN_ERROR")).toThrow();
+  });
+
+  it("accepts only a strict nonempty error body", () => {
+    const errorBody = {
+      code: "PROVIDER_TIMEOUT",
+      message: "FlyAI request timed out",
+    } as const;
+
+    expect(gatewayErrorBodySchema.parse(errorBody)).toEqual(errorBody);
+    expect(() => gatewayErrorBodySchema.parse({ ...errorBody, code: "UNKNOWN_ERROR" })).toThrow();
+    expect(() => gatewayErrorBodySchema.parse({ ...errorBody, message: " " })).toThrow();
+    expect(() => gatewayErrorBodySchema.parse({ ...errorBody, retryAfter: 5 })).toThrow();
   });
 });
 
