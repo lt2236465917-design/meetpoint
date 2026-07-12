@@ -9,8 +9,10 @@ import {
   fallbackExplanation,
 } from "@/lib/ai/recommendation-explainer";
 import { FlyAITravelProvider } from "@/lib/travel/flyai-provider";
+import { GatewayClientError, searchGateway } from "@/lib/travel/gateway-client";
 import { createUnavailableTravelOption } from "@/lib/travel/unavailable-option";
-import type { CityRecommendation } from "@/types/domain";
+import type { CityRecommendation, TransportMode } from "@/types/domain";
+import type { TravelSearchInput } from "@/lib/travel/types";
 
 vi.mock("@/lib/ai/deepseek-client", () => ({
   createDeepSeekClient: vi.fn(),
@@ -42,39 +44,177 @@ afterEach(() => {
   process.env = originalEnv;
 });
 
+const travelSearchInput: TravelSearchInput = {
+  participantId: "p1",
+  originCityCode: "beijing",
+  originCityName: "北京",
+  destinationCityCode: "wuhan",
+  destinationCityName: "武汉",
+  meetingDate: "2026-08-01",
+  targetArrivalTime: "12:00",
+  acceptedModes: ["flight"],
+};
+
+function gatewayResponse(mode: TransportMode = "flight") {
+  return {
+    options: [{
+      mode,
+      source: "real",
+      provider: "flyai",
+      priceCny: 680,
+      departAt: "2026-08-01T07:00:00+08:00",
+      arriveAt: "2026-08-01T09:00:00+08:00",
+      durationMinutes: 120,
+      isDirect: true,
+      hasTransfer: false,
+      transferCount: 0,
+      serviceName: "MU1234",
+      bookingUrl: "https://www.fliggy.com/booking/123",
+    }],
+    queriedAt: "2026-07-12T08:00:00.000Z",
+  };
+}
+
+const gatewaySearchRequest = {
+  originCityCode: "beijing",
+  originCityName: "北京",
+  destinationCityCode: "wuhan",
+  destinationCityName: "武汉",
+  meetingDate: "2026-08-01",
+  mode: "flight" as const,
+};
+
+describe("searchGateway", () => {
+  it("uses a token-safe timeout error for a fetch timeout", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(Object.assign(
+      new Error("gateway-secret-token timed out"), { name: "TimeoutError" },
+    )));
+
+    const error = await searchGateway(gatewaySearchRequest, {
+      gatewayUrl: "http://gateway.internal:8080",
+      token: "gateway-secret-token",
+    }).then(() => null, (caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(GatewayClientError);
+    expect(error).toMatchObject({ code: "GATEWAY_TIMEOUT", message: "GATEWAY_TIMEOUT" });
+    expect((error as Error).message).not.toContain("gateway-secret-token");
+  });
+});
+
 describe("FlyAITravelProvider", () => {
-  it("returns estimate options while production FlyAI access is not configured", async () => {
-    vi.stubEnv("FLYAI_CLI_PATH", "");
+  it("posts authenticated per-mode requests and maps real route facts to the participant and candidate", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(gatewayResponse()), {
+      status: 200,
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+    vi.stubEnv("TRAVEL_GATEWAY_URL", "http://gateway.internal:8080");
+    vi.stubEnv("TRAVEL_GATEWAY_TOKEN", "gateway-token");
     const provider = new FlyAITravelProvider();
 
-    const options = await provider.search({
+    const options = await provider.search(travelSearchInput);
+
+    expect(fetchMock).toHaveBeenCalledWith("http://gateway.internal:8080/v1/search", {
+      method: "POST",
+      headers: {
+        authorization: "Bearer gateway-token",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        originCityCode: "beijing",
+        originCityName: "北京",
+        destinationCityCode: "wuhan",
+        destinationCityName: "武汉",
+        meetingDate: "2026-08-01",
+        mode: "flight",
+      }),
+      signal: expect.any(AbortSignal),
+    });
+    expect(options).toEqual([expect.objectContaining({
       participantId: "p1",
-      originCityCode: "beijing",
-      originCityName: "北京",
-      destinationCityCode: "wuhan",
-      destinationCityName: "武汉",
-      meetingDate: "2026-08-01",
-      targetArrivalTime: "12:00",
+      candidateCityCode: "wuhan",
+      mode: "flight",
+      source: "real",
+      provider: "flyai",
+      queriedAt: "2026-07-12T08:00:00.000Z",
+      priceCny: 680,
+      bookingUrl: "https://www.fliggy.com/booking/123",
+      waitMinutes: null,
+      failureReason: null,
+    })]);
+  });
+
+  it.each([
+    ["a timeout", () => Promise.reject(new DOMException("aborted", "AbortError"))],
+    ["a non-OK response", () => Promise.resolve(new Response("unavailable", { status: 503 }))],
+    ["an invalid gateway schema", () => Promise.resolve(new Response(JSON.stringify({ options: [], queriedAt: "not-a-time" }), { status: 200 }))],
+    ["an unapproved booking link", () => Promise.resolve(new Response(JSON.stringify({
+      ...gatewayResponse(),
+      options: [{ ...gatewayResponse().options[0], bookingUrl: "https://evil.example/booking" }],
+    }), { status: 200 }))],
+  ])("uses an estimate for %s without exposing the authorization token", async (_name, response) => {
+    vi.stubGlobal("fetch", vi.fn(response));
+    vi.stubEnv("TRAVEL_GATEWAY_URL", "http://gateway.internal:8080");
+    vi.stubEnv("TRAVEL_GATEWAY_TOKEN", "gateway-secret-token");
+
+    const options = await new FlyAITravelProvider().search(travelSearchInput);
+
+    expect(options).toEqual([expect.objectContaining({
+      mode: "flight",
+      source: "estimated",
+      provider: "estimate",
+      queriedAt: null,
+    })]);
+  });
+
+  it("creates one unavailable option for a successful empty gateway search", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      options: [], queriedAt: "2026-07-12T08:00:00.000Z",
+    }), { status: 200 })));
+    vi.stubEnv("TRAVEL_GATEWAY_URL", "http://gateway.internal:8080");
+    vi.stubEnv("TRAVEL_GATEWAY_TOKEN", "gateway-token");
+
+    await expect(new FlyAITravelProvider().search(travelSearchInput)).resolves.toEqual([
+      expect.objectContaining({
+        mode: "flight",
+        source: "unavailable",
+        provider: "flyai",
+        failureReason: "NO_FEASIBLE_SAME_DAY_ROUTE",
+      }),
+    ]);
+  });
+
+  it("filters gateway options for other modes and keeps another mode's failure isolated", async () => {
+    const fetchMock = vi.fn(async (_url: string, init: RequestInit) => {
+      const request = JSON.parse(String(init.body)) as { mode: TransportMode };
+      if (request.mode === "flight") return new Response("unavailable", { status: 503 });
+      return new Response(JSON.stringify(gatewayResponse("flight")), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    vi.stubEnv("TRAVEL_GATEWAY_URL", "http://gateway.internal:8080");
+    vi.stubEnv("TRAVEL_GATEWAY_TOKEN", "gateway-token");
+
+    const options = await new FlyAITravelProvider().search({
+      ...travelSearchInput,
       acceptedModes: ["flight", "high_speed_rail"],
     });
 
-    expect(options).toHaveLength(2);
-    expect(options).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          mode: "flight",
-          source: "estimated",
-          provider: "estimate",
-          queriedAt: null,
-        }),
-        expect.objectContaining({
-          mode: "high_speed_rail",
-          source: "estimated",
-          provider: "estimate",
-          queriedAt: null,
-        }),
-      ]),
-    );
+    expect(options).toEqual([
+      expect.objectContaining({ mode: "flight", source: "estimated" }),
+      expect.objectContaining({
+        mode: "high_speed_rail",
+        source: "unavailable",
+        failureReason: "NO_FEASIBLE_SAME_DAY_ROUTE",
+      }),
+    ]);
+  });
+
+  it("uses estimates when the gateway URL is missing", async () => {
+    vi.stubEnv("TRAVEL_GATEWAY_URL", "");
+    vi.stubEnv("TRAVEL_GATEWAY_TOKEN", "gateway-token");
+
+    await expect(new FlyAITravelProvider().search(travelSearchInput)).resolves.toEqual([
+      expect.objectContaining({ mode: "flight", source: "estimated", provider: "estimate" }),
+    ]);
   });
 
   it("creates unavailable options without claiming a provider query time", () => {
