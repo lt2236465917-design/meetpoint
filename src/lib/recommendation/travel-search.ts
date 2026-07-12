@@ -236,25 +236,30 @@ function cloneForParticipants(group: SearchGroup, options: TravelOption[]) {
 export async function collectTravelOptions(
   input: CollectTravelOptionsInput,
 ): Promise<CollectTravelOptionsResult> {
+  const startedAt = Date.now();
   const groups = createGroups(input);
   const outcomes = new Map<string, SearchOutcome>();
+  const deadline = calculationTimeoutMs(input.timeoutMs);
+  const deadlineAt = startedAt + deadline;
   const pending = groups.map(async (group) => {
     try {
+      const options = await input.provider.search(group.input);
+      if (Date.now() > deadlineAt) return;
       outcomes.set(group.key, {
         status: "fulfilled",
-        options: await input.provider.search(group.input),
+        options,
       });
     } catch {
+      if (Date.now() > deadlineAt) return;
       outcomes.set(group.key, { status: "rejected" });
     }
   });
 
-  const deadline = calculationTimeoutMs(input.timeoutMs);
   let timer: ReturnType<typeof setTimeout> | undefined;
   await Promise.race([
     Promise.all(pending),
     new Promise<void>((resolve) => {
-      timer = setTimeout(resolve, deadline);
+      timer = setTimeout(resolve, Math.max(0, deadlineAt - Date.now()));
     }),
   ]);
   if (timer) clearTimeout(timer);

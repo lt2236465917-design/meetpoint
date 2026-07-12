@@ -146,6 +146,62 @@ describe("collectTravelOptions", () => {
     expect(result.usedFallback).toBe(true);
   });
 
+  it("starts the total deadline when collection begins", async () => {
+    const provider = providerFrom(async () => {
+      const startedAt = Date.now();
+      while (Date.now() - startedAt < 30) {
+        // Simulate expensive synchronous provider setup before its promise settles.
+      }
+      return [option()];
+    });
+
+    const result = await collectTravelOptions({
+      participants: [participants[0]],
+      candidates,
+      meetingDate: "2026-08-01",
+      targetArrivalTime: "12:00",
+      provider,
+      timeoutMs: 1,
+    });
+
+    expect(result.options).toEqual([
+      expect.objectContaining({
+        participantId: "p1",
+        source: "estimated",
+        provider: "estimate",
+      }),
+    ]);
+    expect(result.usedFallback).toBe(true);
+  });
+
+  it("does not restart the total deadline after synchronous provider setup", async () => {
+    const startedAt = Date.now();
+    const provider = providerFrom(async () => {
+      while (Date.now() - startedAt < 60) {
+        // Simulate setup that consumes the whole collection budget.
+      }
+      return new Promise<TravelOption[]>(() => {});
+    });
+
+    const result = await collectTravelOptions({
+      participants: [participants[0]],
+      candidates,
+      meetingDate: "2026-08-01",
+      targetArrivalTime: "12:00",
+      provider,
+      timeoutMs: 50,
+    });
+
+    expect(Date.now() - startedAt).toBeLessThan(90);
+    expect(result.options).toEqual([
+      expect.objectContaining({
+        participantId: "p1",
+        source: "estimated",
+        provider: "estimate",
+      }),
+    ]);
+  });
+
   it("stabilizes selected routes when the provider returns the same facts in a different order", async () => {
     const routes = [
       option({ serviceName: "later", priceCny: 500, durationMinutes: 150 }),
