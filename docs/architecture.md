@@ -72,6 +72,7 @@ In fallback mode, the same logical records are kept in process memory instead of
 | `src/lib/travel/types.ts` | Vendor-neutral travel-provider interface plus main-app gateway request/response types. |
 | `src/lib/travel/estimate-provider.ts` | Deterministic estimated option fallback. |
 | `src/lib/travel/gateway-client.ts`, `src/lib/travel/flyai-provider.ts` | Server-only authenticated gateway client and per-mode fallback provider; no participant identity crosses this boundary. |
+| `src/lib/travel/booking-url.ts` | Result-page booking URL allowlist for HTTPS Fliggy/Alitrip actions. |
 | `services/travel-provider-gateway/src/contracts.ts` | Strict normalized gateway request, option, response, and stable error contracts. |
 | `services/travel-provider-gateway/src/flyai-adapter.ts` | Safe FlyAI CLI adapter and fixture-side response normalization. |
 | `services/travel-provider-gateway/src/service.ts`, `src/server.ts` | Cache/retry/concurrency orchestration and authenticated internal HTTP service. |

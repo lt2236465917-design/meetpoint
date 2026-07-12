@@ -66,7 +66,9 @@ DeepSeek requests use a 15-second timeout and at most one SDK retry. Provider fa
 
 ## Travel Provider Status
 
-Tasks 1-8 of the [Amap and FlyAI implementation plan](docs/superpowers/plans/2026-07-12-amap-flyai-integration.md) are complete: Amap city validation, travel query freshness persistence, the isolated gateway, and the main-app authenticated client are fixture-verified. The app uses real normalized route facts when the gateway succeeds; per-mode failures fall back to deterministic estimates, while successful empty results remain unavailable rather than pretending to be estimates.
+Tasks 1-10 of the [Amap and FlyAI implementation plan](docs/superpowers/plans/2026-07-12-amap-flyai-integration.md) are complete: Amap city validation, travel query freshness persistence, the isolated gateway, main-app authenticated client, deterministic travel-search orchestration, and source/freshness result UI are fixture-verified. The app uses real normalized route facts when the gateway succeeds; per-mode failures fall back to deterministic estimates, while successful empty results remain unavailable rather than pretending to be estimates.
+
+Result cards show real FlyAI rows as `飞猪参考价` with the China-time query timestamp. Estimates are marked `估算`, mixed cards show `部分数据为估算`, and booking actions appear only for real FlyAI rows with approved HTTPS Fliggy/Alitrip links. If the latest run has no primary recommendation label because no candidate is feasible for every participant, the result page asks the organizer to adjust the target arrival time or meeting date instead of presenting an unlabeled city as a recommendation.
 
 The gateway has its own environment file at `services/travel-provider-gateway/.env.example` and commands:
 

@@ -212,15 +212,15 @@ The gateway defaults to `PORT=8080`, matching the documented container port; an 
 
 The gateway contract, cache/retry/concurrency behavior, and container policy are locally verified with fixtures. It is not yet proof of live FlyAI compatibility. Run `npm run probe:providers` from the repository root only with operator-managed keys; it outputs only redacted status/count/latency/field-name summaries. A real Docker image build remains unverified because the local Docker daemon was unavailable.
 
-## Real Ticket And Amap Acceptance (after Tasks 9-10)
+## Real Ticket And Amap Acceptance
 
-Use these checks after wiring FlyAI/Fliggy or another ticket source and Amap city data:
+Use these checks after wiring FlyAI/Fliggy or another ticket source and Amap city data. Until a human confirms authorization, quota, real fields, price units, timestamp semantics, and booking-link behavior, treat supplier acceptance as unverified even when fixture tests pass.
 
 1. Create a full plan with at least two departure cities and both flight and high-speed-rail preferences.
 2. Confirm each selected per-participant route stores the provider source, real `price_cny`, `duration_minutes`, `depart_at`, `arrive_at`, and `service_name` in `travel_options`.
 3. Open `/p/[code]/result` and confirm every recommendation card still shows the same shared city ranking to all viewers, plus each person's departure city, transport mode, real price, duration, and train number or flight number.
-4. Confirm routes with a provider booking URL show the "去购票" action and open the provider URL; routes without a booking URL must keep the card usable and not show a broken purchase action.
-5. Confirm real provider rows are not visually described as estimated prices. Mixed real and fallback rows must still mark the fallback rows clearly.
+4. Confirm routes with an approved HTTPS Fliggy/Alitrip booking URL show the "去飞猪查看" action and the "价格和余票以跳转页面为准" note. Routes without an approved URL, and all estimated rows, must keep the card usable and show no booking action.
+5. Confirm real FlyAI rows show "飞猪参考价" and a China-time query timestamp. Estimated rows show "估算"; mixed real and fallback cards show "部分数据为估算".
 6. Search city names through `/api/cities/search?q=...` and the join-page city combobox; confirm Amap-backed results normalize to the same city code/name shape used by recommendation and ticket lookup.
 
 ## DeepSeek Acceptance
