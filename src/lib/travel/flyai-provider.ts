@@ -73,7 +73,8 @@ async function searchMode(
 
 export class FlyAITravelProvider implements TravelProvider {
   async search(input: TravelSearchInput): Promise<TravelOption[]> {
-    const byMode = await Promise.all(input.acceptedModes.map((mode) => searchMode(input, mode)));
+    const modes = [...new Set(input.acceptedModes)];
+    const byMode = await Promise.all(modes.map((mode) => searchMode(input, mode)));
     return byMode.flat();
   }
 }

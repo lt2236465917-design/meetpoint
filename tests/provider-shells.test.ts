@@ -162,6 +162,24 @@ describe("FlyAITravelProvider", () => {
     })]);
   });
 
+  it("deduplicates repeated accepted modes before making gateway requests", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(gatewayResponse()), {
+      status: 200,
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+    vi.stubEnv("TRAVEL_GATEWAY_URL", "http://gateway.internal:8080");
+    vi.stubEnv("TRAVEL_GATEWAY_TOKEN", "gateway-token");
+
+    const options = await new FlyAITravelProvider().search({
+      ...travelSearchInput,
+      acceptedModes: ["flight", "flight"],
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(options).toEqual([expect.objectContaining({ mode: "flight", source: "real" })]);
+    expect(options.map((option) => option.mode)).toEqual(["flight"]);
+  });
+
   it("selects the same real route when viable gateway results arrive in reverse order", async () => {
     const viableRoutes = [
       {
