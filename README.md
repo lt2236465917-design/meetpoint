@@ -60,6 +60,10 @@ Supabase variables:
 
 DeepSeek requests use a 15-second timeout and at most one SDK retry. Provider failures never fail recommendation calculation or change deterministic rankings; they return local fallback explanations instead.
 
+## Approved Next Work
+
+The Amap and FlyAI production-shaped integration is approved but not implemented. Use the [design specification](docs/superpowers/specs/2026-07-12-amap-flyai-integration-design.md) and [implementation plan](docs/superpowers/plans/2026-07-12-amap-flyai-integration.md) as the execution source of truth. Public-beta FlyAI enablement remains blocked until the capability probe confirms authorization, quota, response fields, and booking-link behavior.
+
 ## Verification
 
 Run after code changes:
