@@ -14,11 +14,17 @@ This project is a mobile-first Web H5 app for multi-person cross-city meeting pl
 - Keep secrets in server-side environment variables only.
 - Keep browser Supabase access limited to the anon client; use the service-role client only in server-side code.
 - Run `npm run lint`, `npm run test`, and `npm run build` before reporting completion after code changes.
+- The travel gateway owns FlyAI credentials, CLI/MCP execution, input validation, timeouts, retries, caching, and stable error mapping.
+- The travel gateway cannot generate candidate cities, select routes, score cities, call DeepSeek, or persist participant identity.
+- Execute gateway CLI commands with argument arrays and shell execution disabled.
+- Run the gateway lint, test, and build commands before reporting gateway changes complete.
+- Ignore generated gateway `dist`, coverage, probe output, and cache artifacts.
 
 ## Structure
 
 - `supabase/`: database schema, RLS policies, and Realtime publication setup.
 - `src/lib/travel/`: vendor adapters and normalized travel option types.
+- `gateway/`: isolated server-side travel-provider access; it must follow the travel gateway ownership and safety rules above.
 - `src/lib/recommendation/`: deterministic scoring and calculation orchestration.
 - `src/lib/city/`: city search, distance, and candidate generation.
 - `src/lib/ai/`: DeepSeek explanation helpers.
