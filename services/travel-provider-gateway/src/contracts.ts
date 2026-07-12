@@ -12,7 +12,7 @@ const offsetIsoTimestampSchema = z.iso.datetime({ offset: true });
 
 const bookingUrlSchema = z.url().refine((value) => {
   const url = new URL(value);
-  const approvedHosts = ["fliggy.com", "alitrip.com"];
+  const approvedHosts = ["fliggy.com", "alitrip.com", "feizhu.com"];
   return url.protocol === "https:"
     && approvedHosts.some((host) => url.hostname === host || url.hostname.endsWith(`.${host}`));
 }, "Booking URL must use HTTPS on an approved FlyAI booking host");

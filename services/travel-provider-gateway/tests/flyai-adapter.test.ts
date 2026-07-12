@@ -82,6 +82,47 @@ describe("searchFlyAI", () => {
     expect(logger.error).not.toHaveBeenCalled();
   });
 
+  it("normalizes live FlyAI data.itemList responses", async () => {
+    const execFile = executorReturning({
+      status: "ok",
+      message: "ok",
+      systemMessage: "",
+      data: {
+        itemList: [{
+          ticketPrice: "680",
+          totalDuration: "02:15:00",
+          jumpUrl: "https://a.feizhu.com/flight/MU5101",
+          journeys: [{
+            segments: [{
+              depDateTime: "2026-08-20 08:00:00",
+              arrDateTime: "2026-08-20 10:15:00",
+              duration: "02:15:00",
+              marketingTransportNo: "MU5101",
+              transportType: "flight",
+            }],
+          }],
+        }],
+      },
+    });
+
+    const result = await searchFlyAI(baseInput, { execFile, executable: "/safe/flyai" });
+
+    expect(result).toEqual([{
+      mode: "flight",
+      source: "real",
+      provider: "flyai",
+      priceCny: 680,
+      departAt: "2026-08-20T08:00:00+08:00",
+      arriveAt: "2026-08-20T10:15:00+08:00",
+      durationMinutes: 135,
+      isDirect: true,
+      hasTransfer: false,
+      transferCount: 0,
+      serviceName: "MU5101",
+      bookingUrl: "https://a.feizhu.com/flight/MU5101",
+    }]);
+  });
+
   it("classifies G/C/D services as high-speed rail and excludes normal trains", async () => {
     const execFile = executorReturning([
       { ...trainRow, trainNumber: "G1" },

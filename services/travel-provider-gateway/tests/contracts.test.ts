@@ -66,6 +66,8 @@ describe("gatewayTravelOptionSchema", () => {
     expect(() => gatewayTravelOptionSchema.parse({ ...validOption, bookingUrl: "http://www.fliggy.com/booking" })).toThrow();
     expect(() => gatewayTravelOptionSchema.parse({ ...validOption, bookingUrl: "https://evil.example/booking" })).toThrow();
     expect(() => gatewayTravelOptionSchema.parse({ ...validOption, bookingUrl: "https://fliggy.com.evil/booking" })).toThrow();
+    expect(gatewayTravelOptionSchema.parse({ ...validOption, bookingUrl: "https://a.feizhu.com/booking" }).bookingUrl)
+      .toBe("https://a.feizhu.com/booking");
     expect(gatewayTravelOptionSchema.parse({ ...validOption, bookingUrl: null }).bookingUrl).toBeNull();
   });
 });

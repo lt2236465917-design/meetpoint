@@ -70,7 +70,7 @@ function gatewayResponse(mode: TransportMode = "flight") {
       hasTransfer: false,
       transferCount: 0,
       serviceName: "MU1234",
-      bookingUrl: "https://www.fliggy.com/booking/123",
+      bookingUrl: "https://a.feizhu.com/booking/123",
     }],
     queriedAt: "2026-07-12T08:00:00.000Z",
   };
@@ -156,7 +156,7 @@ describe("FlyAITravelProvider", () => {
       provider: "flyai",
       queriedAt: "2026-07-12T08:00:00.000Z",
       priceCny: 680,
-      bookingUrl: "https://www.fliggy.com/booking/123",
+      bookingUrl: "https://a.feizhu.com/booking/123",
       waitMinutes: null,
       failureReason: null,
     })]);

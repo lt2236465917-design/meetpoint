@@ -1,4 +1,4 @@
-const APPROVED_BOOKING_HOSTS = ["fliggy.com", "alitrip.com"];
+const APPROVED_BOOKING_HOSTS = ["fliggy.com", "alitrip.com", "feizhu.com"];
 
 export function isApprovedBookingUrl(value: string | null): value is string {
   if (!value) return false;

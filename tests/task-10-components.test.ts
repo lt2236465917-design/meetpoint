@@ -58,7 +58,7 @@ describe("Task 10 UI components", () => {
               duration_minutes: 240,
               depart_at: "2026-08-15T08:00:00+08:00",
               arrive_at: "2026-08-15T12:00:00+08:00",
-              booking_url: "https://www.fliggy.com/booking/abc",
+              booking_url: "https://a.feizhu.com/booking/abc",
               service_name: "G101",
               source: "real",
               provider: "flyai",

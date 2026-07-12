@@ -59,6 +59,30 @@ const rawRowSchema = z.object({
   }
 });
 
+const liveSegmentSchema = z.object({
+  depDateTime: z.string().trim().min(1),
+  arrDateTime: z.string().trim().min(1),
+  duration: z.string().trim().min(1),
+  marketingTransportNo: z.string().trim().min(1),
+  transportType: z.string().trim().min(1),
+});
+
+const liveItemSchema = z.object({
+  journeys: z.array(z.object({
+    segments: z.array(liveSegmentSchema).min(1),
+  })).min(1),
+  jumpUrl: z.string().nullable().optional(),
+  price: z.string().optional(),
+  ticketPrice: z.string().optional(),
+  totalDuration: z.string().optional(),
+}).passthrough();
+
+const liveResponseSchema = z.object({
+  data: z.object({
+    itemList: z.array(liveItemSchema),
+  }),
+}).passthrough();
+
 type ExecFileCallback = (error: Error | null, stdout: string, stderr: string) => void;
 type ExecFile = (
   executable: string,
@@ -128,9 +152,63 @@ function execute(execFile: ExecFile, executable: string, args: string[]): Promis
   });
 }
 
-function parseRows(stdout: string): z.infer<typeof rawRowSchema>[] {
+function parseDurationMinutes(value: string): number | null {
+  const hourMinute = /^(\d{1,2}):(\d{2})(?::\d{2})?$/.exec(value);
+  if (hourMinute) {
+    return Number(hourMinute[1]) * 60 + Number(hourMinute[2]);
+  }
+  const hours = /(\d+(?:\.\d+)?)\s*(?:h|hour|小时)/i.exec(value);
+  const minutes = /(\d+)\s*(?:m|min|分钟|分)/i.exec(value);
+  if (hours || minutes) {
+    return Math.round(Number(hours?.[1] ?? 0) * 60 + Number(minutes?.[1] ?? 0));
+  }
+  const numeric = Number(value);
+  return Number.isFinite(numeric) && numeric > 0 ? Math.round(numeric) : null;
+}
+
+function withChinaOffset(value: string): string {
+  if (/([+-]\d{2}:?\d{2}|Z)$/i.test(value)) {
+    return value;
+  }
+  const normalized = value.includes("T") ? value : value.replace(" ", "T");
+  return `${normalized}+08:00`;
+}
+
+function normalizeLiveItem(
+  item: z.infer<typeof liveItemSchema>,
+  mode: GatewaySearchRequest["mode"],
+): z.infer<typeof rawRowSchema> | null {
+  const segment = item.journeys[0]?.segments[0];
+  if (!segment) return null;
+  const firstJourney = item.journeys[0]!;
+  const price = Number(mode === "flight" ? item.ticketPrice : item.price);
+  const durationMinutes = parseDurationMinutes(segment.duration) ?? parseDurationMinutes(item.totalDuration ?? "");
+  if (!Number.isFinite(price) || price < 0 || durationMinutes === null) return null;
+  const category = mode === "flight" ? "flight" : "train";
+  return {
+    category,
+    price: Math.round(price),
+    departureTime: withChinaOffset(segment.depDateTime),
+    arrivalTime: withChinaOffset(segment.arrDateTime),
+    durationMinutes,
+    flightNumber: category === "flight" ? segment.marketingTransportNo : undefined,
+    trainNumber: category === "train" ? segment.marketingTransportNo : undefined,
+    direct: item.journeys.length === 1 && firstJourney.segments.length === 1,
+    bookingUrl: item.jumpUrl ?? null,
+  };
+}
+
+function parseRows(stdout: string, mode: GatewaySearchRequest["mode"]): z.infer<typeof rawRowSchema>[] {
   try {
     const parsed: unknown = JSON.parse(stdout);
+    const legacy = z.array(rawRowSchema).safeParse(parsed);
+    if (legacy.success) return legacy.data;
+    const live = liveResponseSchema.safeParse(parsed);
+    if (live.success) {
+      return live.data.data.itemList
+        .map((item) => normalizeLiveItem(item, mode))
+        .filter((row): row is z.infer<typeof rawRowSchema> => row !== null);
+    }
     return z.array(rawRowSchema).parse(parsed);
   } catch {
     throw new FlyAIAdapterError(
@@ -181,7 +259,7 @@ export async function searchFlyAI(
   const stdout = await execute(execFile, executable, buildArgs(input));
 
   try {
-    return parseRows(stdout)
+    return parseRows(stdout, input.mode)
       .map((row) => normalizeRow(row, input.mode))
       .filter((row): row is GatewayTravelOption => row !== null);
   } catch (error) {
