@@ -99,7 +99,7 @@ An Amap result that cannot be mapped to the local library may be shown as unsupp
    - match the participant's accepted modes;
    - contain valid prices, timestamps, durations, and route identity.
 7. For each participant and candidate city, the application selects exactly one feasible option through the existing deterministic selection formula.
-8. Failed or empty searches produce estimated fallback options where an estimate is possible.
+8. A failed provider request produces an estimated fallback where an estimate is possible. A successful provider response with no feasible same-day option produces an unavailable option, not an estimate.
 9. Scoring aggregates one selected option per participant and preserves the existing cheapest, balanced, and fastest recommendation model.
 
 The provider's ordering and recommendation labels are ignored. FlyAI supplies inventory facts, not product decisions.
@@ -143,7 +143,7 @@ The exact overall calculation timeout is set during implementation after the rea
 
 ### Partial failure
 
-A failed single search falls back to an estimate without discarding successful real searches. A candidate with mixed data remains rankable and displays a visible `部分数据为估算` indicator.
+A failed single request falls back to an estimate without discarding successful real searches. A successful search with no feasible same-day route is marked unavailable so the product does not invent a route the provider has shown does not exist. A candidate with mixed real and estimated data remains rankable and displays a visible `部分数据为估算` indicator; a candidate missing any participant route is infeasible and cannot receive a primary recommendation label.
 
 ### Provider-wide or gateway failure
 
