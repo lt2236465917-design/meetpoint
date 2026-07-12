@@ -80,9 +80,9 @@ describe("calculatePlanRecommendations", () => {
       },
       {
         id: "participant-2",
-        departure_city_code: "shanghai",
-        departure_city_name: "上海",
-        accepted_modes: ["high_speed_rail"],
+        departure_city_code: "beijing",
+        departure_city_name: "北京",
+        accepted_modes: ["flight"],
       },
     ]);
     const manualCandidatesLookup = selectEq([
@@ -122,10 +122,10 @@ describe("calculatePlanRecommendations", () => {
           source: "real",
           provider: "flyai",
           queriedAt: "2026-07-12T08:30:00.000Z",
-          priceCny: input.participantId === "participant-1" ? 500 : 300,
+          priceCny: 500,
           departAt: "2026-08-01T08:00:00+08:00",
           arriveAt: "2026-08-01T11:00:00+08:00",
-          durationMinutes: input.participantId === "participant-1" ? 180 : 240,
+          durationMinutes: 180,
           waitMinutes: 60,
           isDirect: true,
           hasTransfer: false,
@@ -156,7 +156,7 @@ describe("calculatePlanRecommendations", () => {
       plan_id: "plan-1",
       status: "running",
     });
-    expect(mocks.search).toHaveBeenCalledTimes(result.candidateCount * 2);
+    expect(mocks.search).toHaveBeenCalledTimes(result.candidateCount);
     expect(mocks.search).toHaveBeenCalledWith(
       expect.objectContaining({
         participantId: "participant-1",
@@ -183,8 +183,8 @@ describe("calculatePlanRecommendations", () => {
         expect.objectContaining({
           run_id: "run-1",
           city_code: "beijing",
-          total_price_cny: 800,
-          avg_price_cny: 400,
+          total_price_cny: 1000,
+          avg_price_cny: 500,
           labels: expect.arrayContaining(["cheapest", "balanced", "fastest"]),
           explanation: "北京比较均衡。",
           risk_summary: "",

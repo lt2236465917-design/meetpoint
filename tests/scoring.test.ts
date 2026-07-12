@@ -148,4 +148,41 @@ describe("scoreCandidateCity", () => {
       labels: ["cheapest", "balanced", "fastest"],
     });
   });
+
+  it("never assigns a primary label to an infeasible low-price city", () => {
+    const picked = pickPrimaryRecommendations([
+      recommendation("infeasible", {
+        scoreCheapest: 1,
+        scoreBalanced: 1,
+        scoreFastest: 1,
+        missingPenalty: 9999,
+      }),
+      recommendation("feasible", {
+        scoreCheapest: 10,
+        scoreBalanced: 10,
+        scoreFastest: 10,
+        missingPenalty: 0,
+      }),
+    ]);
+
+    expect(picked).toEqual([
+      expect.objectContaining({
+        cityCode: "feasible",
+        labels: ["cheapest", "balanced", "fastest"],
+      }),
+    ]);
+  });
+
+  it("returns no primary recommendations when every candidate is infeasible", () => {
+    expect(
+      pickPrimaryRecommendations([
+        recommendation("wuhan", {
+          scoreCheapest: 1,
+          scoreBalanced: 1,
+          scoreFastest: 1,
+          missingPenalty: 9999,
+        }),
+      ]),
+    ).toEqual([]);
+  });
 });

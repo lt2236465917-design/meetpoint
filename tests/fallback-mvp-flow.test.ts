@@ -118,6 +118,7 @@ describe("fallback MVP flow without Supabase environment variables", () => {
     expect(read.latestRun).toMatchObject({
       id: calculated.runId,
       status: "completed",
+      error_summary: "PARTIAL_ESTIMATE_FALLBACK",
     });
 
     const { readFallbackResult } = await import("@/lib/fallback/mvp-store");

@@ -5,6 +5,7 @@ import {
   pickPrimaryRecommendations,
   scoreCandidateCity,
 } from "@/lib/recommendation/scoring";
+import { collectTravelOptions } from "@/lib/recommendation/travel-search";
 import {
   createServiceSupabaseClient,
   hasSupabaseEnvironment,
@@ -112,24 +113,18 @@ export async function calculatePlanRecommendations({
     throw new Error("RUN_CREATE_FAILED");
   }
 
-  const provider = new FlyAITravelProvider();
-  const allOptions: TravelOption[] = [];
-
-  for (const candidate of candidates) {
-    for (const participant of participantRows) {
-      const options = await provider.search({
-        participantId: participant.id,
-        originCityCode: participant.departure_city_code,
-        originCityName: participant.departure_city_name,
-        destinationCityCode: candidate.code,
-        destinationCityName: candidate.name,
-        meetingDate: plan.meeting_date,
-        targetArrivalTime: plan.target_arrival_time,
-        acceptedModes: participant.accepted_modes,
-      });
-      allOptions.push(...options);
-    }
-  }
+  const { options: allOptions, usedFallback } = await collectTravelOptions({
+    participants: participantRows.map((participant) => ({
+      id: participant.id,
+      departureCityCode: participant.departure_city_code,
+      departureCityName: participant.departure_city_name,
+      acceptedModes: participant.accepted_modes,
+    })),
+    candidates,
+    meetingDate: plan.meeting_date,
+    targetArrivalTime: plan.target_arrival_time,
+    provider: new FlyAITravelProvider(),
+  });
 
   if (allOptions.length > 0) {
     await supabase
@@ -189,6 +184,7 @@ export async function calculatePlanRecommendations({
       status: "completed",
       completed_at: new Date().toISOString(),
       stale_after: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+      error_summary: usedFallback ? "PARTIAL_ESTIMATE_FALLBACK" : null,
     })
     .eq("id", run.id);
 
