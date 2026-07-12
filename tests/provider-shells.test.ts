@@ -9,6 +9,7 @@ import {
   fallbackExplanation,
 } from "@/lib/ai/recommendation-explainer";
 import { FlyAITravelProvider } from "@/lib/travel/flyai-provider";
+import { createUnavailableTravelOption } from "@/lib/travel/unavailable-option";
 import type { CityRecommendation } from "@/types/domain";
 
 vi.mock("@/lib/ai/deepseek-client", () => ({
@@ -64,6 +65,7 @@ describe("FlyAITravelProvider", () => {
           mode: "flight",
           source: "estimated",
           provider: "estimate",
+          queriedAt: null,
         }),
         expect.objectContaining({
           mode: "high_speed_rail",
@@ -72,6 +74,38 @@ describe("FlyAITravelProvider", () => {
         }),
       ]),
     );
+  });
+
+  it("creates unavailable options without claiming a provider query time", () => {
+    const option = createUnavailableTravelOption(
+      {
+        participantId: "p1",
+        originCityCode: "beijing",
+        originCityName: "北京",
+        destinationCityCode: "wuhan",
+        destinationCityName: "武汉",
+        meetingDate: "2026-08-01",
+        targetArrivalTime: "12:00",
+        acceptedModes: ["flight"],
+      },
+      "flight",
+      "NO_FEASIBLE_SAME_DAY_ROUTE",
+    );
+
+    expect(option).toMatchObject({
+      participantId: "p1",
+      candidateCityCode: "wuhan",
+      mode: "flight",
+      source: "unavailable",
+      provider: "flyai",
+      queriedAt: null,
+      priceCny: null,
+      departAt: null,
+      arriveAt: null,
+      durationMinutes: null,
+      bookingUrl: null,
+      failureReason: "NO_FEASIBLE_SAME_DAY_ROUTE",
+    });
   });
 });
 

@@ -119,8 +119,9 @@ describe("calculatePlanRecommendations", () => {
           participantId: input.participantId,
           candidateCityCode: input.destinationCityCode,
           mode: input.acceptedModes[0],
-          source: "estimated",
-          provider: "estimate",
+          source: "real",
+          provider: "flyai",
+          queriedAt: "2026-07-12T08:30:00.000Z",
           priceCny: input.participantId === "participant-1" ? 500 : 300,
           departAt: "2026-08-01T08:00:00+08:00",
           arriveAt: "2026-08-01T11:00:00+08:00",
@@ -173,6 +174,7 @@ describe("calculatePlanRecommendations", () => {
           participant_id: "participant-1",
           candidate_city_code: "beijing",
           price_cny: 500,
+          queried_at: "2026-07-12T08:30:00.000Z",
         }),
       ]),
     );
@@ -185,7 +187,7 @@ describe("calculatePlanRecommendations", () => {
           avg_price_cny: 400,
           labels: expect.arrayContaining(["cheapest", "balanced", "fastest"]),
           explanation: "北京比较均衡。",
-          risk_summary: "含估算",
+          risk_summary: "",
         }),
       ]),
     );

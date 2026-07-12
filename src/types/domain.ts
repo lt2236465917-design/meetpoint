@@ -36,6 +36,7 @@ export type TravelOption = {
   mode: TransportMode;
   source: TravelSource;
   provider: TravelProviderName;
+  queriedAt: string | null;
   priceCny: number | null;
   departAt: string | null;
   arriveAt: string | null;

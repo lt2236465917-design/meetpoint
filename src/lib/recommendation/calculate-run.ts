@@ -39,6 +39,7 @@ function toTravelOptionInsert(runId: string, option: TravelOption) {
     mode: option.mode,
     source: option.source,
     provider: option.provider,
+    queried_at: option.queriedAt,
     price_cny: option.priceCny,
     depart_at: option.departAt,
     arrive_at: option.arriveAt,

@@ -55,6 +55,7 @@ create table if not exists travel_options (
   mode text not null,
   source text not null check (source in ('real', 'estimated', 'unavailable')),
   provider text not null,
+  queried_at timestamptz,
   price_cny integer,
   depart_at timestamptz,
   arrive_at timestamptz,

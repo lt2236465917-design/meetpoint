@@ -11,6 +11,7 @@ const baseOption: TravelOption = {
   mode: "high_speed_rail",
   source: "real",
   provider: "flyai",
+  queriedAt: "2026-07-12T08:30:00.000Z",
   priceCny: 300,
   departAt: "2026-08-01T08:00:00+08:00",
   arriveAt: "2026-08-01T12:00:00+08:00",

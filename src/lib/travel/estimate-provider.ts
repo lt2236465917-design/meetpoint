@@ -31,6 +31,7 @@ export function estimateTravelOption(
     mode,
     source: "estimated",
     provider: "estimate",
+    queriedAt: null,
     priceCny: estimatePrice(distanceKm, mode),
     departAt: null,
     arriveAt: null,
