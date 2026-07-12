@@ -56,7 +56,7 @@ export function createTravelSearchService(dependencies: ServiceDependencies = {}
       const timestamp = now();
       const key = cacheKey(parsedRequest.data);
       const cached = cache.get(key, timestamp.getTime());
-      if (cached !== undefined) return cached;
+      if (cached !== undefined) return structuredClone(cached);
 
       let rawOptions: unknown;
       try {
@@ -83,7 +83,7 @@ export function createTravelSearchService(dependencies: ServiceDependencies = {}
         throw new GatewayServiceError("PROVIDER_INVALID_RESPONSE", "Provider returned an invalid response");
       }
       const response = gatewaySearchResponseSchema.parse({ options: options.data, queriedAt: timestamp.toISOString() });
-      cache.set(key, response, timestamp.getTime());
+      cache.set(key, structuredClone(response), timestamp.getTime());
       return response;
     },
   };

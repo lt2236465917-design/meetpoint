@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 
-import type { GatewaySearchRequest, GatewayTravelOption } from "../src/contracts.js";
+import {
+  gatewaySearchResponseSchema,
+  type GatewaySearchRequest,
+  type GatewayTravelOption,
+} from "../src/contracts.js";
 import { FlyAIAdapterError } from "../src/flyai-adapter.js";
 import { createTravelSearchService } from "../src/service.js";
 
@@ -35,6 +39,35 @@ describe("createTravelSearchService", () => {
     expect(second).toEqual(first);
     expect(searchProvider).toHaveBeenCalledTimes(1);
     expect(first.queriedAt).toBe("2026-07-12T08:00:00.000Z");
+  });
+
+  it("isolates cached responses from mutations to miss and hit results", async () => {
+    const searchProvider = vi.fn().mockResolvedValue([option]);
+    const service = createTravelSearchService({ searchProvider, now: () => new Date("2026-07-12T08:00:00Z") });
+
+    const first = await service.search(request);
+    first.options[0]!.priceCny = 1;
+    Object.assign(first.options[0]!, { injected: "from-miss" });
+    Object.assign(first, { injected: "from-miss" });
+
+    const second = await service.search(request);
+    expect(second).toEqual({ options: [option], queriedAt: "2026-07-12T08:00:00.000Z" });
+    expect(gatewaySearchResponseSchema.safeParse(second).success).toBe(true);
+    expect(second).not.toBe(first);
+    expect(second.options).not.toBe(first.options);
+    expect(second.options[0]).not.toBe(first.options[0]);
+
+    second.options[0]!.priceCny = 2;
+    Object.assign(second.options[0]!, { injected: "from-hit" });
+    Object.assign(second, { injected: "from-hit" });
+
+    const third = await service.search(request);
+    expect(third).toEqual({ options: [option], queriedAt: "2026-07-12T08:00:00.000Z" });
+    expect(gatewaySearchResponseSchema.safeParse(third).success).toBe(true);
+    expect(third).not.toBe(second);
+    expect(third.options).not.toBe(second.options);
+    expect(third.options[0]).not.toBe(second.options[0]);
+    expect(searchProvider).toHaveBeenCalledTimes(1);
   });
 
   it.each(["PROVIDER_TIMEOUT", "PROVIDER_UNAVAILABLE"] as const)("retries %s exactly once with one queriedAt", async (code) => {
