@@ -19,6 +19,7 @@ type ParticipantOption = {
   source: TravelSource;
   provider: TravelProviderName;
   queried_at: string | null;
+  failure_reason?: string | null;
 };
 
 type Recommendation = {
@@ -184,7 +185,7 @@ function formatSource(option: ParticipantOption): string {
     return queriedAt ? `飞猪参考价 · 查询于 ${queriedAt}` : "飞猪参考价";
   }
   if (option.source === "unavailable") return "暂无可行班次";
-  return "估算";
+  return option.failure_reason ? `估算 · 原因 ${option.failure_reason}` : "估算";
 }
 
 function approvedBookingUrl(option: ParticipantOption): string | null {

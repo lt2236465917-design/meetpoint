@@ -145,12 +145,16 @@ function formatVisitedAt(value: string): string {
   return `${month}-${day} ${hour}:${minute}`;
 }
 
-function subscribeToMeetingHistory(onStoreChange: () => void) {
+export function subscribeToMeetingHistory(onStoreChange: () => void) {
   window.addEventListener("storage", onStoreChange);
   window.addEventListener(meetingHistoryUpdatedEvent, onStoreChange);
+  window.addEventListener("pageshow", onStoreChange);
+  window.addEventListener("focus", onStoreChange);
 
   return () => {
     window.removeEventListener("storage", onStoreChange);
     window.removeEventListener(meetingHistoryUpdatedEvent, onStoreChange);
+    window.removeEventListener("pageshow", onStoreChange);
+    window.removeEventListener("focus", onStoreChange);
   };
 }

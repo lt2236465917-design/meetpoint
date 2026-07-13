@@ -35,7 +35,15 @@ export type GatewayClientErrorCode =
   | "GATEWAY_NOT_CONFIGURED"
   | "GATEWAY_TIMEOUT"
   | "GATEWAY_UNAVAILABLE"
-  | "GATEWAY_INVALID_RESPONSE";
+  | "GATEWAY_INVALID_RESPONSE"
+  | "PROVIDER_TIMEOUT"
+  | "PROVIDER_UNAVAILABLE"
+  | "PROVIDER_NO_ROUTE"
+  | "PROVIDER_NO_TICKET"
+  | "PROVIDER_RATE_LIMITED"
+  | "PROVIDER_UPSTREAM_UNAVAILABLE"
+  | "PROVIDER_CLI_FAILED"
+  | "PROVIDER_INVALID_RESPONSE";
 
 export class GatewayClientError extends Error {
   constructor(readonly code: GatewayClientErrorCode) {
@@ -71,6 +79,29 @@ function isAbort(error: unknown): boolean {
     && (error.name === "AbortError" || error.name === "TimeoutError");
 }
 
+const gatewayErrorBodySchema = z.object({
+  code: z.enum([
+    "PROVIDER_TIMEOUT",
+    "PROVIDER_UNAVAILABLE",
+    "PROVIDER_NO_ROUTE",
+    "PROVIDER_NO_TICKET",
+    "PROVIDER_RATE_LIMITED",
+    "PROVIDER_UPSTREAM_UNAVAILABLE",
+    "PROVIDER_CLI_FAILED",
+    "PROVIDER_INVALID_RESPONSE",
+  ]),
+  message: z.string(),
+}).passthrough();
+
+async function gatewayErrorCode(response: Response): Promise<GatewayClientErrorCode> {
+  try {
+    const parsed = gatewayErrorBodySchema.safeParse(await response.json());
+    return parsed.success ? parsed.data.code : "GATEWAY_UNAVAILABLE";
+  } catch {
+    return "GATEWAY_UNAVAILABLE";
+  }
+}
+
 export async function searchGateway(
   input: GatewaySearchRequest,
   options: SearchGatewayOptions = {},
@@ -97,7 +128,7 @@ export async function searchGateway(
     throw new GatewayClientError(isAbort(error) ? "GATEWAY_TIMEOUT" : "GATEWAY_UNAVAILABLE");
   }
 
-  if (!response.ok) throw new GatewayClientError("GATEWAY_UNAVAILABLE");
+  if (!response.ok) throw new GatewayClientError(await gatewayErrorCode(response));
 
   let body: unknown;
   try {

@@ -32,8 +32,8 @@ Mobile-first H5 MVP for choosing a fair cross-city meeting city for 2-6 people i
 - `src/lib/city/amap-client.ts` and `src/lib/city/city-provider.ts`: local-first city search with a 3-second server-side Amap validation fallback; only cities in the built-in library are selectable.
 - `src/lib/fallback/mvp-store.ts`: server-side in-memory fallback store for local create-to-result smoke testing when Supabase variables are missing.
 - `src/lib/travel/types.ts`: normalized travel-provider boundary, including gateway request/response types and query timestamps for real prices.
-- `src/lib/travel/estimate-provider.ts`: deterministic estimated travel option fallback using city distance and transport mode.
-- `src/lib/travel/gateway-client.ts` and `src/lib/travel/flyai-provider.ts`: server-side authenticated gateway client and per-mode provider fallback; real route facts are deterministically ordered before scoring.
+- `src/lib/travel/estimate-provider.ts`: deterministic estimated travel option fallback using city distance and transport mode, with the upstream fallback reason preserved when available.
+- `src/lib/travel/gateway-client.ts` and `src/lib/travel/flyai-provider.ts`: server-side authenticated gateway client and per-mode provider fallback; real route facts are deterministically ordered before scoring, and stable gateway error codes are retained on estimated fallback rows.
 - `services/travel-provider-gateway/`: independently runnable FlyAI gateway with strict contracts, safe CLI execution, cache, concurrency limit, retry, authenticated HTTP API, and container configuration.
 - `src/lib/recommendation/scoring.ts`: deterministic city scoring and primary recommendation selection; each candidate city is scored from one selected route per participant rather than summing every accepted transport mode.
 - `src/lib/recommendation/calculate-run.ts`: manual calculation orchestration that generates candidates, queries travel options, stores recommendation explanations, and marks results stale after 30 minutes.
@@ -70,7 +70,7 @@ For local real-ticket smoke tests, run the gateway separately and set `TRAVEL_GA
 
 Tasks 1-10 of the [Amap and FlyAI implementation plan](docs/superpowers/plans/2026-07-12-amap-flyai-integration.md) are complete: Amap city validation, travel query freshness persistence, the isolated gateway, main-app authenticated client, deterministic travel-search orchestration, and source/freshness result UI are fixture-verified. The app uses real normalized route facts when the gateway succeeds; per-mode failures fall back to deterministic estimates, while successful empty results remain unavailable rather than pretending to be estimates.
 
-Result cards show real FlyAI rows as `飞猪参考价` with the China-time query timestamp. Estimates are marked `估算`, mixed cards show `部分数据为估算`, and booking actions appear only for real FlyAI rows with approved HTTPS Fliggy/Alitrip/Feizhu links. If the latest run has no primary recommendation label because no candidate is feasible for every participant, the result page asks the organizer to adjust the target arrival time or meeting date instead of presenting an unlabeled city as a recommendation.
+Result cards show real FlyAI rows as `飞猪参考价` with the China-time query timestamp. Estimates are marked `估算` and include the stable fallback reason when one is available, such as `PROVIDER_RATE_LIMITED` or `GATEWAY_UNAVAILABLE`; mixed cards show `部分数据为估算`, and booking actions appear only for real FlyAI rows with approved HTTPS Fliggy/Alitrip/Feizhu links. If the latest run has no primary recommendation label because no candidate is feasible for every participant, the result page asks the organizer to adjust the target arrival time or meeting date instead of presenting an unlabeled city as a recommendation.
 
 The gateway has its own environment file at `services/travel-provider-gateway/.env.example` and commands:
 

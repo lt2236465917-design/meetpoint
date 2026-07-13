@@ -245,6 +245,7 @@ function selectFallbackParticipantOptions(
       source: option.source,
       provider: option.provider,
       queried_at: option.queriedAt,
+      failure_reason: option.failureReason,
     };
   });
 }

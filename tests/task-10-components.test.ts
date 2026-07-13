@@ -77,6 +77,7 @@ describe("Task 10 UI components", () => {
               source: "estimated",
               provider: "estimate",
               queried_at: null,
+              failure_reason: "PROVIDER_RATE_LIMITED",
             },
           ],
         },
@@ -109,7 +110,7 @@ describe("Task 10 UI components", () => {
     expect(html).toContain("上海出发");
     expect(html).toContain("飞机");
     expect(html).toContain("MU1234");
-    expect(html).toContain("估算");
+    expect(html).toContain("估算 · 原因 PROVIDER_RATE_LIMITED");
     expect(html).not.toContain("https://www.fliggy.com/estimated-should-not-link");
   });
 });

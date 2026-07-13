@@ -28,7 +28,7 @@ Use this mode to test the product flow before provisioning Supabase:
 
 Fallback data is cleared when the dev server restarts. Use Supabase variables for persistent handoff or deployment testing.
 
-Recent meeting records are browser-local convenience data stored in `localStorage`. They help the same device return to plans that were created, opened, or joined, but they are not shared across devices and are not a security boundary.
+Recent meeting records are browser-local convenience data stored in `localStorage`. They help the same device return to plans that were created, opened, or joined, refresh when the user returns to a cached homepage tab, and are not shared across devices or treated as a security boundary.
 
 ## Environment Variables
 
@@ -140,7 +140,7 @@ Returns:
 
 Calculation also stores recommendation `explanation` and `risk_summary` fields for the result page.
 
-Result rankings are shared for the whole plan. The calculation service queries the gateway from server-side code once per distinct accepted mode, validates and deterministically orders valid real route facts, then maps them back to each participant. Gateway failures use estimates per mode; a successful empty result is unavailable. Result cards show provider source, query freshness, and safe booking actions from `travel_options.provider`, `queried_at`, and approved booking URLs.
+Result rankings are shared for the whole plan. The calculation service queries the gateway from server-side code once per distinct accepted mode, validates and deterministically orders valid real route facts, then maps them back to each participant. Gateway failures use estimates per mode; a successful empty result is unavailable. Result cards show provider source, query freshness, fallback reason, and safe booking actions from `travel_options.provider`, `queried_at`, `failure_reason`, and approved booking URLs.
 
 ### Regenerate Recommendation Explanations
 
@@ -217,7 +217,7 @@ TRAVEL_GATEWAY_URL=http://127.0.0.1:8080
 TRAVEL_GATEWAY_TOKEN=<same value as services/travel-provider-gateway/.env>
 ```
 
-If these root variables are missing, `src/lib/travel/gateway-client.ts` reports the gateway as not configured and the main app falls back to estimates. If `/v1/search` returns `404` with `PROVIDER_NO_ROUTE` or `PROVIDER_NO_TICKET`, the gateway reached FlyAI but no usable route fact was available for that route/mode. If it returns `429` with `PROVIDER_RATE_LIMITED`, reduce probe volume or wait for quota recovery; this includes FlyAI/Fliggy `MCP HTTP 403` risk-control responses such as abnormal access behavior. If it returns `503` with `PROVIDER_UNAVAILABLE` or `PROVIDER_UPSTREAM_UNAVAILABLE`, treat it as supplier instability until a redacted direct gateway probe proves otherwise. If it returns `502` with `PROVIDER_CLI_FAILED` or `PROVIDER_INVALID_RESPONSE`, inspect gateway deployment and adapter normalization before changing main-app fallback behavior.
+If these root variables are missing, `src/lib/travel/gateway-client.ts` reports the gateway as not configured and the main app falls back to estimates. If `/v1/search` returns `404` with `PROVIDER_NO_ROUTE` or `PROVIDER_NO_TICKET`, the gateway reached FlyAI but no usable route fact was available for that route/mode. If it returns `429` with `PROVIDER_RATE_LIMITED`, reduce probe volume or wait for quota recovery; this includes FlyAI/Fliggy `MCP HTTP 403` risk-control responses such as abnormal access behavior. If it returns `503` with `PROVIDER_UNAVAILABLE` or `PROVIDER_UPSTREAM_UNAVAILABLE`, treat it as supplier instability until a redacted direct gateway probe proves otherwise. If it returns `502` with `PROVIDER_CLI_FAILED` or `PROVIDER_INVALID_RESPONSE`, inspect gateway deployment and adapter normalization before changing main-app fallback behavior. Stable provider error codes are retained on estimated fallback rows as `travel_options.failure_reason` and appear on result cards as the estimate reason, so result-page checks and operations review can distinguish rate limiting, upstream unavailability, invalid responses, and local gateway unavailability.
 
 The gateway contract, cache/retry/concurrency behavior, and container policy are locally verified with fixtures. Run `npm run probe:providers` from the repository root only with operator-managed keys; it outputs only redacted status/count/latency/field-name summaries. A 2026-07-12 credentialed probe confirmed Amap key access and FlyAI train field summaries. Direct gateway smoke confirmed live FlyAI flight/train rows, real source/provider fields, numeric string prices normalized to integer CNY, China-time departure/arrival timestamps, query freshness, and `a.feizhu.com` booking hosts. The main app batches travel searches at four concurrent provider requests, matching the gateway limiter so queued work does not consume client request timeouts. A 2026-07-13 full local calculation confirmed result-page `飞猪参考价` and `去飞猪查看` rows, but the run still stored `PARTIAL_ESTIMATE_FALLBACK` because direct gateway diagnostics returned provider failures for some route/mode pairs. A later 2026-07-13 H5 smoke with three participants still produced partial estimates; direct top-three-candidate gateway diagnostics grouped 18 route/mode checks into 10 successful row sets, one successful empty result, and seven `PROVIDER_RATE_LIMITED` responses from FlyAI/Fliggy risk-control 403 behavior. Production enablement remains blocked on supplier route coverage/quota behavior and final user-flow acceptance. A real Docker image build remains unverified because the local Docker daemon was unavailable.
 
@@ -231,7 +231,7 @@ Use these checks after wiring FlyAI/Fliggy or another ticket source and Amap cit
 2. Confirm each selected per-participant route stores the provider source, real `price_cny`, `duration_minutes`, `depart_at`, `arrive_at`, and `service_name` in `travel_options`.
 3. Open `/p/[code]/result` and confirm every recommendation card still shows the same shared city ranking to all viewers, plus each person's departure city, transport mode, real price, duration, and train number or flight number.
 4. Confirm routes with an approved HTTPS Fliggy/Alitrip/Feizhu booking URL show the "去飞猪查看" action and the "价格和余票以跳转页面为准" note. Routes without an approved URL, and all estimated rows, must keep the card usable and show no booking action.
-5. Confirm real FlyAI rows show "飞猪参考价" and a China-time query timestamp. Estimated rows show "估算"; mixed real and fallback cards show "部分数据为估算".
+5. Confirm real FlyAI rows show "飞猪参考价" and a China-time query timestamp. Estimated rows show "估算" plus a stable fallback reason when available, such as `PROVIDER_RATE_LIMITED` or `GATEWAY_UNAVAILABLE`; mixed real and fallback cards show "部分数据为估算".
 6. Search city names through `/api/cities/search?q=...` and the join-page city combobox; confirm Amap-backed results normalize to the same city code/name shape used by recommendation and ticket lookup.
 
 ## DeepSeek Acceptance

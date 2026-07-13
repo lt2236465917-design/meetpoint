@@ -248,6 +248,24 @@ describe("FlyAITravelProvider", () => {
     })]);
   });
 
+  it("keeps the stable gateway error code on estimated fallback options", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      code: "PROVIDER_RATE_LIMITED",
+      message: "Provider rate limited",
+    }), { status: 429 })));
+    vi.stubEnv("TRAVEL_GATEWAY_URL", "http://gateway.internal:8080");
+    vi.stubEnv("TRAVEL_GATEWAY_TOKEN", "gateway-secret-token");
+
+    await expect(new FlyAITravelProvider().search(travelSearchInput)).resolves.toEqual([
+      expect.objectContaining({
+        mode: "flight",
+        source: "estimated",
+        provider: "estimate",
+        failureReason: "PROVIDER_RATE_LIMITED",
+      }),
+    ]);
+  });
+
   it("creates one unavailable option for a successful empty gateway search", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
       options: [], queriedAt: "2026-07-12T08:00:00.000Z",

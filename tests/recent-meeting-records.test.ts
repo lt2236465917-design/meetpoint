@@ -1,11 +1,13 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   getEmptyMeetingRecordsSnapshot,
   RecentMeetingRecords,
   RecentMeetingRecordsView,
+  subscribeToMeetingHistory,
 } from "@/components/plan/RecentMeetingRecords";
+import { meetingHistoryUpdatedEvent } from "@/lib/ui/meeting-history";
 
 describe("RecentMeetingRecords", () => {
   it("renders an empty local-history state on the home page", () => {
@@ -108,5 +110,35 @@ describe("RecentMeetingRecords", () => {
     expect(getEmptyMeetingRecordsSnapshot()).toBe(
       getEmptyMeetingRecordsSnapshot(),
     );
+  });
+
+  it("refreshes local meeting records when returning to a cached home page", () => {
+    const originalWindow = globalThis.window;
+    const target = new EventTarget();
+    Object.defineProperty(globalThis, "window", {
+      configurable: true,
+      value: {
+        addEventListener: target.addEventListener.bind(target),
+        removeEventListener: target.removeEventListener.bind(target),
+      },
+    });
+    const onStoreChange = vi.fn();
+
+    try {
+      const unsubscribe = subscribeToMeetingHistory(onStoreChange);
+
+      target.dispatchEvent(new Event("pageshow"));
+      target.dispatchEvent(new Event("focus"));
+      target.dispatchEvent(new Event(meetingHistoryUpdatedEvent));
+      unsubscribe();
+      target.dispatchEvent(new Event("pageshow"));
+
+      expect(onStoreChange).toHaveBeenCalledTimes(3);
+    } finally {
+      Object.defineProperty(globalThis, "window", {
+        configurable: true,
+        value: originalWindow,
+      });
+    }
   });
 });

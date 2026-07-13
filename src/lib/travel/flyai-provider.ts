@@ -1,6 +1,6 @@
 import type { TravelOption } from "@/types/domain";
 import { estimateTravelOption } from "./estimate-provider";
-import { searchGateway } from "./gateway-client";
+import { GatewayClientError, searchGateway } from "./gateway-client";
 import { createUnavailableTravelOption } from "./unavailable-option";
 import type { GatewaySearchRequest, TravelProvider, TravelSearchInput } from "./types";
 
@@ -66,8 +66,12 @@ async function searchMode(
     return options.length > 0
       ? options
       : [createUnavailableTravelOption(input, mode, "NO_FEASIBLE_SAME_DAY_ROUTE")];
-  } catch {
-    return [estimateTravelOption(input, mode)];
+  } catch (error) {
+    const failureReason =
+      error instanceof GatewayClientError
+        ? error.code
+        : "真实报价暂不可用，使用距离和交通方式粗估";
+    return [estimateTravelOption(input, mode, failureReason)];
   }
 }
 
