@@ -261,6 +261,7 @@ describe("searchFlyAI", () => {
     ["PROVIDER_NO_ROUTE", "No route found for this city pair"],
     ["PROVIDER_NO_TICKET", "暂无可售票"],
     ["PROVIDER_RATE_LIMITED", "Too many requests, rate limit exceeded"],
+    ["PROVIDER_RATE_LIMITED", "MCP HTTP 403: Abnormal access behavior detected by risk control"],
     ["PROVIDER_UPSTREAM_UNAVAILABLE", "upstream service unavailable 503"],
   ] as const)("classifies FlyAI CLI stderr as %s without exposing provider details", async (code, stderr) => {
     const processError = Object.assign(new Error("flyai failed"), { code: "ECLI" });

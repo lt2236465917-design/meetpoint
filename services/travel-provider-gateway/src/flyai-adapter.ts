@@ -148,7 +148,7 @@ function classifyCliError(error: Error, stdout: string, stderr: string): Gateway
   if (/(no\s*(ticket|seat|availability)|sold\s*out|暂无|无票|售罄|余票不足|不可售)/.test(text)) {
     return "PROVIDER_NO_TICKET";
   }
-  if (/(rate\s*limit|too\s*many\s*requests|\b429\b|限流|频率|请求过多)/.test(text)) {
+  if (/(rate\s*limit|too\s*many\s*requests|\b429\b|\b403\b|risk\s*control|abnormal\s*access|限流|频率|请求过多|风控|访问异常)/.test(text)) {
     return "PROVIDER_RATE_LIMITED";
   }
   if (/(upstream|service\s*unavailable|bad\s*gateway|gateway\s*timeout|\b5\d{2}\b|供应商|上游|服务不可用)/.test(text)) {
