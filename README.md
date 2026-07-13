@@ -64,6 +64,8 @@ Supabase variables:
 
 DeepSeek requests use a 15-second timeout and at most one SDK retry. Provider failures never fail recommendation calculation or change deterministic rankings; they return local fallback explanations instead.
 
+For local real-ticket smoke tests, run the gateway separately and set `TRAVEL_GATEWAY_URL=http://127.0.0.1:8080` in `.env.local`. The `.env.local` `TRAVEL_GATEWAY_TOKEN` must match `services/travel-provider-gateway/.env`; otherwise the main app treats the gateway as unavailable and falls back to estimates.
+
 ## Travel Provider Status
 
 Tasks 1-10 of the [Amap and FlyAI implementation plan](docs/superpowers/plans/2026-07-12-amap-flyai-integration.md) are complete: Amap city validation, travel query freshness persistence, the isolated gateway, main-app authenticated client, deterministic travel-search orchestration, and source/freshness result UI are fixture-verified. The app uses real normalized route facts when the gateway succeeds; per-mode failures fall back to deterministic estimates, while successful empty results remain unavailable rather than pretending to be estimates.
@@ -83,6 +85,8 @@ npm run build
 The gateway exposes `GET /healthz` and authenticated `POST /v1/search`. It accepts only supported normalized requests, calls FlyAI through an argument-array CLI invocation with shell execution disabled, and returns stable error codes. Its 5-minute cache, four-call concurrency limit, 12-second provider timeout, and one retry are process-local.
 
 Run `npm run probe:providers` only with operator-managed keys. It prints a single redacted JSON summary (status, latency, count, and field names), never provider payload values. A credentialed probe on 2026-07-12 confirmed Amap key access and FlyAI train field summaries, including the live `data.itemList` shape. Direct gateway smoke confirmed real FlyAI flight/train rows, numeric string prices normalized to CNY integers, China-time timestamps, query freshness, and `a.feizhu.com` booking hosts. The main app now batches travel searches at four concurrent provider requests so queued gateway work does not consume client request timeouts. A 2026-07-13 full local calculation showed real FlyAI rows, `飞猪参考价`, and `去飞猪查看`, but still stored `PARTIAL_ESTIMATE_FALLBACK` because FlyAI returned `PROVIDER_UNAVAILABLE` for some route/mode pairs; production enablement remains blocked on supplier route coverage/quota behavior and final user-flow acceptance. The Dockerfile policy and gateway build are verified; an actual Docker image build still needs a running Docker daemon.
+
+Future Fliggy/FlyAI MCP or skill integrations should be treated as gateway-side provider adapters, not main-app dependencies. Compare them against the same fixed route/mode probe set before replacing FlyAI or changing fallback behavior.
 
 ## Verification
 
