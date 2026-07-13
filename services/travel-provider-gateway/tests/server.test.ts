@@ -72,6 +72,8 @@ describe("createGatewayServer", () => {
 
   it.each([
     ["INVALID_REQUEST", 400], ["PROVIDER_INVALID_RESPONSE", 502], ["PROVIDER_UNAVAILABLE", 503],
+    ["PROVIDER_NO_ROUTE", 404], ["PROVIDER_NO_TICKET", 404], ["PROVIDER_RATE_LIMITED", 429],
+    ["PROVIDER_UPSTREAM_UNAVAILABLE", 503], ["PROVIDER_CLI_FAILED", 502],
     ["PROVIDER_TIMEOUT", 504], ["INTERNAL_ERROR", 500],
   ] as const)("maps %s to HTTP %s without echoing exception details", async (code, status) => {
     const search = vi.fn().mockRejectedValue(new GatewayServiceError(code, "token=secret raw provider"));

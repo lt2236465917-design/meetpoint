@@ -79,6 +79,11 @@ describe("gateway error schema", () => {
       "INVALID_REQUEST",
       "PROVIDER_TIMEOUT",
       "PROVIDER_UNAVAILABLE",
+      "PROVIDER_NO_ROUTE",
+      "PROVIDER_NO_TICKET",
+      "PROVIDER_RATE_LIMITED",
+      "PROVIDER_UPSTREAM_UNAVAILABLE",
+      "PROVIDER_CLI_FAILED",
       "PROVIDER_INVALID_RESPONSE",
       "INTERNAL_ERROR",
     ] as const;

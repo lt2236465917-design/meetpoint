@@ -39,7 +39,19 @@ function cacheKey(input: GatewaySearchRequest): string {
 function publicProviderMessage(code: GatewayErrorCode): string {
   if (code === "PROVIDER_TIMEOUT") return "Provider request timed out";
   if (code === "PROVIDER_UNAVAILABLE") return "Provider unavailable";
+  if (code === "PROVIDER_NO_ROUTE") return "Provider found no route";
+  if (code === "PROVIDER_NO_TICKET") return "Provider found no ticket";
+  if (code === "PROVIDER_RATE_LIMITED") return "Provider rate limited";
+  if (code === "PROVIDER_UPSTREAM_UNAVAILABLE") return "Provider upstream unavailable";
+  if (code === "PROVIDER_CLI_FAILED") return "Provider CLI failed";
   return "Provider returned an invalid response";
+}
+
+function shouldRetryProviderError(code: GatewayErrorCode): boolean {
+  return code === "PROVIDER_TIMEOUT"
+    || code === "PROVIDER_UNAVAILABLE"
+    || code === "PROVIDER_RATE_LIMITED"
+    || code === "PROVIDER_UPSTREAM_UNAVAILABLE";
 }
 
 export function createTravelSearchService(dependencies: ServiceDependencies = {}): TravelSearchService {
@@ -64,8 +76,7 @@ export function createTravelSearchService(dependencies: ServiceDependencies = {}
           try {
             return await searchProvider(parsedRequest.data);
           } catch (error) {
-            if (error instanceof FlyAIAdapterError
-              && (error.code === "PROVIDER_TIMEOUT" || error.code === "PROVIDER_UNAVAILABLE")) {
+            if (error instanceof FlyAIAdapterError && shouldRetryProviderError(error.code)) {
               return searchProvider(parsedRequest.data);
             }
             throw error;

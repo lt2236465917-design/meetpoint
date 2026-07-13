@@ -257,6 +257,44 @@ describe("searchFlyAI", () => {
     expect(logger.error).not.toHaveBeenCalledWith(expect.stringContaining("secret raw output"));
   });
 
+  it.each([
+    ["PROVIDER_NO_ROUTE", "No route found for this city pair"],
+    ["PROVIDER_NO_TICKET", "暂无可售票"],
+    ["PROVIDER_RATE_LIMITED", "Too many requests, rate limit exceeded"],
+    ["PROVIDER_UPSTREAM_UNAVAILABLE", "upstream service unavailable 503"],
+  ] as const)("classifies FlyAI CLI stderr as %s without exposing provider details", async (code, stderr) => {
+    const processError = Object.assign(new Error("flyai failed"), { code: "ECLI" });
+    const execFile = vi.fn((_file: string, _args: readonly string[], _options: object, callback: ExecCallback) => {
+      callback(processError, "", stderr);
+      return undefined as never;
+    });
+
+    const thrown = await searchFlyAI(baseInput, { execFile, executable: "/safe/flyai" })
+      .catch((error: unknown) => error);
+
+    expect(thrown).toMatchObject({
+      name: "FlyAIAdapterError",
+      code,
+      message: "FlyAI CLI request failed",
+    });
+    expect(String(thrown)).not.toContain(stderr);
+    expect(JSON.stringify(thrown)).not.toContain(stderr);
+  });
+
+  it("classifies unrecognized FlyAI CLI failures separately from supplier unavailability", async () => {
+    const processError = Object.assign(new Error("spawn failed"), { code: "ENOENT" });
+    const execFile = vi.fn((_file: string, _args: readonly string[], _options: object, callback: ExecCallback) => {
+      callback(processError, "", "");
+      return undefined as never;
+    });
+
+    await expect(searchFlyAI(baseInput, { execFile, executable: "/safe/flyai" })).rejects.toMatchObject({
+      name: "FlyAIAdapterError",
+      code: "PROVIDER_CLI_FAILED",
+      message: "FlyAI CLI request failed",
+    });
+  });
+
   it("does not retain sensitive execFile stdout or stderr in errors, causes, serialization, or logs", async () => {
     const sensitive = "supplier-token=top-secret";
     const processError = Object.assign(new Error(`failed: ${sensitive}`), {
@@ -275,7 +313,7 @@ describe("searchFlyAI", () => {
 
     expect(thrown).toMatchObject({
       name: "FlyAIAdapterError",
-      code: "PROVIDER_UNAVAILABLE",
+      code: "PROVIDER_CLI_FAILED",
       message: "FlyAI CLI request failed",
     });
     expect((thrown as Error).cause).toBeUndefined();

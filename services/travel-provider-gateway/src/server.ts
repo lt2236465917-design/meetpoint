@@ -8,12 +8,18 @@ import { createTravelSearchService, GatewayServiceError, type TravelSearchServic
 const MAX_BODY_BYTES = 16 * 1_024;
 const STATUS_BY_CODE: Record<GatewayErrorCode, number> = {
   UNAUTHORIZED: 401, INVALID_REQUEST: 400, PROVIDER_INVALID_RESPONSE: 502,
-  PROVIDER_UNAVAILABLE: 503, PROVIDER_TIMEOUT: 504, INTERNAL_ERROR: 500,
+  PROVIDER_UNAVAILABLE: 503, PROVIDER_NO_ROUTE: 404, PROVIDER_NO_TICKET: 404,
+  PROVIDER_RATE_LIMITED: 429, PROVIDER_UPSTREAM_UNAVAILABLE: 503,
+  PROVIDER_CLI_FAILED: 502, PROVIDER_TIMEOUT: 504, INTERNAL_ERROR: 500,
 };
 const MESSAGE_BY_CODE: Record<GatewayErrorCode, string> = {
   UNAUTHORIZED: "Unauthorized", INVALID_REQUEST: "Invalid request",
   PROVIDER_INVALID_RESPONSE: "Provider returned an invalid response",
   PROVIDER_UNAVAILABLE: "Provider unavailable", PROVIDER_TIMEOUT: "Provider request timed out",
+  PROVIDER_NO_ROUTE: "Provider found no route", PROVIDER_NO_TICKET: "Provider found no ticket",
+  PROVIDER_RATE_LIMITED: "Provider rate limited",
+  PROVIDER_UPSTREAM_UNAVAILABLE: "Provider upstream unavailable",
+  PROVIDER_CLI_FAILED: "Provider CLI failed",
   INTERNAL_ERROR: "Gateway request failed",
 };
 

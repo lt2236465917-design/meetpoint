@@ -70,7 +70,9 @@ describe("createTravelSearchService", () => {
     expect(searchProvider).toHaveBeenCalledTimes(1);
   });
 
-  it.each(["PROVIDER_TIMEOUT", "PROVIDER_UNAVAILABLE"] as const)("retries %s exactly once with one queriedAt", async (code) => {
+  it.each(["PROVIDER_TIMEOUT", "PROVIDER_RATE_LIMITED", "PROVIDER_UPSTREAM_UNAVAILABLE"] as const)(
+    "retries %s exactly once with one queriedAt",
+    async (code) => {
     const searchProvider = vi.fn()
       .mockRejectedValueOnce(new FlyAIAdapterError(code, "sensitive supplier detail"))
       .mockResolvedValueOnce([option]);
@@ -80,7 +82,19 @@ describe("createTravelSearchService", () => {
     await expect(service.search(request)).resolves.toMatchObject({ options: [option] });
     expect(searchProvider).toHaveBeenCalledTimes(2);
     expect(now).toHaveBeenCalledTimes(1);
-  });
+    },
+  );
+
+  it.each(["PROVIDER_NO_ROUTE", "PROVIDER_NO_TICKET", "PROVIDER_CLI_FAILED"] as const)(
+    "does not retry %s",
+    async (code) => {
+      const searchProvider = vi.fn().mockRejectedValue(new FlyAIAdapterError(code, "sensitive supplier detail"));
+      const service = createTravelSearchService({ searchProvider });
+
+      await expect(service.search(request)).rejects.toMatchObject({ code });
+      expect(searchProvider).toHaveBeenCalledTimes(1);
+    },
+  );
 
   it("does not retry or cache an invalid provider response", async () => {
     const searchProvider = vi.fn().mockResolvedValue([{ ...option, rawPayload: "secret" }]);

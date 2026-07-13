@@ -137,13 +137,37 @@ function isTimeout(error: Error): boolean {
   return details.code === "ETIMEDOUT" || (details.killed === true && details.signal === "SIGTERM");
 }
 
+function classifyCliError(error: Error, stdout: string, stderr: string): GatewayErrorCode {
+  if (isTimeout(error)) return "PROVIDER_TIMEOUT";
+  const details = error as Error & { code?: string };
+  const text = `${stderr}\n${stdout}\n${error.message}`.toLowerCase();
+
+  if (/(no\s*(route|itinerary|flight|train)|route\s*(not\s*found|unavailable)|无航线|无车次|无线路|没有.*(航班|车次|线路))/.test(text)) {
+    return "PROVIDER_NO_ROUTE";
+  }
+  if (/(no\s*(ticket|seat|availability)|sold\s*out|暂无|无票|售罄|余票不足|不可售)/.test(text)) {
+    return "PROVIDER_NO_TICKET";
+  }
+  if (/(rate\s*limit|too\s*many\s*requests|\b429\b|限流|频率|请求过多)/.test(text)) {
+    return "PROVIDER_RATE_LIMITED";
+  }
+  if (/(upstream|service\s*unavailable|bad\s*gateway|gateway\s*timeout|\b5\d{2}\b|供应商|上游|服务不可用)/.test(text)) {
+    return "PROVIDER_UPSTREAM_UNAVAILABLE";
+  }
+  if (details.code === "ENOENT" || details.code === "EACCES" || details.code === "ECLI") {
+    return "PROVIDER_CLI_FAILED";
+  }
+  return "PROVIDER_UNAVAILABLE";
+}
+
 function execute(execFile: ExecFile, executable: string, args: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
-    execFile(executable, args, EXECUTION_OPTIONS, (error, stdout) => {
+    execFile(executable, args, EXECUTION_OPTIONS, (error, stdout, stderr) => {
       if (error !== null) {
+        const code = classifyCliError(error, stdout, stderr);
         reject(new FlyAIAdapterError(
-          isTimeout(error) ? "PROVIDER_TIMEOUT" : "PROVIDER_UNAVAILABLE",
-          isTimeout(error) ? "FlyAI request timed out" : "FlyAI CLI request failed",
+          code,
+          code === "PROVIDER_TIMEOUT" ? "FlyAI request timed out" : "FlyAI CLI request failed",
         ));
         return;
       }
