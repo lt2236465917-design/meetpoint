@@ -39,6 +39,8 @@ type ParticipantTravelOption = {
   arrive_at: string | null;
   booking_url: string | null;
   service_name: string | null;
+  departure_station_name: string | null;
+  arrival_station_name: string | null;
   source: TravelSource;
   provider: TravelProviderName;
   queried_at: string | null;
@@ -173,7 +175,7 @@ export default async function ResultPage({
     ? await supabase
         .from("travel_options")
         .select(
-          "participant_id,candidate_city_code,mode,source,provider,queried_at,price_cny,depart_at,arrive_at,duration_minutes,booking_url,service_name,failure_reason,participants(name,departure_city_name)",
+          "participant_id,candidate_city_code,mode,source,provider,queried_at,price_cny,depart_at,arrive_at,duration_minutes,booking_url,service_name,departure_station_name,arrival_station_name,failure_reason,participants(name,departure_city_name)",
         )
         .eq("run_id", run.id)
     : { data: [] };
@@ -210,6 +212,8 @@ function attachParticipantOptions(
     duration_minutes: number | null;
     booking_url: string | null;
     service_name: string | null;
+    departure_station_name: string | null;
+    arrival_station_name: string | null;
     failure_reason?: string | null;
     participants?:
       | { name: string; departure_city_name: string }
@@ -253,6 +257,8 @@ function selectParticipantOptions(
       arrive_at: option.arrive_at,
       booking_url: option.booking_url,
       service_name: option.service_name,
+      departure_station_name: option.departure_station_name,
+      arrival_station_name: option.arrival_station_name,
       source: option.source,
       provider: option.provider,
       queried_at: option.queried_at,

@@ -19,7 +19,7 @@ Mobile-first H5 MVP for choosing a fair cross-city meeting city for 2-6 people i
 - `/p/[code]/result`: shared team result page showing the latest recommendation run, stale-result warning, team total fare, total duration, fairness gap, and per-participant travel details.
 - `POST /api/plans`: creates a plan from `{ title, meetingDate, targetArrivalTime, participantLimit }` and returns `{ code, shareUrl }`; local development requests from `localhost` return a LAN `shareUrl` when available.
 - `GET /api/plans/[code]`: returns `{ plan, participants, latestRun }` for public plan reads.
-- `GET /api/cities/search?q=...`: searches the built-in city library first, then uses Amap only to validate and map a local miss back to a supported city; returns `{ cities }`.
+- `GET /api/cities/search?q=...`: searches the built-in city library first, then uses Amap to validate city-level local misses; returns `{ cities }`.
 - `POST /api/plans/[code]/participants`: creates a participant and returns `{ participantId, editToken }`.
 - `GET /api/plans/[code]/candidates`: returns stored candidate city controls for a plan.
 - `POST /api/plans/[code]/candidates`: currently returns `CANDIDATE_EDITING_UNAVAILABLE`.
@@ -29,7 +29,7 @@ Mobile-first H5 MVP for choosing a fair cross-city meeting city for 2-6 people i
 ## Core Modules
 
 - `src/lib/city/candidate-generator.ts`: deterministic candidate-city generation from participant cities and host controls.
-- `src/lib/city/amap-client.ts` and `src/lib/city/city-provider.ts`: local-first city search with a 3-second server-side Amap validation fallback; only cities in the built-in library are selectable.
+- `src/lib/city/amap-client.ts` and `src/lib/city/city-provider.ts`: local-first city search with a 3-second server-side Amap validation fallback for city-level results.
 - `src/lib/fallback/mvp-store.ts`: server-side in-memory fallback store for local create-to-result smoke testing when Supabase variables are missing.
 - `src/lib/travel/types.ts`: normalized travel-provider boundary, including gateway request/response types and query timestamps for real prices.
 - `src/lib/travel/estimate-provider.ts`: deterministic estimated travel option fallback using city distance and transport mode, with the upstream fallback reason preserved when available.
@@ -53,7 +53,7 @@ Supabase variables:
 - `NEXT_PUBLIC_SUPABASE_URL`: public Supabase project URL used by browser and server clients.
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`: public anon key for browser-side reads.
 - `SUPABASE_SERVICE_ROLE_KEY`: server-only service-role key for route handlers and background calculations.
-- `AMAP_API_KEY`: server-side Amap key for local-miss city validation and mapping; it never expands the scoring city library.
+- `AMAP_API_KEY`: server-side Amap key for local-miss city validation; Amap-backed city-level results can be selected even when they are not in the local scoring city library.
 - `DEEPSEEK_API_KEY`: server-side DeepSeek key for explanation and share-copy generation only.
 - `DEEPSEEK_MODEL`: optional server-side model override; defaults to `deepseek-v4-flash`.
 - `FLYAI_PROBE_CLI_PATH`: optional operator-only executable override for the redacted FlyAI capability probe.
@@ -61,6 +61,7 @@ Supabase variables:
 - `TRAVEL_GATEWAY_TOKEN`: server-side bearer token for the internal gateway.
 - `TRAVEL_GATEWAY_TIMEOUT_MS`: optional main-app gateway request timeout; defaults to `30000` ms.
 - `TRAVEL_CALCULATION_TIMEOUT_MS`: optional total travel-query budget; defaults to `45000` ms.
+- `TRAVEL_SECONDARY_QUERY_TIMEOUT_MS`: optional second-pass travel-query budget for unfinished searches; defaults to `15000` ms.
 
 DeepSeek requests use a 15-second timeout and at most one SDK retry. Provider failures never fail recommendation calculation or change deterministic rankings; they return local fallback explanations instead.
 
@@ -70,7 +71,7 @@ For local real-ticket smoke tests, run the gateway separately and set `TRAVEL_GA
 
 Tasks 1-10 of the [Amap and FlyAI implementation plan](docs/superpowers/plans/2026-07-12-amap-flyai-integration.md) are complete: Amap city validation, travel query freshness persistence, the isolated gateway, main-app authenticated client, deterministic travel-search orchestration, and source/freshness result UI are fixture-verified. The app uses real normalized route facts when the gateway succeeds; per-mode failures fall back to deterministic estimates, while successful empty results remain unavailable rather than pretending to be estimates.
 
-Result cards show real FlyAI rows as `飞猪参考价` with the China-time query timestamp. Estimates are marked `估算` and include the stable fallback reason when one is available, such as `PROVIDER_RATE_LIMITED` or `GATEWAY_UNAVAILABLE`; mixed cards show `部分数据为估算`, and booking actions appear only for real FlyAI rows with approved HTTPS Fliggy/Alitrip/Feizhu links. If the latest run has no primary recommendation label because no candidate is feasible for every participant, the result page asks the organizer to adjust the target arrival time or meeting date instead of presenting an unlabeled city as a recommendation.
+Result cards show real FlyAI rows as `飞猪参考价` with the China-time query timestamp, train or flight number, stations where available, time range, duration, and fare. Estimates are marked `估算` and include the stable fallback reason when one is available, such as `PROVIDER_RATE_LIMITED` or `GATEWAY_UNAVAILABLE`; mixed cards show `部分数据为估算`. Result cards do not render provider booking links; users should use the displayed train or flight details to verify tickets in their preferred booking app. If the latest run has no primary recommendation label because no candidate is feasible for every participant, the result page asks the organizer to adjust the target arrival time or meeting date instead of presenting an unlabeled city as a recommendation.
 
 The gateway has its own environment file at `services/travel-provider-gateway/.env.example` and commands:
 
@@ -84,7 +85,7 @@ npm run build
 
 The gateway exposes `GET /healthz` and authenticated `POST /v1/search`. It accepts only supported normalized requests, calls FlyAI through an argument-array CLI invocation with shell execution disabled, and returns stable error codes for no route, no ticket, rate limit, upstream unavailability, CLI failure, timeout, and invalid responses. Its 5-minute cache, four-call concurrency limit, 12-second provider timeout, and one retry for retryable provider failures are process-local.
 
-Run `npm run probe:providers` only with operator-managed keys. It prints a single redacted JSON summary (status, latency, count, and field names), never provider payload values. A credentialed probe on 2026-07-12 confirmed Amap key access and FlyAI train field summaries, including the live `data.itemList` shape. Direct gateway smoke confirmed real FlyAI flight/train rows, numeric string prices normalized to CNY integers, China-time timestamps, query freshness, and `a.feizhu.com` booking hosts. The main app now batches travel searches at four concurrent provider requests so queued gateway work does not consume client request timeouts. A 2026-07-13 full local calculation showed real FlyAI rows, `飞猪参考价`, and `去飞猪查看`, but still stored `PARTIAL_ESTIMATE_FALLBACK` because FlyAI returned provider failures for some route/mode pairs. A later 2026-07-13 H5 smoke with three participants still produced partial estimates; direct gateway diagnostics grouped the top-three candidate checks as 10 successful row sets, one successful empty result, and seven `PROVIDER_RATE_LIMITED` responses caused by FlyAI/Fliggy risk-control 403 behavior. Production enablement remains blocked on supplier route coverage/quota behavior and final user-flow acceptance. The Dockerfile policy and gateway build are verified; an actual Docker image build still needs a running Docker daemon.
+Run `npm run probe:providers` only with operator-managed keys. It prints a single redacted JSON summary (status, latency, count, and field names), never provider payload values. A credentialed probe on 2026-07-12 confirmed Amap key access and FlyAI train field summaries, including the live `data.itemList` shape. Direct gateway smoke confirmed real FlyAI flight/train rows, numeric string prices normalized to CNY integers, China-time timestamps, query freshness, and `a.feizhu.com` booking hosts. The main app now batches travel searches at four concurrent provider requests so queued gateway work does not consume client request timeouts, and runs a second-pass query for unfinished route groups before using estimates. A 2026-07-13 full local calculation showed real FlyAI rows and `飞猪参考价`, but still stored `PARTIAL_ESTIMATE_FALLBACK` because FlyAI returned provider failures for some route/mode pairs. A later 2026-07-13 H5 smoke with three participants still produced partial estimates; direct gateway diagnostics grouped the top-three candidate checks as 10 successful row sets, one successful empty result, and seven `PROVIDER_RATE_LIMITED` responses caused by FlyAI/Fliggy risk-control 403 behavior. Production enablement remains blocked on supplier route coverage/quota behavior and final user-flow acceptance. A 2026-07-13 Docker smoke built `cross-city-travel-gateway:test`, confirmed `GET /healthz`, rejected unauthenticated `POST /v1/search`, and returned authenticated real FlyAI flight rows from the container.
 
 Future Fliggy/FlyAI MCP or skill integrations should be treated as gateway-side provider adapters, not main-app dependencies. Compare them against the same fixed route/mode probe set before replacing FlyAI or changing fallback behavior.
 

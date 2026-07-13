@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { ResponsiveShell } from "@/components/layout/ResponsiveShell";
 import { getApiErrorMessage } from "@/lib/ui/api-error-message";
+import { copyTextToClipboard } from "@/lib/ui/clipboard";
 import { parseCreatePlanForm } from "@/lib/ui/create-plan-form";
 import { rememberMeetingHistoryItem } from "@/lib/ui/meeting-history";
 
@@ -75,12 +76,12 @@ export default function CreatePlanPage() {
     if (!result) return;
 
     const publicLink = getPublicShareUrl(result.shareUrl);
-    try {
-      await navigator.clipboard.writeText(publicLink);
-      setCopyMessage("公开链接已复制，可以直接发给朋友填写。");
-    } catch {
-      setCopyMessage("复制失败，请长按链接手动复制。");
-    }
+    const copied = await copyTextToClipboard(publicLink);
+    setCopyMessage(
+      copied
+        ? "公开链接已复制，可以直接发给朋友填写。"
+        : "复制失败，请长按链接手动复制。",
+    );
   }
 
   const publicShareUrl = result ? getPublicShareUrl(result.shareUrl) : "";

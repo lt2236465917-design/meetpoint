@@ -4,6 +4,7 @@ import type { TravelProvider, TravelSearchInput } from "@/lib/travel/types";
 import type { TransportMode, TravelOption } from "@/types/domain";
 
 const DEFAULT_TIMEOUT_MS = 45_000;
+const DEFAULT_SECONDARY_TIMEOUT_MS = 15_000;
 const PROVIDER_SEARCH_CONCURRENCY = 4;
 const SHANGHAI_TIME_ZONE = "Asia/Shanghai";
 
@@ -62,6 +63,15 @@ export function travelSearchKey(input: {
 function calculationTimeoutMs(value?: number) {
   const parsed = value ?? Number(process.env.TRAVEL_CALCULATION_TIMEOUT_MS);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_TIMEOUT_MS;
+}
+
+function secondaryTimeoutMs(primaryTimeoutMs: number) {
+  if (primaryTimeoutMs < 1_000) return 0;
+  const parsed = Number(process.env.TRAVEL_SECONDARY_QUERY_TIMEOUT_MS);
+  const configured = Number.isFinite(parsed) && parsed >= 0
+    ? parsed
+    : DEFAULT_SECONDARY_TIMEOUT_MS;
+  return Math.min(configured, primaryTimeoutMs);
 }
 
 function uniqueModes(modes: readonly TransportMode[]): TransportMode[] {
@@ -237,13 +247,10 @@ function cloneForParticipants(group: SearchGroup, options: TravelOption[]) {
 export async function collectTravelOptions(
   input: CollectTravelOptionsInput,
 ): Promise<CollectTravelOptionsResult> {
-  const startedAt = Date.now();
   const groups = createGroups(input);
   const outcomes = new Map<string, SearchOutcome>();
   const deadline = calculationTimeoutMs(input.timeoutMs);
-  const deadlineAt = startedAt + deadline;
-  let nextGroupIndex = 0;
-  const searchGroup = async (group: SearchGroup) => {
+  const searchGroup = async (group: SearchGroup, deadlineAt: number) => {
     try {
       const options = await input.provider.search(group.input);
       if (Date.now() > deadlineAt) return;
@@ -256,26 +263,40 @@ export async function collectTravelOptions(
       outcomes.set(group.key, { status: "rejected" });
     }
   };
-  const workers = Array.from(
-    { length: Math.min(PROVIDER_SEARCH_CONCURRENCY, groups.length) },
-    async () => {
-      while (Date.now() <= deadlineAt) {
-        const group = groups[nextGroupIndex];
-        nextGroupIndex += 1;
-        if (!group) return;
-        await searchGroup(group);
-      }
-    },
-  );
 
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  await Promise.race([
-    Promise.all(workers),
-    new Promise<void>((resolve) => {
-      timer = setTimeout(resolve, Math.max(0, deadlineAt - Date.now()));
-    }),
-  ]);
-  if (timer) clearTimeout(timer);
+  const runGroups = async (groupsToRun: SearchGroup[], timeoutMs: number) => {
+    if (groupsToRun.length === 0 || timeoutMs <= 0) return;
+    const deadlineAt = Date.now() + timeoutMs;
+    let nextGroupIndex = 0;
+    const workers = Array.from(
+      { length: Math.min(PROVIDER_SEARCH_CONCURRENCY, groupsToRun.length) },
+      async () => {
+        while (Date.now() <= deadlineAt) {
+          const group = groupsToRun[nextGroupIndex];
+          nextGroupIndex += 1;
+          if (!group) return;
+          await searchGroup(group, deadlineAt);
+        }
+      },
+    );
+
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    await Promise.race([
+      Promise.all(workers),
+      new Promise<void>((resolve) => {
+        timer = setTimeout(resolve, Math.max(0, deadlineAt - Date.now()));
+      }),
+    ]);
+    if (timer) clearTimeout(timer);
+  };
+
+  await runGroups(groups, deadline);
+
+  const groupsNeedingSecondaryLookup = groups.filter((group) => {
+    const outcome = outcomes.get(group.key);
+    return outcome === undefined || outcome.status === "rejected";
+  });
+  await runGroups(groupsNeedingSecondaryLookup, secondaryTimeoutMs(deadline));
 
   const options = groups.flatMap((group) => {
     const outcome = outcomes.get(group.key);

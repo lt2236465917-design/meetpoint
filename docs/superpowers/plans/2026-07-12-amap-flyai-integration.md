@@ -15,7 +15,7 @@
 - Keep candidate generation, route selection, scoring, and ranking deterministic.
 - Score one selected route per participant per candidate; do not use average fare as a UI decision metric.
 - DeepSeek only explains computed results and never changes candidates, tickets, scores, or ordering.
-- The built-in city library remains the scoring source of truth; Amap only supplements search and validation.
+- The built-in city library remains the scoring source of truth; Amap supplements search and validation for city-level participant input.
 - Search only meeting-day departures that arrive no later than the target arrival time.
 - Keep mixed real and estimated candidates rankable with estimate penalties and visible source labels.
 - Treat provider prices as timestamped references, not locked prices or inventory.
@@ -163,7 +163,7 @@ Public-beta enablement remains blocked until a human confirms authorization, quo
 
 - [ ] **Step 1: Add failing tests**
 
-Test that local hits make zero requests; a remote tip named 武汉市 maps to local wuhan; unsupported cities return no selectable city; HTTP failure, status 0, invalid JSON, and abort return an empty list.
+Test that local hits make zero requests; a remote tip named 武汉市 maps to local wuhan; remote prefecture-level city tips return stable `amap-<adcode>` selectable cities; non-city places return no selectable city; HTTP failure, status 0, invalid JSON, and abort return an empty list.
 
 ~~~ts
 vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
@@ -199,7 +199,7 @@ Call https://restapi.amap.com/v3/assistant/inputtips with keywords and the serve
 
 - [ ] **Step 4: Map only to the local library**
 
-Return local matches immediately. After a local miss, remove a final 市 from Amap names, exact-match supported Chinese city names in CITIES, deduplicate by internal code, and return at most eight.
+Return local matches immediately. After a local miss, remove a final 市 from Amap names, exact-match supported Chinese city names in CITIES when possible, otherwise accept prefecture-level or municipality adcodes as `amap-<adcode>` city results, deduplicate by code, and return at most eight.
 
 - [ ] **Step 5: Verify GREEN**
 
@@ -538,7 +538,7 @@ Run inside the gateway: npm run test -- tests/container-config.test.ts and npm r
 
 If Docker exists, run docker build -t cross-city-travel-gateway:test .
 
-Expected: tests/build pass; report Docker as unverified if unavailable.
+Expected: tests/build pass; Docker smoke verifies image build plus container `GET /healthz`, unauthenticated `POST /v1/search` rejection, and authenticated `POST /v1/search` routing.
 
 - [ ] **Step 6: Commit**
 
@@ -684,7 +684,7 @@ Install @testing-library/react, @testing-library/jest-dom, and jsdom as dev depe
 
 - [ ] **Step 2: Write failing UI tests**
 
-Assert real FlyAI rows show 飞猪参考价 and query time; approved HTTPS Fliggy links show 去飞猪查看 and 价格和余票以跳转页面为准; estimates show 估算 and no link; mixed cards show 部分数据为估算; invalid links render no anchor; team total fare remains visible and average fare remains absent.
+Assert real FlyAI rows show 飞猪参考价, query time, train or flight number, station names when available, time range, duration, and fare; result cards render no provider booking links or 去飞猪查看 action; estimates show 估算; mixed cards show 部分数据为估算; team total fare remains visible and average fare remains absent.
 
 - [ ] **Step 3: Verify RED**
 

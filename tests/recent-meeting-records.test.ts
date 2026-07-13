@@ -61,7 +61,7 @@ describe("RecentMeetingRecords", () => {
     expect(html).toContain('aria-label="查看上海周末见面填写情况"');
   });
 
-  it("shows copy-link actions for unfinished local meeting records", () => {
+  it("shows copy-link actions for every local meeting record", () => {
     const html = renderToStaticMarkup(
       createElement(RecentMeetingRecordsView, {
         records: [
@@ -71,7 +71,7 @@ describe("RecentMeetingRecords", () => {
             meetingDate: "2026-08-15",
             targetArrivalTime: "18:00",
             role: "host",
-            latestRun: false,
+            latestRun: true,
             lastVisitedAt: "2026-07-10T08:00:00.000Z",
           },
         ],

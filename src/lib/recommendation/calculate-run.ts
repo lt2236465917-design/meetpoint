@@ -50,6 +50,8 @@ function toTravelOptionInsert(runId: string, option: TravelOption) {
     has_transfer: option.hasTransfer,
     transfer_count: option.transferCount,
     service_name: option.serviceName,
+    departure_station_name: option.departureStationName,
+    arrival_station_name: option.arrivalStationName,
     booking_url: option.bookingUrl,
     failure_reason: option.failureReason,
   };

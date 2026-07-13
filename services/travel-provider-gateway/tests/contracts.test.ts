@@ -29,6 +29,8 @@ const validOption = {
   hasTransfer: false,
   transferCount: 0,
   serviceName: "MU5101",
+  departureStationName: "北京首都",
+  arrivalStationName: "上海虹桥",
   bookingUrl: "https://www.fliggy.com/booking/flight",
 } as const;
 

@@ -43,12 +43,32 @@ function compareRouteFacts(left: TravelOption, right: TravelOption): number {
   return leftKey === rightKey ? 0 : leftKey < rightKey ? -1 : 1;
 }
 
+function isRetryableGatewayError(error: unknown): boolean {
+  return error instanceof GatewayClientError && [
+    "GATEWAY_TIMEOUT",
+    "GATEWAY_UNAVAILABLE",
+    "PROVIDER_TIMEOUT",
+    "PROVIDER_UNAVAILABLE",
+    "PROVIDER_RATE_LIMITED",
+    "PROVIDER_UPSTREAM_UNAVAILABLE",
+  ].includes(error.code);
+}
+
+async function searchGatewayWithRetry(request: GatewaySearchRequest) {
+  try {
+    return await searchGateway(request);
+  } catch (error) {
+    if (!isRetryableGatewayError(error)) throw error;
+    return searchGateway(request);
+  }
+}
+
 async function searchMode(
   input: TravelSearchInput,
   mode: GatewaySearchRequest["mode"],
 ): Promise<TravelOption[]> {
   try {
-    const response = await searchGateway(toGatewayRequest(input, mode));
+    const response = await searchGatewayWithRetry(toGatewayRequest(input, mode));
     // The scorer keeps the first route when selection scores tie, so do not let
     // provider response order decide the shared recommendation.
     const options = response.options
@@ -70,7 +90,7 @@ async function searchMode(
     const failureReason =
       error instanceof GatewayClientError
         ? error.code
-        : "真实报价暂不可用，使用距离和交通方式粗估";
+        : "二次查询后仍无稳定真实报价";
     return [estimateTravelOption(input, mode, failureReason)];
   }
 }

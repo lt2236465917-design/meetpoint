@@ -33,7 +33,7 @@ This document is the stable technical map for the MVP. Detailed task history liv
 | `/api/plans/[code]/candidates` | `POST` | Currently unavailable for manual edits. | None |
 | `/api/plans/[code]/calculate` | `POST` | Run deterministic recommendation calculation after the participant limit is reached. | `x-participant-token` |
 | `/api/plans/[code]/explain` | `POST` | Regenerate explanations for the latest recommendation run. | None |
-| `/api/cities/search` | `GET` | Search built-in city data by query. | None |
+| `/api/cities/search` | `GET` | Search local city data first, then Amap-backed city-level matches. | None |
 
 ## Data Flow
 
@@ -52,12 +52,12 @@ In fallback mode, the same logical records are kept in process memory instead of
 
 ## External Provider Boundary
 
-1. City search returns built-in-library results immediately. On a local miss, the server calls Amap input tips with a 3-second limit, validates the narrow response, and maps only exact supported city names back to the built-in library. Amap failures, invalid responses, missing keys, and unsupported places return no remote selectable city.
+1. City search returns built-in-library results immediately. On a local miss, the server calls Amap input tips with a 3-second limit, validates the narrow response, and returns normalized prefecture-level or municipality city results. Amap failures, invalid responses, missing keys, and non-city places return no remote selectable city.
 2. `TravelOption.queriedAt` is nullable. Real gateway prices carry the gateway query timestamp; deterministic estimates and unavailable options use `null`. Supabase persists this as `travel_options.queried_at`.
 3. `services/travel-provider-gateway/` owns FlyAI credentials and CLI execution. Its HTTP boundary is `GET /healthz` and bearer-authenticated `POST /v1/search`; requests and responses are strict Zod schemas.
 4. The gateway uses argument-array `execFile` calls with shell execution disabled, a 12-second provider timeout, one retry only for retryable provider failures, a five-minute route-facts cache, and FIFO concurrency limited to four calls. It classifies FlyAI CLI failures into stable no-route, no-ticket, rate-limit, upstream-unavailable, CLI-failed, timeout, unavailable, and invalid-response errors without returning raw provider output; FlyAI/Fliggy 403 risk-control rejections are treated as rate-limit failures. It does not receive participant identity, generate candidates, select routes, score cities, call DeepSeek, or persist plans.
 5. The gateway accepts both the fixture-era normalized FlyAI rows and the live FlyAI `data.itemList` response shape. Live price strings are normalized to integer CNY values, local China-time strings are converted to offset timestamps, and `jumpUrl` is admitted only through the booking URL allowlist.
-6. The main application sends one authenticated JSON request per distinct accepted mode, with travel searches batched at four concurrent provider requests to match the gateway limiter and avoid client-side timeouts while requests wait in the gateway queue. It strictly validates responses, maps facts to the participant only after the gateway response, deterministically orders valid route facts before scoring, and keeps per-mode failures as estimates. When the gateway returns a stable provider error code, such as `PROVIDER_RATE_LIMITED`, the estimated fallback row preserves that code in `failureReason` and persists it as `travel_options.failure_reason`; result cards surface the same reason beside the estimated source label. A 2026-07-12 credentialed gateway smoke confirmed real FlyAI flight/train rows and `a.feizhu.com` booking hosts. A 2026-07-13 full local calculation confirmed real FlyAI result-page rows and booking actions, while remaining partial fallback came from FlyAI provider failures for specific route/mode pairs; production enablement still depends on supplier route coverage/quota behavior and full user-flow acceptance.
+6. The main application sends one authenticated JSON request per distinct accepted mode, with travel searches batched at four concurrent provider requests to match the gateway limiter and avoid client-side timeouts while requests wait in the gateway queue. Route groups unfinished in the first pass receive one second-pass lookup before estimates are used. It strictly validates responses, maps facts to the participant only after the gateway response, deterministically orders valid route facts before scoring, and keeps per-mode failures as estimates. When the gateway returns a stable provider error code, such as `PROVIDER_RATE_LIMITED`, the estimated fallback row preserves that code in `failureReason` and persists it as `travel_options.failure_reason`; result cards surface the same reason beside the estimated source label. A 2026-07-12 credentialed gateway smoke confirmed real FlyAI flight/train rows and `a.feizhu.com` booking hosts. Result cards show real route details without rendering provider booking links; production enablement still depends on supplier route coverage/quota behavior and full user-flow acceptance.
 7. Any future Fliggy/FlyAI MCP integration belongs behind the travel gateway as another provider adapter. The main app should keep calling the same normalized gateway contract, and provider replacement decisions should be based on fixed route/mode probe comparisons for coverage, stable fields, booking URL safety, and error classification.
 
 ## Core Modules
@@ -69,12 +69,12 @@ In fallback mode, the same logical records are kept in process memory instead of
 | `src/components/plan/JoinParticipantForm.tsx` | Participant submission form with labeled controls and a post-submit return action. |
 | `src/components/plan/RecentMeetingRecords.tsx` | Homepage local recent-record list backed by `useSyncExternalStore` and cached snapshots. |
 | `src/lib/city/candidate-generator.ts` | Deterministic candidate-city generation from participant cities and host controls. |
-| `src/lib/city/amap-client.ts`, `src/lib/city/city-provider.ts` | Local-first city search and Amap validation; unsupported remote places never enter scoring. |
+| `src/lib/city/amap-client.ts`, `src/lib/city/city-provider.ts` | Local-first city search and Amap validation; city-level remote matches can be selected, while non-city remote places never enter scoring. |
 | `src/lib/fallback/mvp-store.ts` | In-memory local fallback persistence for create-to-result smoke testing without Supabase credentials. |
 | `src/lib/travel/types.ts` | Vendor-neutral travel-provider interface plus main-app gateway request/response types. |
 | `src/lib/travel/estimate-provider.ts` | Deterministic estimated option fallback. |
 | `src/lib/travel/gateway-client.ts`, `src/lib/travel/flyai-provider.ts` | Server-only authenticated gateway client and per-mode fallback provider; no participant identity crosses this boundary. |
-| `src/lib/travel/booking-url.ts` | Result-page booking URL allowlist for HTTPS Fliggy/Alitrip/Feizhu actions. |
+| `src/lib/travel/booking-url.ts` | Booking URL allowlist retained for validation and storage boundaries; result cards do not render booking actions. |
 | `services/travel-provider-gateway/src/contracts.ts` | Strict normalized gateway request, option, response, and stable error contracts. |
 | `services/travel-provider-gateway/src/flyai-adapter.ts` | Safe FlyAI CLI adapter with fixture and live `data.itemList` response normalization. |
 | `services/travel-provider-gateway/src/service.ts`, `src/server.ts` | Cache/retry/concurrency orchestration and authenticated internal HTTP service. |
@@ -125,6 +125,6 @@ npm run test
 npm run build
 ```
 
-For the isolated gateway, run the same three commands from `services/travel-provider-gateway/`. The current Dockerfile is a Node 20 multi-stage, non-root image; it receives secrets only at runtime. The image build itself remains unverified until a Docker daemon is available.
+For the isolated gateway, run the same three commands from `services/travel-provider-gateway/`. The current Dockerfile is a Node 20 multi-stage, non-root image; it receives secrets only at runtime. A 2026-07-13 Docker smoke built `cross-city-travel-gateway:test` and verified container `GET /healthz`, unauthenticated `POST /v1/search` rejection, and authenticated search response routing.
 
 In managed sandboxes, `npm run build` can fail if Turbopack cannot create a process and bind a local port. Re-run the same command in an environment that permits local port binding before release.

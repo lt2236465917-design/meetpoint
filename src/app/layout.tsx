@@ -10,6 +10,9 @@ export const metadata: Metadata = {
     email: false,
     address: false,
   },
+  other: {
+    google: "notranslate",
+  },
 };
 
 export default function RootLayout({
@@ -18,7 +21,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="zh-CN" className="h-full antialiased">
+    <html lang="zh-CN" className="h-full antialiased notranslate" translate="no">
       <body className="min-h-full flex flex-col" suppressHydrationWarning>
         {children}
       </body>

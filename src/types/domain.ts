@@ -46,6 +46,8 @@ export type TravelOption = {
   hasTransfer: boolean;
   transferCount: number;
   serviceName: string | null;
+  departureStationName: string | null;
+  arrivalStationName: string | null;
   bookingUrl: string | null;
   failureReason: string | null;
 };

@@ -146,6 +146,34 @@ describe("collectTravelOptions", () => {
     expect(result.usedFallback).toBe(true);
   });
 
+  it("runs a secondary lookup for unfinished groups before estimating", async () => {
+    let attempts = 0;
+    const provider = providerFrom(async () => {
+      attempts += 1;
+      if (attempts === 1) return new Promise<TravelOption[]>(() => {});
+      return [option({ serviceName: "second-try" })];
+    });
+
+    const result = await collectTravelOptions({
+      participants: [participants[0]],
+      candidates,
+      meetingDate: "2026-08-01",
+      targetArrivalTime: "12:00",
+      provider,
+      timeoutMs: 1200,
+    });
+
+    expect(attempts).toBe(2);
+    expect(result.options).toEqual([
+      expect.objectContaining({
+        participantId: "p1",
+        source: "real",
+        serviceName: "second-try",
+      }),
+    ]);
+    expect(result.usedFallback).toBe(false);
+  });
+
   it("limits provider concurrency so queued live searches do not consume request timeout", async () => {
     let active = 0;
     let maxActive = 0;

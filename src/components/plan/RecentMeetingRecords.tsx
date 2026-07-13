@@ -7,6 +7,7 @@ import {
   meetingHistoryUpdatedEvent,
   type MeetingHistoryItem,
 } from "@/lib/ui/meeting-history";
+import { copyTextToClipboard } from "@/lib/ui/clipboard";
 
 const roleLabels: Record<MeetingHistoryItem["role"], string> = {
   host: "发起的计划",
@@ -43,6 +44,7 @@ export function RecentMeetingRecordsView({
   records: MeetingHistoryItem[];
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [copyMessageCode, setCopyMessageCode] = useState<string | null>(null);
   const visibleRecords = expanded
     ? records
     : records.slice(0, compactRecordCount);
@@ -50,11 +52,9 @@ export function RecentMeetingRecordsView({
 
   async function copyPlanLink(record: MeetingHistoryItem) {
     const planUrl = getPlanUrl(record.code);
-    try {
-      await navigator.clipboard.writeText(planUrl);
-    } catch {
-      window.prompt("复制失败，请长按链接手动复制", planUrl);
-    }
+    const copied = await copyTextToClipboard(planUrl);
+    setCopyMessageCode(record.code);
+    if (!copied) window.prompt("复制失败，请长按链接手动复制", planUrl);
   }
 
   return (
@@ -91,17 +91,15 @@ export function RecentMeetingRecordsView({
                   </p>
                 </div>
                 <div className="flex shrink-0 gap-2">
-                  {record.latestRun !== true && (
-                    <button
-                      aria-label={`复制${record.title}邀请链接`}
-                      className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-950"
-                      data-copy-plan-code={record.code}
-                      onClick={() => void copyPlanLink(record)}
-                      type="button"
-                    >
-                      复制链接
-                    </button>
-                  )}
+                  <button
+                    aria-label={`复制${record.title}邀请链接`}
+                    className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-950"
+                    data-copy-plan-code={record.code}
+                    onClick={() => void copyPlanLink(record)}
+                    type="button"
+                  >
+                    {copyMessageCode === record.code ? "已复制" : "复制链接"}
+                  </button>
                   <Link
                     aria-label={`查看${record.title}填写情况`}
                     className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-950"

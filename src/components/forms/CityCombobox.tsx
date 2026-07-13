@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { searchLocalCities } from "@/data/cities";
+import { useEffect, useState } from "react";
+
+type CityOption = { code: string; name: string; province: string };
 
 export function CityCombobox({
   value,
@@ -15,8 +16,38 @@ export function CityCombobox({
   placeholder?: string;
 }) {
   const [query, setQuery] = useState(value?.name ?? "");
-  const results = useMemo(() => searchLocalCities(query), [query]);
+  const [results, setResults] = useState<CityOption[]>([]);
   const showResults = results.length > 0 && query.trim() !== value?.name;
+
+  useEffect(() => {
+    const normalized = query.trim();
+    if (!normalized) return;
+
+    const controller = new AbortController();
+    void (async () => {
+      try {
+        const response = await fetch(
+          `/api/cities/search?q=${encodeURIComponent(normalized)}`,
+          { signal: controller.signal },
+        );
+        if (!response.ok) return;
+        const json = await response.json() as { cities?: CityOption[] };
+        if (!Array.isArray(json.cities)) return;
+        setResults(json.cities);
+      } catch {
+        if (!controller.signal.aborted) setResults([]);
+      }
+    })();
+
+    return () => controller.abort();
+  }, [query]);
+
+  useEffect(() => {
+    const normalized = query.trim();
+    const exactCity = results.find((city) => city.name === normalized);
+    if (!exactCity || value?.code === exactCity.code) return;
+    onChange({ code: exactCity.code, name: exactCity.name });
+  }, [onChange, query, results, value?.code]);
 
   return (
     <div className="space-y-1.5">
@@ -28,6 +59,7 @@ export function CityCombobox({
         onChange={(event) => {
           const nextQuery = event.target.value;
           setQuery(nextQuery);
+          if (!nextQuery.trim()) setResults([]);
           if (value && nextQuery !== value.name) onChange(null);
         }}
       />

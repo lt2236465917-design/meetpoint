@@ -22,6 +22,8 @@ const flightRow = {
   arrivalTime: "2026-08-20T10:15:00+08:00",
   durationMinutes: 135,
   flightNumber: "MU5101",
+  departureStationName: "北京首都",
+  arrivalStationName: "上海虹桥",
   direct: true,
   bookingUrl: "https://www.fliggy.com/flight/MU5101",
 };
@@ -77,6 +79,8 @@ describe("searchFlyAI", () => {
       hasTransfer: false,
       transferCount: 0,
       serviceName: "MU5101",
+      departureStationName: "北京首都",
+      arrivalStationName: "上海虹桥",
       bookingUrl: "https://www.fliggy.com/flight/MU5101",
     }]);
     expect(logger.error).not.toHaveBeenCalled();
@@ -99,6 +103,8 @@ describe("searchFlyAI", () => {
               duration: "02:15:00",
               marketingTransportNo: "MU5101",
               transportType: "flight",
+              depStationName: "北京首都",
+              arrStationName: "上海虹桥",
             }],
           }],
         }],
@@ -119,6 +125,8 @@ describe("searchFlyAI", () => {
       hasTransfer: false,
       transferCount: 0,
       serviceName: "MU5101",
+      departureStationName: "北京首都",
+      arrivalStationName: "上海虹桥",
       bookingUrl: "https://a.feizhu.com/flight/MU5101",
     }]);
   });

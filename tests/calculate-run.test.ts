@@ -150,7 +150,7 @@ describe("calculatePlanRecommendations", () => {
     );
     const result = await calculatePlanRecommendations({ code: "ABC123" });
 
-    expect(result).toEqual({ runId: "run-1", candidateCount: 11 });
+    expect(result).toEqual({ runId: "run-1", candidateCount: 12 });
     expect(planLookup.eq).toHaveBeenCalledWith("code", "ABC123");
     expect(runInsert.insert).toHaveBeenCalledWith({
       plan_id: "plan-1",

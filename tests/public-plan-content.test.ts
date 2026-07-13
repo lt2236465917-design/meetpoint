@@ -63,6 +63,33 @@ describe("PublicPlanContent", () => {
     expect(html).not.toContain("开始计算");
   });
 
+  it("does not render the result action as a link before a run exists", () => {
+    const html = renderToStaticMarkup(
+      createElement(PublicPlanContent, {
+        code: "ABC123",
+        initialData: planData,
+      }),
+    );
+
+    expect(html).toContain("暂无结果");
+    expect(html).not.toContain('href="/p/ABC123/result"');
+  });
+
+  it("renders the result action as a link after a run exists", () => {
+    const html = renderToStaticMarkup(
+      createElement(PublicPlanContent, {
+        code: "ABC123",
+        initialData: {
+          ...planData,
+          latestRun: { id: "run-1" },
+        },
+      }),
+    );
+
+    expect(html).toContain("看结果");
+    expect(html).toContain('href="/p/ABC123/result"');
+  });
+
   it("shows a direct calculation entry for local participants when participants are full", () => {
     const html = renderToStaticMarkup(
       createElement(PublicPlanContent, {

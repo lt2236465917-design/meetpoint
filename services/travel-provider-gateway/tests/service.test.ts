@@ -17,7 +17,7 @@ const option: GatewayTravelOption = {
   mode: "flight", source: "real", provider: "flyai", priceCny: 680,
   departAt: "2026-08-20T08:00:00+08:00", arriveAt: "2026-08-20T10:15:00+08:00",
   durationMinutes: 135, isDirect: true, hasTransfer: false, transferCount: 0,
-  serviceName: "MU5101", bookingUrl: null,
+  serviceName: "MU5101", departureStationName: "北京首都", arrivalStationName: "上海虹桥", bookingUrl: null,
 };
 
 describe("createTravelSearchService", () => {

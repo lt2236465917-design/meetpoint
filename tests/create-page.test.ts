@@ -40,7 +40,7 @@ describe("CreatePlanPage", () => {
     );
 
     expect(pageSource).toContain("复制公开链接");
-    expect(pageSource).toContain("navigator.clipboard.writeText");
+    expect(pageSource).toContain("copyTextToClipboard");
     expect(pageSource).not.toContain("打开公开链接");
   });
 

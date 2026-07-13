@@ -242,6 +242,8 @@ function selectFallbackParticipantOptions(
       arrive_at: option.arriveAt,
       booking_url: option.bookingUrl,
       service_name: option.serviceName,
+      departure_station_name: option.departureStationName,
+      arrival_station_name: option.arrivalStationName,
       source: option.source,
       provider: option.provider,
       queried_at: option.queriedAt,

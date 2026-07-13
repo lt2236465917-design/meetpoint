@@ -130,12 +130,21 @@ export function PublicPlanContent({
           >
             填写我的信息
           </Link>
-          <Link
-            className="rounded-lg border border-gray-200 py-3 text-center font-medium text-gray-950"
-            href={`/p/${code}/result`}
-          >
-            看结果
-          </Link>
+          {data.latestRun ? (
+            <Link
+              className="rounded-lg border border-gray-200 py-3 text-center font-medium text-gray-950"
+              href={`/p/${code}/result`}
+            >
+              看结果
+            </Link>
+          ) : (
+            <div
+              aria-disabled="true"
+              className="rounded-lg border border-gray-200 bg-gray-50 py-3 text-center font-medium text-gray-400"
+            >
+              暂无结果
+            </div>
+          )}
         </div>
         {canCalculateHere ? (
           <div className="mt-4">

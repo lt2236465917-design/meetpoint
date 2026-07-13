@@ -65,7 +65,7 @@ The gateway must not generate candidates, select a winning route, calculate reco
 
 Amap is called directly from the Next.js server-side city provider. It does not pass through the travel gateway. `AMAP_API_KEY` remains server-only.
 
-The built-in city library remains the source of truth for city codes, coordinates, hub flags, candidate generation, and scoring. Amap improves input quality but does not introduce unsupported cities into recommendation calculations.
+The built-in city library remains the source of truth for coordinates, hub flags, candidate generation, and scoring. Amap improves input quality and may introduce validated city-level departure cities for participant entry; non-city places must not become selectable.
 
 ### DeepSeek
 
@@ -78,10 +78,10 @@ City search is local-first:
 1. Search the built-in city library immediately.
 2. If local results are insufficient, call Amap from `/api/cities/search` on the server.
 3. Validate and normalize the Amap response.
-4. Match each Amap result back to a supported built-in city.
-5. Return only supported normalized cities for selection.
+4. Match each Amap result back to a supported built-in city when possible.
+5. Otherwise, return normalized prefecture-level or municipality city results with stable `amap-<adcode>` codes.
 
-An Amap result that cannot be mapped to the local library may be shown as unsupported, but it must not enter candidate generation or scoring. Amap timeout, quota failure, invalid data, or missing credentials falls back to local search without breaking the form.
+An Amap result that is not a city-level administrative result must not be selectable. Amap timeout, quota failure, invalid data, or missing credentials falls back to local search without breaking the form.
 
 ## Travel Query Data Flow
 
@@ -157,8 +157,8 @@ If every candidate lacks a feasible same-day route for at least one participant,
 
 - Real route: show `飞猪参考价`, its query time, and a source indicator.
 - Estimated route: show `估算`; do not show a booking action.
-- Valid booking URL: show `去飞猪查看` and `价格和余票以跳转页面为准`.
-- Missing or invalid booking URL: keep the route usable without a broken action.
+- Train or flight details: show the train/flight number, station names when available, time range, duration, fare, and query time so users can verify tickets in their preferred booking app.
+- Provider booking URLs may be accepted at the storage boundary for auditability, but result cards must not render booking links or external jump actions.
 - Recalculation: tell the user that real fares are being queried; automatically finish with partial fallback when some searches time out.
 
 ## Security And Privacy

@@ -1,5 +1,4 @@
 import { transportModeLabels } from "@/lib/ui/transport-modes";
-import { isApprovedBookingUrl } from "@/lib/travel/booking-url";
 import type {
   TransportMode,
   TravelProviderName,
@@ -16,6 +15,8 @@ type ParticipantOption = {
   arrive_at: string | null;
   booking_url: string | null;
   service_name: string | null;
+  departure_station_name?: string | null;
+  arrival_station_name?: string | null;
   source: TravelSource;
   provider: TravelProviderName;
   queried_at: string | null;
@@ -109,8 +110,6 @@ export function RecommendationCard({
         <div className="mt-3 space-y-2">
           <p className="text-xs font-medium text-gray-500">每人出行明细</p>
           {recommendation.participant_options.map((option) => {
-            const bookingUrl = approvedBookingUrl(option);
-
             return (
               <div
                 className="rounded-lg border border-gray-100 px-3 py-2 text-xs leading-5 text-gray-600"
@@ -122,7 +121,7 @@ export function RecommendationCard({
                       {option.participant_name}
                     </p>
                     <p>
-                      {option.departure_city_name}出发 ·{" "}
+                      {formatRouteLabel(option)} ·{" "}
                       {transportModeLabels[option.mode]}
                       {option.service_name ? ` · ${option.service_name}` : ""}
                     </p>
@@ -136,21 +135,6 @@ export function RecommendationCard({
                   {formatTimeRange(option.depart_at, option.arrive_at)} ·{" "}
                   {formatDuration(option.duration_minutes ?? 0)}
                 </p>
-                {bookingUrl && (
-                  <div className="mt-1">
-                    <a
-                      className="inline-block font-medium text-gray-950 underline underline-offset-2"
-                      href={bookingUrl}
-                      rel="noreferrer noopener"
-                      target="_blank"
-                    >
-                      去飞猪查看
-                    </a>
-                    <p className="mt-1 text-gray-500">
-                      价格和余票以跳转页面为准
-                    </p>
-                  </div>
-                )}
               </div>
             );
           })}
@@ -158,7 +142,7 @@ export function RecommendationCard({
       ) : null}
       {recommendation.estimate_penalty > 0 && (
         <p className="mt-2 text-xs leading-5 text-gray-500">
-          部分数据为估算：价格来自距离和交通方式粗估，请以实际购票页面为准。
+          部分数据为估算：系统已二次查询，仍无稳定真实报价时才使用距离和交通方式粗估。
         </p>
       )}
     </article>
@@ -188,15 +172,12 @@ function formatSource(option: ParticipantOption): string {
   return option.failure_reason ? `估算 · 原因 ${option.failure_reason}` : "估算";
 }
 
-function approvedBookingUrl(option: ParticipantOption): string | null {
-  if (
-    option.source === "real" &&
-    option.provider === "flyai" &&
-    isApprovedBookingUrl(option.booking_url)
-  ) {
-    return option.booking_url;
+function formatRouteLabel(option: ParticipantOption): string {
+  if (option.departure_station_name && option.arrival_station_name) {
+    return `${option.departure_station_name} → ${option.arrival_station_name}`;
   }
-  return null;
+  if (option.departure_station_name) return `${option.departure_station_name}出发`;
+  return `${option.departure_city_name}出发`;
 }
 
 function formatChinaDateTime(value: string | null): string | null {

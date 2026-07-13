@@ -65,6 +65,8 @@ create table if not exists travel_options (
   has_transfer boolean not null default false,
   transfer_count integer not null default 0,
   service_name text,
+  departure_station_name text,
+  arrival_station_name text,
   booking_url text,
   failure_reason text,
   raw_payload_ref text

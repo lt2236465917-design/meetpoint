@@ -25,6 +25,8 @@ const rawRowSchema = z.object({
   durationMinutes: z.number().int().positive(),
   flightNumber: z.string().trim().min(1).max(64).optional(),
   trainNumber: z.string().trim().min(1).max(64).optional(),
+  departureStationName: z.string().trim().min(1).max(64).nullable().optional(),
+  arrivalStationName: z.string().trim().min(1).max(64).nullable().optional(),
   direct: z.boolean(),
   isDirect: z.boolean().optional(),
   transferCount: z.number().int().nonnegative().optional(),
@@ -65,7 +67,7 @@ const liveSegmentSchema = z.object({
   duration: z.string().trim().min(1),
   marketingTransportNo: z.string().trim().min(1),
   transportType: z.string().trim().min(1),
-});
+}).passthrough();
 
 const liveItemSchema = z.object({
   journeys: z.array(z.object({
@@ -198,6 +200,14 @@ function withChinaOffset(value: string): string {
   return `${normalized}+08:00`;
 }
 
+function firstStringValue(source: Record<string, unknown>, keys: string[]): string | null {
+  for (const key of keys) {
+    const value = source[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return null;
+}
+
 function normalizeLiveItem(
   item: z.infer<typeof liveItemSchema>,
   mode: GatewaySearchRequest["mode"],
@@ -217,6 +227,24 @@ function normalizeLiveItem(
     durationMinutes,
     flightNumber: category === "flight" ? segment.marketingTransportNo : undefined,
     trainNumber: category === "train" ? segment.marketingTransportNo : undefined,
+    departureStationName: firstStringValue(segment, [
+      "depStationName",
+      "departureStationName",
+      "departureStation",
+      "depAirportName",
+      "departureAirportName",
+      "fromStationName",
+      "fromAirportName",
+    ]),
+    arrivalStationName: firstStringValue(segment, [
+      "arrStationName",
+      "arrivalStationName",
+      "arrivalStation",
+      "arrAirportName",
+      "arrivalAirportName",
+      "toStationName",
+      "toAirportName",
+    ]),
     direct: item.journeys.length === 1 && firstJourney.segments.length === 1,
     bookingUrl: item.jumpUrl ?? null,
   };
@@ -270,6 +298,8 @@ function normalizeRow(
     hasTransfer: transferCount > 0,
     transferCount,
     serviceName,
+    departureStationName: row.departureStationName ?? null,
+    arrivalStationName: row.arrivalStationName ?? null,
     bookingUrl: row.bookingUrl,
   });
 }

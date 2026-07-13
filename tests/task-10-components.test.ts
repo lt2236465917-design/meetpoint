@@ -60,6 +60,8 @@ describe("Task 10 UI components", () => {
               arrive_at: "2026-08-15T12:00:00+08:00",
               booking_url: "https://a.feizhu.com/booking/abc",
               service_name: "G101",
+              departure_station_name: "北京南",
+              arrival_station_name: "南京南",
               source: "real",
               provider: "flyai",
               queried_at: "2026-07-12T08:30:00.000Z",
@@ -94,18 +96,17 @@ describe("Task 10 UI components", () => {
     expect(html).toContain("三人整体路程接近，价格差距较小。");
     expect(html).toContain("总耗时 6小时");
     expect(html).toContain("公平差 ¥80");
-    expect(html).toContain("部分数据为估算：价格来自距离和交通方式粗估");
-    expect(html).toContain("价格来自距离和交通方式粗估");
+    expect(html).toContain("部分数据为估算：系统已二次查询");
     expect(html).toContain("李雷");
-    expect(html).toContain("北京出发");
+    expect(html).toContain("北京南 → 南京南");
     expect(html).toContain("高铁/动车");
     expect(html).toContain("G101");
     expect(html).toContain("飞猪参考价");
     expect(html).toContain("查询于 2026/07/12 16:30");
-    expect(html).toContain("去飞猪查看");
-    expect(html).toContain("价格和余票以跳转页面为准");
-    expect(html).toContain('target="_blank"');
-    expect(html).toContain('rel="noreferrer noopener"');
+    expect(html).not.toContain("去飞猪查看");
+    expect(html).not.toContain("价格和余票以跳转页面为准");
+    expect(html).not.toContain('target="_blank"');
+    expect(html).not.toContain('rel="noreferrer noopener"');
     expect(html).toContain("韩梅梅");
     expect(html).toContain("上海出发");
     expect(html).toContain("飞机");

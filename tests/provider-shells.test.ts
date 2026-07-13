@@ -70,6 +70,8 @@ function gatewayResponse(mode: TransportMode = "flight") {
       hasTransfer: false,
       transferCount: 0,
       serviceName: "MU1234",
+      departureStationName: "北京首都",
+      arrivalStationName: "武汉天河",
       bookingUrl: "https://a.feizhu.com/booking/123",
     }],
     queriedAt: "2026-07-12T08:00:00.000Z",
@@ -249,10 +251,11 @@ describe("FlyAITravelProvider", () => {
   });
 
   it("keeps the stable gateway error code on estimated fallback options", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
+    const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(new Response(JSON.stringify({
       code: "PROVIDER_RATE_LIMITED",
       message: "Provider rate limited",
     }), { status: 429 })));
+    vi.stubGlobal("fetch", fetchMock);
     vi.stubEnv("TRAVEL_GATEWAY_URL", "http://gateway.internal:8080");
     vi.stubEnv("TRAVEL_GATEWAY_TOKEN", "gateway-secret-token");
 
@@ -262,6 +265,33 @@ describe("FlyAITravelProvider", () => {
         source: "estimated",
         provider: "estimate",
         failureReason: "PROVIDER_RATE_LIMITED",
+      }),
+    ]);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("retries a transient gateway failure before falling back to estimates", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        code: "PROVIDER_UNAVAILABLE",
+        message: "Provider unavailable",
+      }), { status: 503 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(gatewayResponse()), {
+        status: 200,
+      }));
+    vi.stubGlobal("fetch", fetchMock);
+    vi.stubEnv("TRAVEL_GATEWAY_URL", "http://gateway.internal:8080");
+    vi.stubEnv("TRAVEL_GATEWAY_TOKEN", "gateway-token");
+
+    const options = await new FlyAITravelProvider().search(travelSearchInput);
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(options).toEqual([
+      expect.objectContaining({
+        mode: "flight",
+        source: "real",
+        provider: "flyai",
+        serviceName: "MU1234",
       }),
     ]);
   });
@@ -362,7 +392,15 @@ describe("searchCities", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("maps an Amap city tip to the built-in city library", async () => {
+  it("selects Tianjin from the local city library without requiring Amap", async () => {
+    vi.stubEnv("AMAP_API_KEY", "");
+
+    await expect(searchCities("天津")).resolves.toEqual([
+      expect.objectContaining({ code: "tianjin", name: "天津" }),
+    ]);
+  });
+
+  it("normalizes an Amap city tip to a selectable city result", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
       status: "1",
       tips: [{ name: "武汉市", district: "湖北省", adcode: "420100" }],
@@ -374,14 +412,16 @@ describe("searchCities", () => {
     ]);
   });
 
-  it("does not make unsupported Amap cities selectable", async () => {
+  it("makes Amap prefecture-level cities selectable when they are not in the local library", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
       status: "1",
-      tips: [{ name: "苏州市", district: "江苏省", adcode: "320500" }],
+      tips: [{ name: "湛江市", district: "广东省", adcode: "440800" }],
     }), { status: 200 })));
     vi.stubEnv("AMAP_API_KEY", "test-key");
 
-    await expect(searchCities("苏州市")).resolves.toEqual([]);
+    await expect(searchCities("湛江市")).resolves.toEqual([
+      expect.objectContaining({ code: "amap-440800", name: "湛江", province: "广东" }),
+    ]);
   });
 
   it.each([

@@ -22,6 +22,8 @@ export function createUnavailableTravelOption(
     hasTransfer: false,
     transferCount: 0,
     serviceName: null,
+    departureStationName: null,
+    arrivalStationName: null,
     bookingUrl: null,
     failureReason: reason,
   };

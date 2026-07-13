@@ -20,7 +20,7 @@ function estimateDuration(distanceKm: number, mode: TransportMode): number {
 export function estimateTravelOption(
   input: TravelSearchInput,
   mode: TransportMode,
-  failureReason = "真实报价暂不可用，使用距离和交通方式粗估",
+  failureReason = "二次查询后仍无稳定真实报价",
 ): TravelOption {
   const origin = findCityByCode(input.originCityCode);
   const destination = findCityByCode(input.destinationCityCode);
@@ -42,6 +42,8 @@ export function estimateTravelOption(
     hasTransfer: false,
     transferCount: 0,
     serviceName: null,
+    departureStationName: null,
+    arrivalStationName: null,
     bookingUrl: null,
     failureReason,
   };

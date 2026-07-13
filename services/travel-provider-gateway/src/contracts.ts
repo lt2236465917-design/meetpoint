@@ -38,6 +38,8 @@ export const gatewayTravelOptionSchema = z.object({
   hasTransfer: z.boolean(),
   transferCount: z.number().int().nonnegative(),
   serviceName: z.string().trim().min(1).max(64),
+  departureStationName: z.string().trim().min(1).max(64).nullable(),
+  arrivalStationName: z.string().trim().min(1).max(64).nullable(),
   bookingUrl: bookingUrlSchema.nullable(),
 }).strict();
 
