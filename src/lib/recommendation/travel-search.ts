@@ -4,6 +4,7 @@ import type { TravelProvider, TravelSearchInput } from "@/lib/travel/types";
 import type { TransportMode, TravelOption } from "@/types/domain";
 
 const DEFAULT_TIMEOUT_MS = 45_000;
+const PROVIDER_SEARCH_CONCURRENCY = 4;
 const SHANGHAI_TIME_ZONE = "Asia/Shanghai";
 
 type SearchParticipant = {
@@ -241,7 +242,8 @@ export async function collectTravelOptions(
   const outcomes = new Map<string, SearchOutcome>();
   const deadline = calculationTimeoutMs(input.timeoutMs);
   const deadlineAt = startedAt + deadline;
-  const pending = groups.map(async (group) => {
+  let nextGroupIndex = 0;
+  const searchGroup = async (group: SearchGroup) => {
     try {
       const options = await input.provider.search(group.input);
       if (Date.now() > deadlineAt) return;
@@ -253,11 +255,22 @@ export async function collectTravelOptions(
       if (Date.now() > deadlineAt) return;
       outcomes.set(group.key, { status: "rejected" });
     }
-  });
+  };
+  const workers = Array.from(
+    { length: Math.min(PROVIDER_SEARCH_CONCURRENCY, groups.length) },
+    async () => {
+      while (Date.now() <= deadlineAt) {
+        const group = groups[nextGroupIndex];
+        nextGroupIndex += 1;
+        if (!group) return;
+        await searchGroup(group);
+      }
+    },
+  );
 
   let timer: ReturnType<typeof setTimeout> | undefined;
   await Promise.race([
-    Promise.all(pending),
+    Promise.all(workers),
     new Promise<void>((resolve) => {
       timer = setTimeout(resolve, Math.max(0, deadlineAt - Date.now()));
     }),

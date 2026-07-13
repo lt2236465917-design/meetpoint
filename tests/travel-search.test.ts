@@ -146,6 +146,39 @@ describe("collectTravelOptions", () => {
     expect(result.usedFallback).toBe(true);
   });
 
+  it("limits provider concurrency so queued live searches do not consume request timeout", async () => {
+    let active = 0;
+    let maxActive = 0;
+    const provider = providerFrom(async (input) => {
+      active += 1;
+      maxActive = Math.max(maxActive, active);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      active -= 1;
+      return [option({ candidateCityCode: input.destinationCityCode })];
+    });
+
+    const result = await collectTravelOptions({
+      participants: [participants[0]],
+      candidates: [
+        { code: "wuhan", name: "武汉" },
+        { code: "changsha", name: "长沙" },
+        { code: "nanjing", name: "南京" },
+        { code: "hangzhou", name: "杭州" },
+        { code: "zhengzhou", name: "郑州" },
+        { code: "xian", name: "西安" },
+      ],
+      meetingDate: "2026-08-01",
+      targetArrivalTime: "12:00",
+      provider,
+      timeoutMs: 200,
+    });
+
+    expect(provider.search).toHaveBeenCalledTimes(6);
+    expect(maxActive).toBeLessThanOrEqual(4);
+    expect(result.options).toHaveLength(6);
+    expect(result.usedFallback).toBe(false);
+  });
+
   it("starts the total deadline when collection begins", async () => {
     const provider = providerFrom(async () => {
       const startedAt = Date.now();
