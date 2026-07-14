@@ -45,7 +45,7 @@ This document is the stable technical map for the MVP. Detailed task history liv
    - `travel_options`
    - `city_recommendations`, including DeepSeek/fallback explanation fields
 5. The explain API can regenerate explanation and risk-summary fields for the latest run without changing deterministic scores.
-6. Result pages read the latest run, city recommendations, and matching `travel_options`. Every viewer sees the same shared city ranking for the plan; each card expands the decision with selected per-participant routes. Results become stale after 30 minutes.
+6. Result pages read the latest run, city recommendations, and matching `travel_options`. A `running` run is an in-progress state: the public page withholds the result entry and the result page reports progress with bounded local refresh plus a manual refresh action. Only a `completed` run renders recommendation cards. Every viewer then sees the same shared city ranking for the plan; each card expands the decision with selected per-participant routes. Results become stale after 30 minutes.
 7. The browser stores local recent meeting records in `localStorage` when a plan is created, opened, or joined. Participant records keep the participant edit token on the filling device so the public plan page can show direct calculation after the plan is full. The homepage recent-record store refreshes on same-tab updates, `storage`, `pageshow`, and window focus so plans created on another route still appear after returning to `/`. This is a convenience layer only and is not a server-side history.
 
 In fallback mode, the same logical records are kept in process memory instead of Supabase. Fallback mode is non-persistent and exists only for local smoke testing.

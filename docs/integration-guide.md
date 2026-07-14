@@ -87,6 +87,8 @@ Returns:
 }
 ```
 
+When `latestRun.status` is `"running"`, it represents an incomplete calculation. Clients must show progress rather than a result entry or recommendation cards; only `"completed"` represents a displayable result.
+
 ### Search Cities
 
 `GET /api/cities/search?q=上海`

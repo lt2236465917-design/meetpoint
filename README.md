@@ -16,9 +16,9 @@ Mobile-first H5 MVP for choosing a fair cross-city meeting city for 2-6 people i
 - `/p/[code]`: public plan page with meeting summary, participant completion state, filling records, join entry, result entry, automatic participant-status refresh, and a direct calculate action for local participants when the participant limit is reached.
 - `/p/[code]/join`: participant submits name, departure city, and accepted transport modes, then returns to the public plan page automatically.
 - `/p/[code]/manage`: legacy route that points users back to the public plan page.
-- `/p/[code]/result`: shared team result page showing the latest recommendation run, stale-result warning, team total fare, total duration, fairness gap, and per-participant travel details.
+- `/p/[code]/result`: shared team result page that shows recommendation cards only after the latest run completes; while it is running, it reports progress, refreshes locally for a bounded period, and keeps a manual refresh action.
 - `POST /api/plans`: creates a plan from `{ title, meetingDate, targetArrivalTime, participantLimit }` and returns `{ code, shareUrl }`; local development requests from `localhost` return a LAN `shareUrl` when available.
-- `GET /api/plans/[code]`: returns `{ plan, participants, latestRun }` for public plan reads.
+- `GET /api/plans/[code]`: returns `{ plan, participants, latestRun }` for public plan reads; clients must treat `latestRun.status === "running"` as in progress, not as a completed result.
 - `GET /api/cities/search?q=...`: searches the built-in city library first, then uses Amap to validate city-level local misses; returns `{ cities }`.
 - `POST /api/plans/[code]/participants`: creates a participant and returns `{ participantId, editToken }`.
 - `GET /api/plans/[code]/candidates`: returns stored candidate city controls for a plan.
