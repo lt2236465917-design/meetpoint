@@ -9,7 +9,7 @@ import {
   type GatewaySearchRequest,
   type GatewaySearchResponse,
 } from "./contracts.js";
-import { FlyAIAdapterError, searchFlyAI } from "./flyai-adapter.js";
+import { FlyAIAdapterError, searchFlyAI, type FlyAIDiagnostic } from "./flyai-adapter.js";
 import { FifoLimiter } from "./limiter.js";
 
 export class GatewayServiceError extends Error {
@@ -25,6 +25,7 @@ export interface TravelSearchService {
 
 interface ServiceDependencies {
   searchProvider?: (input: GatewaySearchRequest) => Promise<unknown>;
+  diagnosticLogger?: (event: FlyAIDiagnostic) => void;
   cache?: TtlCache<GatewaySearchResponse>;
   limiter?: FifoLimiter;
   now?: () => Date;
@@ -53,8 +54,40 @@ function shouldRetryProviderError(code: GatewayErrorCode): boolean {
     || code === "PROVIDER_UPSTREAM_UNAVAILABLE";
 }
 
+function writeGatewayDiagnostic(event: FlyAIDiagnostic): void {
+  const {
+    routeFingerprint,
+    mode,
+    outcome,
+    topLevelKeys,
+    dataKeys,
+    itemKeys,
+    itemCount,
+    normalizedCount,
+    droppedCount,
+    droppedReasons,
+    cliErrorCode,
+  } = event;
+  console.info(JSON.stringify({
+    event: "flyai_diagnostic",
+    routeFingerprint,
+    mode,
+    outcome,
+    topLevelKeys,
+    dataKeys,
+    itemKeys,
+    itemCount,
+    normalizedCount,
+    droppedCount,
+    droppedReasons,
+    cliErrorCode,
+  }));
+}
+
 export function createTravelSearchService(dependencies: ServiceDependencies = {}): TravelSearchService {
-  const searchProvider = dependencies.searchProvider ?? searchFlyAI;
+  const diagnosticLogger = dependencies.diagnosticLogger ?? writeGatewayDiagnostic;
+  const searchProvider = dependencies.searchProvider ?? ((request: GatewaySearchRequest) =>
+    searchFlyAI(request, { diagnosticLogger }));
   const cache = dependencies.cache ?? new TtlCache<GatewaySearchResponse>();
   const limiter = dependencies.limiter ?? new FifoLimiter();
   const now = dependencies.now ?? (() => new Date());

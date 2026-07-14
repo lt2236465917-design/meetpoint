@@ -1,5 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+const searchFlyAIMock = vi.hoisted(() => vi.fn());
+
+vi.mock("../src/flyai-adapter.js", async () => {
+  const actual = await vi.importActual<typeof import("../src/flyai-adapter.js")>("../src/flyai-adapter.js");
+  return { ...actual, searchFlyAI: searchFlyAIMock };
+});
+
 import {
   gatewaySearchResponseSchema,
   type GatewaySearchRequest,
@@ -23,6 +30,27 @@ const option: GatewayTravelOption = {
 describe("createTravelSearchService", () => {
   afterEach(() => {
     vi.useRealTimers();
+    vi.clearAllMocks();
+  });
+
+  it("passes the gateway diagnostic logger only to the default FlyAI adapter", async () => {
+    const diagnosticLogger = vi.fn();
+    searchFlyAIMock.mockRejectedValueOnce(new FlyAIAdapterError("PROVIDER_NO_ROUTE", "detail"));
+    const service = createTravelSearchService({ diagnosticLogger });
+
+    await expect(service.search(request)).rejects.toBeDefined();
+    expect(searchFlyAIMock).toHaveBeenCalledWith(request, { diagnosticLogger });
+  });
+
+  it("does not call a diagnostic logger for an injected provider", async () => {
+    const diagnosticLogger = vi.fn();
+    const service = createTravelSearchService({
+      searchProvider: vi.fn().mockResolvedValue([option]),
+      diagnosticLogger,
+    });
+
+    await service.search(request);
+    expect(diagnosticLogger).not.toHaveBeenCalled();
   });
 
   it("strictly validates requests before calling the provider", async () => {
