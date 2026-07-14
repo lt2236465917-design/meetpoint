@@ -31,7 +31,11 @@ export function parseCreatePlanForm(
   if (!targetArrivalTime) {
     return { ok: false, error: "请选择目标到达时间" };
   }
-  if (participantLimit < 2 || participantLimit > 6) {
+  if (
+    !Number.isInteger(participantLimit) ||
+    participantLimit < 2 ||
+    participantLimit > 6
+  ) {
     return { ok: false, error: "参与人数需在 2-6 人之间" };
   }
 
