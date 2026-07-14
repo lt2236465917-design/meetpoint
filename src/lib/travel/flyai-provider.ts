@@ -49,7 +49,6 @@ function isRetryableGatewayError(error: unknown): boolean {
     "GATEWAY_UNAVAILABLE",
     "PROVIDER_TIMEOUT",
     "PROVIDER_UNAVAILABLE",
-    "PROVIDER_RATE_LIMITED",
     "PROVIDER_UPSTREAM_UNAVAILABLE",
   ].includes(error.code);
 }

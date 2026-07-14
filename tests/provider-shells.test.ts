@@ -267,7 +267,7 @@ describe("FlyAITravelProvider", () => {
         failureReason: "PROVIDER_RATE_LIMITED",
       }),
     ]);
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it("retries a transient gateway failure before falling back to estimates", async () => {
