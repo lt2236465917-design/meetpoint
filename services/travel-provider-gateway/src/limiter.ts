@@ -8,7 +8,7 @@ export class FifoLimiter {
   private active = 0;
   private readonly queue: Array<Job<unknown>> = [];
 
-  constructor(private readonly concurrency = 4) {
+  constructor(private readonly concurrency = 1) {
     if (!Number.isInteger(concurrency) || concurrency < 1) throw new RangeError("Concurrency must be positive");
   }
 

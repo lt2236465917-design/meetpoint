@@ -77,6 +77,17 @@ export async function calculatePlanRecommendations({
     throw new Error("PLAN_NOT_FOUND");
   }
 
+  const { data: runningRun } = await supabase
+    .from("recommendation_runs")
+    .select("id")
+    .eq("plan_id", plan.id)
+    .eq("status", "running")
+    .maybeSingle<{ id: string }>();
+
+  if (runningRun) {
+    throw new Error("CALCULATION_IN_PROGRESS");
+  }
+
   const { data: participants } = await supabase
     .from("participants")
     .select("*")
@@ -105,11 +116,20 @@ export async function calculatePlanRecommendations({
     limit: 12,
   });
 
-  const { data: run } = await supabase
+  const { data: run, error: runError } = await supabase
     .from("recommendation_runs")
     .insert({ plan_id: plan.id, status: "running" })
     .select("id")
     .single<{ id: string }>();
+
+  if (
+    runError &&
+    typeof runError === "object" &&
+    "code" in runError &&
+    runError.code === "23505"
+  ) {
+    throw new Error("CALCULATION_IN_PROGRESS");
+  }
 
   if (!run) {
     throw new Error("RUN_CREATE_FAILED");

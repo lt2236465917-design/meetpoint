@@ -11,7 +11,7 @@ This guide is the quick reference for running and calling the MVP locally.
 
 The same user-facing routes are mobile-first and desktop responsive. On desktop, they should open as a centered phone-sized H5 canvas, not as a wide document page.
 
-For real-phone testing, open the Network URL printed by `npm run dev`, for example `http://192.168.31.69:3000`. That LAN origin is allowed in `next.config.ts` so the phone can load Next.js development resources and keep client-side form submission behavior.
+For local browser testing, open `http://127.0.0.1:<port>`; for real-phone testing, open the Network URL printed by `npm run dev`, for example `http://192.168.31.69:3000`. Both origins are allowed in `next.config.ts` so the browser can load Next.js development resources and keep client-side form submission behavior.
 
 ## Local Fallback Mode
 
@@ -174,6 +174,7 @@ Returns:
 | `PARTICIPANT_LIMIT_NOT_REACHED` | The plan is not full yet, so calculation is not allowed. |
 | `CANDIDATE_EDITING_UNAVAILABLE` | Manual candidate editing is disabled in the current flow. |
 | `CALCULATION_FAILED` | Recommendation calculation failed. |
+| `CALCULATION_IN_PROGRESS` | A calculation for this plan is already running; clients should wait for polling refresh. |
 | `RUN_NOT_FOUND` | No recommendation run exists for the plan. |
 
 ## Manual Smoke Path
@@ -195,6 +196,8 @@ Use these checks after layout or component changes:
 3. Open `/p/[code]`, `/p/[code]/join`, and `/p/[code]/result` on desktop; confirm each route stays in the centered H5 canvas and does not switch to multi-column desktop layout.
 4. On `/p/[code]/join`, type a departure city, confirm city candidates do not cover the transport-mode buttons, then select a city and confirm the candidates disappear.
 5. Confirm no browser or framework overlay visually covers the right side of the app. If a red overlay appears while the DOM has no app-level fixed red element, check browser extensions before changing app CSS.
+6. On `/create` in a WebKit/Chrome browser, click the middle of each date and time white field, then confirm the platform-native picker opens and the selected value appears. The native picker controls its own closing behavior.
+7. On `/create`, click "参与人数上限". Confirm the app-styled 2–6 person panel opens, and selecting one option updates the field and closes the panel.
 
 ## Gateway Setup And Contract (internal service)
 
@@ -209,7 +212,7 @@ npm run dev
 
 The gateway defaults to `PORT=8080`, matching the documented container port; an explicitly supplied `PORT` overrides it.
 
-- `GET /healthz` returns `{ "status": "ok" }` without authentication or secrets.
+- `GET /healthz` returns `{ "status": "ok" }` without authentication or secrets. A successful health response proves only that the gateway process is reachable; it does not prove FlyAI quota, risk-control clearance, or real-ticket availability.
 - `POST /v1/search` requires `Authorization: Bearer <TRAVEL_GATEWAY_TOKEN>` and a strict normalized request. It returns normalized `options` and an ISO `queriedAt`; the gateway's own cache remains an internal detail.
 - Stable gateway errors are `UNAUTHORIZED`, `INVALID_REQUEST`, `PROVIDER_TIMEOUT`, `PROVIDER_UNAVAILABLE`, `PROVIDER_NO_ROUTE`, `PROVIDER_NO_TICKET`, `PROVIDER_RATE_LIMITED`, `PROVIDER_UPSTREAM_UNAVAILABLE`, `PROVIDER_CLI_FAILED`, `PROVIDER_INVALID_RESPONSE`, and `INTERNAL_ERROR`. The service does not return provider exception text or raw response bodies.
 
@@ -222,7 +225,9 @@ TRAVEL_GATEWAY_TOKEN=<same value as services/travel-provider-gateway/.env>
 
 If these root variables are missing, `src/lib/travel/gateway-client.ts` reports the gateway as not configured and the main app falls back to estimates. If `/v1/search` returns `404` with `PROVIDER_NO_ROUTE` or `PROVIDER_NO_TICKET`, the gateway reached FlyAI but no usable route fact was available for that route/mode. If it returns `429` with `PROVIDER_RATE_LIMITED`, reduce probe volume or wait for quota recovery; this includes FlyAI/Fliggy `MCP HTTP 403` risk-control responses such as abnormal access behavior. If it returns `503` with `PROVIDER_UNAVAILABLE` or `PROVIDER_UPSTREAM_UNAVAILABLE`, treat it as supplier instability until a redacted direct gateway probe proves otherwise. If it returns `502` with `PROVIDER_CLI_FAILED` or `PROVIDER_INVALID_RESPONSE`, inspect gateway deployment and adapter normalization before changing main-app fallback behavior. Stable provider error codes are retained on estimated fallback rows as `travel_options.failure_reason` and appear on result cards as the estimate reason, so result-page checks and operations review can distinguish rate limiting, upstream unavailability, invalid responses, and local gateway unavailability.
 
-The gateway contract, cache/retry/concurrency behavior, and container policy are locally verified with fixtures. Run `npm run probe:providers` from the repository root only with operator-managed keys; it outputs only redacted status/count/latency/field-name summaries. A 2026-07-12 credentialed probe confirmed Amap key access and FlyAI train field summaries. Direct gateway smoke confirmed live FlyAI flight/train rows, real source/provider fields, numeric string prices normalized to integer CNY, China-time departure/arrival timestamps, query freshness, and `a.feizhu.com` booking hosts. The main app batches travel searches at four concurrent provider requests, matching the gateway limiter so queued work does not consume client request timeouts, and runs a second-pass query for unfinished route groups before using estimates. A 2026-07-13 full local calculation confirmed result-page `飞猪参考价` rows, but the run still stored `PARTIAL_ESTIMATE_FALLBACK` because direct gateway diagnostics returned provider failures for some route/mode pairs. A later 2026-07-13 H5 smoke with three participants still produced partial estimates; direct top-three-candidate gateway diagnostics grouped 18 route/mode checks into 10 successful row sets, one successful empty result, and seven `PROVIDER_RATE_LIMITED` responses from FlyAI/Fliggy risk-control 403 behavior. Production enablement remains blocked on supplier route coverage/quota behavior and final user-flow acceptance. A 2026-07-13 Docker smoke built `cross-city-travel-gateway:test`, confirmed container `GET /healthz`, confirmed unauthenticated `POST /v1/search` returns `UNAUTHORIZED`, and confirmed authenticated `POST /v1/search` returns normalized real FlyAI flight rows.
+The gateway contract, cache/retry/concurrency behavior, and container policy are locally verified with fixtures. The gateway executes supplier calls one at a time, joins same-key cache misses to one in-flight call, and caches only successful normalized responses. `PROVIDER_RATE_LIMITED` never retries immediately: it applies a global 5-second cooldown, then a 15-second cooldown if the first post-cooldown supplier call is also limited. Timeout, unavailable, and upstream-unavailable failures still retry once. Run `npm run probe:providers` from the repository root only with operator-managed keys; it outputs only redacted status/count/latency/field-name summaries. A 2026-07-12 credentialed probe confirmed Amap key access and FlyAI train field summaries. Direct gateway smoke confirmed live FlyAI flight/train rows, real source/provider fields, numeric string prices normalized to integer CNY, China-time departure/arrival timestamps, query freshness, and `a.feizhu.com` booking hosts. A 2026-07-13 full local calculation confirmed result-page `飞猪参考价` rows, but the run still stored `PARTIAL_ESTIMATE_FALLBACK` because direct gateway diagnostics returned provider failures for some route/mode pairs. A later 2026-07-13 H5 smoke with three participants still produced partial estimates; direct top-three-candidate gateway diagnostics grouped 18 route/mode checks into 10 successful row sets, one successful empty result, and seven `PROVIDER_RATE_LIMITED` responses from FlyAI/Fliggy risk-control 403 behavior. Production enablement remains blocked on supplier route coverage/quota behavior and final user-flow acceptance. A 2026-07-13 Docker smoke built `cross-city-travel-gateway:test`, confirmed container `GET /healthz`, confirmed unauthenticated `POST /v1/search` returns `UNAUTHORIZED`, and confirmed authenticated `POST /v1/search` returns normalized real FlyAI flight rows.
+
+After a supplier cooldown, use a new full plan for a live-ticket check. Real rows must still be labeled `飞猪参考价`; rows without a real response remain `估算` with their stable reason. Neither one successful `/healthz` response nor one successful fare row proves supplier-wide authorization or quota recovery.
 
 Treat any future Fliggy/FlyAI MCP as a gateway-side provider adapter. Before enabling it for recommendation runs, compare it against FlyAI with the same fixed origin/candidate/mode probe set and verify stable price units, China-time timestamps, safe booking URLs, error classifications, and production authorization.
 

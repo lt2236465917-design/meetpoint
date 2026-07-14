@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 让创建计划页的日期和到达时间整块区域打开原生选择器，并将人数限制为 2–6 的原生下拉选项。
+**Goal:** 让创建计划页的日期和到达时间整块区域打开原生选择器，并将人数限制为 2–6 的应用内选择面板。
 
-**Architecture:** 保持日期与时间为受控的原生 `input`，在不触发 `<label>` 默认转发的容器点击中调用浏览器 `showPicker()`，确保标题、空白区域、图标和输入框本身均请求同一个原生选择器。人数继续在提交时经 `parseCreatePlanForm` 规范化为数字；解析器拒绝非整数，和服务端 schema 的整数约束一致。
+**Architecture:** 保持日期与时间为受控的原生 `input`，在 WebKit/Chrome 中扩展浏览器自身 picker 指示器的命中区域，确保整块白色输入框走同一原生路径。人数使用应用内的 `listbox` 面板，选中后关闭；隐藏字段继续经 `parseCreatePlanForm` 规范化为数字，解析器拒绝非整数，和服务端 schema 的整数约束一致。
 
 **Tech Stack:** Next.js App Router、React 19、TypeScript、Tailwind CSS、Vitest。
 
@@ -13,7 +13,7 @@
 - 用户可见文案使用中文；代码、文件和变量名使用英文。
 - 表单继续提交 `meetingDate`（`YYYY-MM-DD`）、`targetArrivalTime`（`HH:mm`）和数值 `participantLimit`。
 - 不修改 API、数据库或创建流程；保留客户端与服务端 2–6 人校验。
-- 日期、时间和人数继续采用原生浏览器控件，以获得 iOS、Android 和桌面端系统选择体验。
+- 日期和时间继续采用原生浏览器控件；人数采用应用内面板，避免桌面端系统下拉菜单破坏 H5 视觉一致性。
 - 完成前运行 `npm run lint`、`npm run test` 和 `npm run build`。
 
 ---
@@ -89,18 +89,19 @@ Expected: all tests in the file pass.
 - Modify: `src/app/create/page.tsx`
 
 **Interfaces:**
-- Consumes: `HTMLInputElement.showPicker(): void` when supported and the existing controlled React state setters.
-- Produces: full label containers that synchronously request the native date or time picker; a native `select` named `participantLimit` with only values 2–6 and a default selected value of 4.
+- Consumes: the existing controlled React state setters and WebKit/Chrome native picker indicator behavior.
+- Produces: full-width native date/time picker hit areas; an application `listbox` with values 2–6, immediate close-on-selection behavior, and a hidden `participantLimit` form field.
 
 - [x] **Step 1: Write the failing page contract test**
 
 ```ts
 expect(pageSource).toContain('ref={meetingDateInputRef}');
 expect(pageSource).toContain('ref={targetArrivalTimeInputRef}');
-expect(pageSource).toContain('input.showPicker();');
-expect(pageSource).toContain('<select');
+expect(pageSource).toContain('native-picker-hit-area');
+expect(pageSource).toContain('role="listbox"');
+expect(pageSource).toContain('setParticipantLimitOpen(false);');
 expect(pageSource).toContain('name="participantLimit"');
-expect(pageSource).toContain('<option value={4}>4</option>');
+expect(pageSource).toContain('type="hidden"');
 expect(pageSource).not.toContain('type="number"');
 ```
 
@@ -113,17 +114,10 @@ Expected: FAIL because the current page has no picker refs or `select` control.
 - [x] **Step 3: Write the minimal UI implementation**
 
 ```tsx
-const meetingDateInputRef = useRef<HTMLInputElement>(null);
-const targetArrivalTimeInputRef = useRef<HTMLInputElement>(null);
-
-function openNativePicker(input: HTMLInputElement | null) {
-  if (!input) return;
-  input.focus();
-  if ("showPicker" in input) input.showPicker();
-}
+const [participantLimitOpen, setParticipantLimitOpen] = useState(false);
 ```
 
-Attach an `onClick` handler that prevents the container default and calls `openNativePicker(...)` to each date/time region, pass the matching `ref` and accessible label to its input, and replace the number input with a controlled `<select>` whose options are exactly 2, 3, 4, 5, and 6.
+Keep date and time as accessible native inputs, use `native-picker-hit-area` to enlarge the browser-owned WebKit/Chrome picker target, and add decorative icons that do not intercept clicks. Replace the number input with a controlled button/listbox offering exactly 2, 3, 4, 5, and 6; write the selection through a hidden `participantLimit` field and close the panel immediately after selection.
 
 - [x] **Step 4: Run the focused page contract test to verify it passes**
 
@@ -156,7 +150,7 @@ Expected: all three commands exit 0.
 
 - [ ] **Step 3: Perform manual native-picker acceptance at 390×844**
 
-Open `/create`; tap the date label, blank date field area, and calendar icon area, then choose a date. Repeat for time. Change the participant select to 2, 3, 4, 5, and 6 in turn; submit a plan and confirm the success summary shows the selected values.
+Open `/create`; tap the date label, blank date field area, and calendar icon area, then choose a date. Repeat for time. Change the participant panel to 2, 3, 4, 5, and 6 in turn; submit a plan and confirm the success summary shows the selected values.
 
 - [x] **Step 4: Check the ticket gateway before real-price revalidation**
 

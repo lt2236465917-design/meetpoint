@@ -12,6 +12,9 @@ describe("getApiErrorMessage", () => {
     expect(getApiErrorMessage("PARTICIPANT_LIMIT_NOT_REACHED", "计算失败")).toBe(
       "人数填满后才能开始计算",
     );
+    expect(getApiErrorMessage("CALCULATION_IN_PROGRESS", "计算失败")).toBe(
+      "正在查询票价并生成结果，请稍后自动刷新。",
+    );
   });
 
   it("uses fallback copy for unknown errors", () => {

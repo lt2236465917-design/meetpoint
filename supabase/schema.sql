@@ -47,6 +47,10 @@ create table if not exists recommendation_runs (
   error_summary text
 );
 
+create unique index if not exists recommendation_runs_one_running_per_plan
+  on recommendation_runs (plan_id)
+  where status = 'running';
+
 create table if not exists travel_options (
   id uuid primary key default gen_random_uuid(),
   run_id uuid not null references recommendation_runs(id) on delete cascade,

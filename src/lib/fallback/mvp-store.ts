@@ -397,6 +397,11 @@ export async function calculateFallbackRecommendations(code: string) {
   );
   if (participants.length < 2) throw new Error("NOT_ENOUGH_PARTICIPANTS");
 
+  const runningRun = store.runs.find(
+    (run) => run.plan_id === plan.id && run.status === "running",
+  );
+  if (runningRun) throw new Error("CALCULATION_IN_PROGRESS");
+
   const candidateRows = store.candidates.filter(
     (candidate) => candidate.plan_id === plan.id,
   );

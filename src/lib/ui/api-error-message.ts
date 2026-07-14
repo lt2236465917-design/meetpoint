@@ -9,6 +9,7 @@ const apiErrorMessages: Record<string, string> = {
   CREATE_PARTICIPANT_FAILED: "提交失败，请稍后重试",
   CANDIDATE_EDITING_UNAVAILABLE: "当前版本不支持手动调整候选城市",
   CALCULATION_FAILED: "计算失败，请稍后重试",
+  CALCULATION_IN_PROGRESS: "正在查询票价并生成结果，请稍后自动刷新。",
   NOT_ENOUGH_PARTICIPANTS: "至少需要 2 个人填写后才能计算",
   RUN_NOT_FOUND: "还没有计算结果",
 };

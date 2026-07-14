@@ -102,4 +102,29 @@ describe("POST /api/plans/[code]/calculate", () => {
       code: "ABC123",
     });
   });
+
+  it("returns an in-progress conflict after a participant is authorized", async () => {
+    mocks.verifyParticipantCanCalculatePlan.mockResolvedValue({
+      ok: true,
+      planId: "plan-1",
+      participantId: "participant-1",
+    });
+    mocks.calculatePlanRecommendations.mockRejectedValue(
+      new Error("CALCULATION_IN_PROGRESS"),
+    );
+
+    const { POST } = await import("@/app/api/plans/[code]/calculate/route");
+    const response = await POST(
+      new Request("http://localhost/api/plans/ABC123/calculate", {
+        method: "POST",
+        headers: { "x-participant-token": "edit-token" },
+      }),
+      { params: Promise.resolve({ code: "ABC123" }) },
+    );
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toEqual({
+      error: "CALCULATION_IN_PROGRESS",
+    });
+  });
 });

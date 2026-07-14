@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   gatewaySearchResponseSchema,
@@ -21,6 +21,10 @@ const option: GatewayTravelOption = {
 };
 
 describe("createTravelSearchService", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("strictly validates requests before calling the provider", async () => {
     const searchProvider = vi.fn();
     const service = createTravelSearchService({ searchProvider });
@@ -70,7 +74,7 @@ describe("createTravelSearchService", () => {
     expect(searchProvider).toHaveBeenCalledTimes(1);
   });
 
-  it.each(["PROVIDER_TIMEOUT", "PROVIDER_RATE_LIMITED", "PROVIDER_UPSTREAM_UNAVAILABLE"] as const)(
+  it.each(["PROVIDER_TIMEOUT", "PROVIDER_UPSTREAM_UNAVAILABLE"] as const)(
     "retries %s exactly once with one queriedAt",
     async (code) => {
     const searchProvider = vi.fn()
@@ -111,5 +115,68 @@ describe("createTravelSearchService", () => {
 
     expect(error).toMatchObject({ code: "INTERNAL_ERROR", message: "Gateway request failed" });
     expect(String(error)).not.toContain("secret");
+  });
+
+  it("shares one provider call for concurrent cache misses with the same key", async () => {
+    const searchProvider = vi.fn().mockResolvedValue([option]);
+    const service = createTravelSearchService({ searchProvider });
+
+    const first = service.search(request);
+    const second = service.search({ ...request, originCityName: "北京市" });
+    const [firstResponse, secondResponse] = await Promise.all([first, second]);
+    expect(firstResponse).toEqual(secondResponse);
+    expect(firstResponse).not.toBe(secondResponse);
+    expect(searchProvider).toHaveBeenCalledTimes(1);
+  });
+
+  it("removes a failed in-flight entry so a later same-key request can call the provider", async () => {
+    const searchProvider = vi.fn()
+      .mockRejectedValueOnce(new FlyAIAdapterError("PROVIDER_NO_ROUTE", "supplier detail"))
+      .mockResolvedValueOnce([option]);
+    const service = createTravelSearchService({ searchProvider });
+
+    await expect(service.search(request)).rejects.toMatchObject({ code: "PROVIDER_NO_ROUTE" });
+    await expect(service.search(request)).resolves.toMatchObject({ options: [option] });
+    expect(searchProvider).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not immediately retry rate limiting and waits five seconds before the next provider call", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-12T08:00:00Z"));
+    const searchProvider = vi.fn()
+      .mockRejectedValueOnce(new FlyAIAdapterError("PROVIDER_RATE_LIMITED", "supplier detail"))
+      .mockResolvedValueOnce([option]);
+    const service = createTravelSearchService({ searchProvider });
+
+    await expect(service.search(request)).rejects.toMatchObject({ code: "PROVIDER_RATE_LIMITED" });
+    expect(searchProvider).toHaveBeenCalledTimes(1);
+    const next = service.search({ ...request, destinationCityCode: "wuhan", destinationCityName: "武汉" });
+    await vi.advanceTimersByTimeAsync(4_999);
+    expect(searchProvider).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    await expect(next).resolves.toMatchObject({ options: [option] });
+    expect(searchProvider).toHaveBeenCalledTimes(2);
+  });
+
+  it("waits fifteen seconds after the first post-cooldown provider call is rate limited", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-12T08:00:00Z"));
+    const searchProvider = vi.fn()
+      .mockRejectedValueOnce(new FlyAIAdapterError("PROVIDER_RATE_LIMITED", "first"))
+      .mockRejectedValueOnce(new FlyAIAdapterError("PROVIDER_RATE_LIMITED", "second"))
+      .mockResolvedValueOnce([option]);
+    const service = createTravelSearchService({ searchProvider });
+
+    await expect(service.search(request)).rejects.toMatchObject({ code: "PROVIDER_RATE_LIMITED" });
+    const second = service.search({ ...request, destinationCityCode: "wuhan", destinationCityName: "武汉" });
+    const secondFailure = expect(second).rejects.toMatchObject({ code: "PROVIDER_RATE_LIMITED" });
+    await vi.advanceTimersByTimeAsync(5_000);
+    await secondFailure;
+    const third = service.search({ ...request, destinationCityCode: "nanjing", destinationCityName: "南京" });
+    await vi.advanceTimersByTimeAsync(14_999);
+    expect(searchProvider).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(1);
+    await expect(third).resolves.toMatchObject({ options: [option] });
+    expect(searchProvider).toHaveBeenCalledTimes(3);
   });
 });

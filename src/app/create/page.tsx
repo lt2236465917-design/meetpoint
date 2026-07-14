@@ -17,6 +17,7 @@ export default function CreatePlanPage() {
   const [meetingDate, setMeetingDate] = useState("");
   const [targetArrivalTime, setTargetArrivalTime] = useState("18:00");
   const [participantLimit, setParticipantLimit] = useState(4);
+  const [participantLimitOpen, setParticipantLimitOpen] = useState(false);
   const meetingDateInputRef = useRef<HTMLInputElement>(null);
   const targetArrivalTimeInputRef = useRef<HTMLInputElement>(null);
   const [result, setResult] = useState<CreatePlanResult | null>(null);
@@ -117,56 +118,89 @@ export default function CreatePlanPage() {
           </label>
           <div
             className="block space-y-1.5 text-sm font-medium text-gray-700"
-            onClick={(event) => {
-              openNativePicker(event, meetingDateInputRef.current);
-            }}
           >
             <span id="meeting-date-label">见面日期</span>
-            <input
-              aria-labelledby="meeting-date-label"
-              className="w-full rounded-lg border px-4 py-3 font-normal text-gray-950"
-              name="meetingDate"
-              type="date"
-              ref={meetingDateInputRef}
-              value={meetingDate}
-              onChange={(event) => setMeetingDate(event.target.value)}
-            />
+            <div className="relative">
+              <input
+                aria-labelledby="meeting-date-label"
+                className="native-picker-hit-area w-full rounded-lg border px-4 py-3 pr-12 font-normal text-gray-950"
+                name="meetingDate"
+                ref={meetingDateInputRef}
+                type="date"
+                value={meetingDate}
+                onChange={(event) => setMeetingDate(event.target.value)}
+              />
+              <span
+                aria-hidden="true"
+                className="pointer-events-none absolute inset-y-0 right-0 flex w-12 items-center justify-center"
+              >
+                <CalendarIcon />
+              </span>
+            </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div
               className="block space-y-1.5 text-sm font-medium text-gray-700"
-              onClick={(event) => {
-                openNativePicker(event, targetArrivalTimeInputRef.current);
-              }}
             >
               <span id="target-arrival-time-label">目标到达时间</span>
-              <input
-                aria-labelledby="target-arrival-time-label"
-                className="w-full rounded-lg border px-4 py-3 font-normal text-gray-950"
-                name="targetArrivalTime"
-                type="time"
-                ref={targetArrivalTimeInputRef}
-                value={targetArrivalTime}
-                onChange={(event) => setTargetArrivalTime(event.target.value)}
-              />
+              <div className="relative">
+                <input
+                  aria-labelledby="target-arrival-time-label"
+                  className="native-picker-hit-area w-full rounded-lg border px-4 py-3 pr-12 font-normal text-gray-950"
+                  name="targetArrivalTime"
+                  ref={targetArrivalTimeInputRef}
+                  type="time"
+                  value={targetArrivalTime}
+                  onChange={(event) => setTargetArrivalTime(event.target.value)}
+                />
+                <span
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-y-0 right-0 flex w-12 items-center justify-center"
+                >
+                  <ClockIcon />
+                </span>
+              </div>
             </div>
-            <label className="block space-y-1.5 text-sm font-medium text-gray-700">
-              <span>参与人数上限</span>
-              <select
-                className="w-full rounded-lg border px-4 py-3 font-normal text-gray-950"
-                name="participantLimit"
-                value={participantLimit}
-                onChange={(event) =>
-                  setParticipantLimit(Number(event.target.value))
-                }
+            <div className="relative block space-y-1.5 text-sm font-medium text-gray-700">
+              <span id="participant-limit-label">参与人数上限</span>
+              <input name="participantLimit" type="hidden" value={participantLimit} />
+              <button
+                aria-controls="participant-limit-options"
+                aria-expanded={participantLimitOpen}
+                aria-haspopup="listbox"
+                aria-labelledby="participant-limit-label participant-limit-value"
+                className="flex w-full items-center justify-between rounded-lg border px-4 py-3 font-normal text-gray-950"
+                onClick={() => setParticipantLimitOpen((open) => !open)}
+                type="button"
               >
-                <option value={2}>2</option>
-                <option value={3}>3</option>
-                <option value={4}>4</option>
-                <option value={5}>5</option>
-                <option value={6}>6</option>
-              </select>
-            </label>
+                <span id="participant-limit-value">{participantLimit} 人</span>
+                <ChevronDownIcon expanded={participantLimitOpen} />
+              </button>
+              {participantLimitOpen && (
+                <div
+                  className="absolute z-10 mt-2 w-full overflow-hidden rounded-lg border border-gray-200 bg-white p-1 shadow-lg"
+                  id="participant-limit-options"
+                  role="listbox"
+                  aria-labelledby="participant-limit-label"
+                >
+                  {[2, 3, 4, 5, 6].map((limit) => (
+                    <button
+                      aria-selected={participantLimit === limit}
+                      className="flex w-full rounded-md px-3 py-2 text-left text-sm font-normal text-gray-950 hover:bg-gray-100 aria-selected:bg-gray-100"
+                      key={limit}
+                      onClick={() => {
+                        setParticipantLimit(limit);
+                        setParticipantLimitOpen(false);
+                      }}
+                      role="option"
+                      type="button"
+                    >
+                      {limit} 人
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
           {error && (
             <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">
@@ -214,20 +248,35 @@ export default function CreatePlanPage() {
   );
 }
 
-function openNativePicker(
-  event: React.MouseEvent<HTMLDivElement>,
-  input: HTMLInputElement | null,
-) {
-  if (!input) return;
-  input.focus();
-  if ("showPicker" in input) {
-    try {
-      input.showPicker();
-      event.preventDefault();
-    } catch {
-      // Preserve the browser's own input activation as a native fallback.
-    }
-  }
+function CalendarIcon() {
+  return (
+    <svg aria-hidden="true" className="h-5 w-5" fill="none" viewBox="0 0 24 24">
+      <rect height="16" rx="2" stroke="currentColor" strokeWidth="2" width="16" x="4" y="5" />
+      <path d="M8 3v4M16 3v4M4 10h16" stroke="currentColor" strokeWidth="2" />
+    </svg>
+  );
+}
+
+function ClockIcon() {
+  return (
+    <svg aria-hidden="true" className="h-5 w-5" fill="none" viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="8" stroke="currentColor" strokeWidth="2" />
+      <path d="M12 7v5l3 2" stroke="currentColor" strokeWidth="2" />
+    </svg>
+  );
+}
+
+function ChevronDownIcon({ expanded }: { expanded: boolean }) {
+  return (
+    <svg
+      aria-hidden="true"
+      className={`h-5 w-5 transition-transform ${expanded ? "rotate-180" : ""}`}
+      fill="none"
+      viewBox="0 0 24 24"
+    >
+      <path d="m6 9 6 6 6-6" stroke="currentColor" strokeWidth="2" />
+    </svg>
+  );
 }
 
 function getPublicShareUrl(shareUrl: string): string {

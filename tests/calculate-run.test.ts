@@ -38,8 +38,16 @@ function selectEq(data: unknown) {
   return { select, eq };
 }
 
-function insertSelectSingle(data: unknown) {
-  const single = vi.fn().mockResolvedValue({ data });
+function selectRunningRun(data: unknown) {
+  const maybeSingle = vi.fn().mockResolvedValue({ data });
+  const statusEq = vi.fn(() => ({ maybeSingle }));
+  const planEq = vi.fn(() => ({ eq: statusEq }));
+  const select = vi.fn(() => ({ eq: planEq }));
+  return { select, planEq, statusEq, maybeSingle };
+}
+
+function insertSelectSingle(data: unknown, error: unknown = null) {
+  const single = vi.fn().mockResolvedValue({ data, error });
   const select = vi.fn(() => ({ single }));
   const insert = vi.fn(() => ({ select }));
   return { insert, select, single };
@@ -71,6 +79,7 @@ describe("calculatePlanRecommendations", () => {
       meeting_date: "2026-08-01",
       target_arrival_time: "12:00",
     });
+    const runningRunLookup = selectRunningRun(null);
     const participantsLookup = selectEq([
       {
         id: "participant-1",
@@ -105,6 +114,7 @@ describe("calculatePlanRecommendations", () => {
 
     mocks.from
       .mockReturnValueOnce({ select: planLookup.select })
+      .mockReturnValueOnce({ select: runningRunLookup.select })
       .mockReturnValueOnce({ select: participantsLookup.select })
       .mockReturnValueOnce({ select: manualCandidatesLookup.select })
       .mockReturnValueOnce({ insert: runInsert.insert })
@@ -211,6 +221,7 @@ describe("calculatePlanRecommendations", () => {
       meeting_date: "2026-08-01",
       target_arrival_time: "12:00",
     });
+    const runningRunLookup = selectRunningRun(null);
     const participantsLookup = selectEq([
       {
         id: "participant-1",
@@ -222,6 +233,7 @@ describe("calculatePlanRecommendations", () => {
 
     mocks.from
       .mockReturnValueOnce({ select: planLookup.select })
+      .mockReturnValueOnce({ select: runningRunLookup.select })
       .mockReturnValueOnce({ select: participantsLookup.select });
 
     const { calculatePlanRecommendations } = await import(
@@ -231,6 +243,70 @@ describe("calculatePlanRecommendations", () => {
     await expect(
       calculatePlanRecommendations({ code: "ABC123" }),
     ).rejects.toThrow("NOT_ENOUGH_PARTICIPANTS");
+    expect(mocks.search).not.toHaveBeenCalled();
+  });
+
+  it("rejects an existing running plan before creating a run or searching fares", async () => {
+    const planLookup = selectEqSingle({
+      id: "plan-1",
+      code: "ABC123",
+      meeting_date: "2026-08-01",
+      target_arrival_time: "12:00",
+    });
+    const runningRunLookup = selectRunningRun({ id: "run-active" });
+    mocks.from
+      .mockReturnValueOnce({ select: planLookup.select })
+      .mockReturnValueOnce({ select: runningRunLookup.select });
+
+    const { calculatePlanRecommendations } = await import(
+      "@/lib/recommendation/calculate-run"
+    );
+
+    await expect(
+      calculatePlanRecommendations({ code: "ABC123" }),
+    ).rejects.toThrow("CALCULATION_IN_PROGRESS");
+    expect(mocks.search).not.toHaveBeenCalled();
+    expect(mocks.from).toHaveBeenCalledTimes(2);
+  });
+
+  it("maps the running-run unique conflict without searching fares", async () => {
+    const planLookup = selectEqSingle({
+      id: "plan-1",
+      code: "ABC123",
+      meeting_date: "2026-08-01",
+      target_arrival_time: "12:00",
+    });
+    const runningRunLookup = selectRunningRun(null);
+    const participantsLookup = selectEq([
+      {
+        id: "participant-1",
+        departure_city_code: "beijing",
+        departure_city_name: "北京",
+        accepted_modes: ["flight"],
+      },
+      {
+        id: "participant-2",
+        departure_city_code: "shanghai",
+        departure_city_name: "上海",
+        accepted_modes: ["flight"],
+      },
+    ]);
+    const manualCandidatesLookup = selectEq([]);
+    const runInsert = insertSelectSingle(null, { code: "23505" });
+    mocks.from
+      .mockReturnValueOnce({ select: planLookup.select })
+      .mockReturnValueOnce({ select: runningRunLookup.select })
+      .mockReturnValueOnce({ select: participantsLookup.select })
+      .mockReturnValueOnce({ select: manualCandidatesLookup.select })
+      .mockReturnValueOnce({ insert: runInsert.insert });
+
+    const { calculatePlanRecommendations } = await import(
+      "@/lib/recommendation/calculate-run"
+    );
+
+    await expect(
+      calculatePlanRecommendations({ code: "ABC123" }),
+    ).rejects.toThrow("CALCULATION_IN_PROGRESS");
     expect(mocks.search).not.toHaveBeenCalled();
   });
 });

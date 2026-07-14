@@ -23,9 +23,10 @@ export async function POST(
     const result = await calculatePlanRecommendations({ code });
     return NextResponse.json(result);
   } catch (error) {
+    const code = error instanceof Error ? error.message : "CALCULATION_FAILED";
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "CALCULATION_FAILED" },
-      { status: 400 },
+      { error: code },
+      { status: code === "CALCULATION_IN_PROGRESS" ? 409 : 400 },
     );
   }
 }

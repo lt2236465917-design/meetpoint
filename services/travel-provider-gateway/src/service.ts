@@ -50,7 +50,6 @@ function publicProviderMessage(code: GatewayErrorCode): string {
 function shouldRetryProviderError(code: GatewayErrorCode): boolean {
   return code === "PROVIDER_TIMEOUT"
     || code === "PROVIDER_UNAVAILABLE"
-    || code === "PROVIDER_RATE_LIMITED"
     || code === "PROVIDER_UPSTREAM_UNAVAILABLE";
 }
 
@@ -59,6 +58,66 @@ export function createTravelSearchService(dependencies: ServiceDependencies = {}
   const cache = dependencies.cache ?? new TtlCache<GatewaySearchResponse>();
   const limiter = dependencies.limiter ?? new FifoLimiter();
   const now = dependencies.now ?? (() => new Date());
+  const inFlight = new Map<string, Promise<GatewaySearchResponse>>();
+  let cooldownUntil = 0;
+  let nextCooldownMs = 5_000;
+
+  async function waitForCooldown(): Promise<void> {
+    if (cooldownUntil <= 0) return;
+    const remainingMs = cooldownUntil - now().getTime();
+    if (remainingMs <= 0) return;
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, remainingMs);
+    });
+  }
+
+  async function callProvider(request: GatewaySearchRequest): Promise<unknown> {
+    await waitForCooldown();
+    try {
+      const rawOptions = await searchProvider(request);
+      nextCooldownMs = 5_000;
+      return rawOptions;
+    } catch (error) {
+      if (error instanceof FlyAIAdapterError && error.code === "PROVIDER_RATE_LIMITED") {
+        cooldownUntil = now().getTime() + nextCooldownMs;
+        nextCooldownMs = 15_000;
+      }
+      throw error;
+    }
+  }
+
+  async function fetchAndNormalize(
+    request: GatewaySearchRequest,
+    key: string,
+    queriedAt: Date,
+  ): Promise<GatewaySearchResponse> {
+    let rawOptions: unknown;
+    try {
+      rawOptions = await limiter.run(async () => {
+        try {
+          return await callProvider(request);
+        } catch (error) {
+          if (error instanceof FlyAIAdapterError && shouldRetryProviderError(error.code)) {
+            return callProvider(request);
+          }
+          throw error;
+        }
+      });
+    } catch (error) {
+      if (error instanceof FlyAIAdapterError) {
+        throw new GatewayServiceError(error.code, publicProviderMessage(error.code));
+      }
+      throw new GatewayServiceError("INTERNAL_ERROR", "Gateway request failed");
+    }
+
+    const options = providerOptionsSchema.safeParse(rawOptions);
+    if (!options.success) {
+      throw new GatewayServiceError("PROVIDER_INVALID_RESPONSE", "Provider returned an invalid response");
+    }
+    const response = gatewaySearchResponseSchema.parse({ options: options.data, queriedAt: queriedAt.toISOString() });
+    cache.set(key, structuredClone(response), queriedAt.getTime());
+    return response;
+  }
 
   return {
     async search(input: unknown): Promise<GatewaySearchResponse> {
@@ -70,32 +129,13 @@ export function createTravelSearchService(dependencies: ServiceDependencies = {}
       const cached = cache.get(key, timestamp.getTime());
       if (cached !== undefined) return structuredClone(cached);
 
-      let rawOptions: unknown;
-      try {
-        rawOptions = await limiter.run(async () => {
-          try {
-            return await searchProvider(parsedRequest.data);
-          } catch (error) {
-            if (error instanceof FlyAIAdapterError && shouldRetryProviderError(error.code)) {
-              return searchProvider(parsedRequest.data);
-            }
-            throw error;
-          }
-        });
-      } catch (error) {
-        if (error instanceof FlyAIAdapterError) {
-          throw new GatewayServiceError(error.code, publicProviderMessage(error.code));
-        }
-        throw new GatewayServiceError("INTERNAL_ERROR", "Gateway request failed");
+      const existing = inFlight.get(key);
+      const pending = existing ?? fetchAndNormalize(parsedRequest.data, key, timestamp);
+      if (!existing) {
+        inFlight.set(key, pending);
+        void pending.finally(() => inFlight.delete(key)).catch(() => undefined);
       }
-
-      const options = providerOptionsSchema.safeParse(rawOptions);
-      if (!options.success) {
-        throw new GatewayServiceError("PROVIDER_INVALID_RESPONSE", "Provider returned an invalid response");
-      }
-      const response = gatewaySearchResponseSchema.parse({ options: options.data, queriedAt: timestamp.toISOString() });
-      cache.set(key, structuredClone(response), timestamp.getTime());
-      return response;
+      return structuredClone(await pending);
     },
   };
 }
