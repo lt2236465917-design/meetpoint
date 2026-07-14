@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { ResponsiveShell } from "@/components/layout/ResponsiveShell";
 import { getApiErrorMessage } from "@/lib/ui/api-error-message";
 import { copyTextToClipboard } from "@/lib/ui/clipboard";
@@ -17,6 +17,8 @@ export default function CreatePlanPage() {
   const [meetingDate, setMeetingDate] = useState("");
   const [targetArrivalTime, setTargetArrivalTime] = useState("18:00");
   const [participantLimit, setParticipantLimit] = useState(4);
+  const meetingDateInputRef = useRef<HTMLInputElement>(null);
+  const targetArrivalTimeInputRef = useRef<HTMLInputElement>(null);
   const [result, setResult] = useState<CreatePlanResult | null>(null);
   const [error, setError] = useState("");
   const [copyMessage, setCopyMessage] = useState("");
@@ -113,40 +115,53 @@ export default function CreatePlanPage() {
               onChange={(event) => setTitle(event.target.value)}
             />
           </label>
-          <label className="block space-y-1.5 text-sm font-medium text-gray-700">
+          <label
+            className="block space-y-1.5 text-sm font-medium text-gray-700"
+            onClick={() => openNativePicker(meetingDateInputRef.current)}
+          >
             <span>见面日期</span>
             <input
               className="w-full rounded-lg border px-4 py-3 font-normal text-gray-950"
               name="meetingDate"
               type="date"
+              ref={meetingDateInputRef}
               value={meetingDate}
               onChange={(event) => setMeetingDate(event.target.value)}
             />
           </label>
           <div className="grid grid-cols-2 gap-3">
-            <label className="block space-y-1.5 text-sm font-medium text-gray-700">
+            <label
+              className="block space-y-1.5 text-sm font-medium text-gray-700"
+              onClick={() =>
+                openNativePicker(targetArrivalTimeInputRef.current)
+              }
+            >
               <span>目标到达时间</span>
               <input
                 className="w-full rounded-lg border px-4 py-3 font-normal text-gray-950"
                 name="targetArrivalTime"
                 type="time"
+                ref={targetArrivalTimeInputRef}
                 value={targetArrivalTime}
                 onChange={(event) => setTargetArrivalTime(event.target.value)}
               />
             </label>
             <label className="block space-y-1.5 text-sm font-medium text-gray-700">
               <span>参与人数上限</span>
-              <input
+              <select
                 className="w-full rounded-lg border px-4 py-3 font-normal text-gray-950"
                 name="participantLimit"
-                type="number"
-                min={2}
-                max={6}
                 value={participantLimit}
                 onChange={(event) =>
                   setParticipantLimit(Number(event.target.value))
                 }
-              />
+              >
+                <option value={2}>2</option>
+                <option value={3}>3</option>
+                <option value={4}>4</option>
+                <option value={5}>5</option>
+                <option value={6}>6</option>
+              </select>
             </label>
           </div>
           {error && (
@@ -193,6 +208,12 @@ export default function CreatePlanPage() {
       )}
     </ResponsiveShell>
   );
+}
+
+function openNativePicker(input: HTMLInputElement | null) {
+  if (!input) return;
+  input.focus();
+  if ("showPicker" in input) input.showPicker();
 }
 
 function getPublicShareUrl(shareUrl: string): string {
