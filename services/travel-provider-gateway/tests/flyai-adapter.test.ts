@@ -36,6 +36,23 @@ const trainRow = {
   bookingUrl: null,
 };
 
+const liveFlightItem = {
+  ticketPrice: "680",
+  totalDuration: "02:15:00",
+  jumpUrl: "https://a.feizhu.com/flight/MU5101",
+  journeys: [{
+    segments: [{
+      depDateTime: "2026-08-20 08:00:00",
+      arrDateTime: "2026-08-20 10:15:00",
+      duration: "02:15:00",
+      marketingTransportNo: "MU5101",
+      transportType: "flight",
+      depStationName: "北京首都",
+      arrStationName: "上海虹桥",
+    }],
+  }],
+};
+
 function executorReturning(payload: unknown) {
   return vi.fn((_file: string, _args: readonly string[], _options: object, callback: ExecCallback) => {
     callback(null, JSON.stringify(payload), "");
@@ -129,6 +146,62 @@ describe("searchFlyAI", () => {
       arrivalStationName: "上海虹桥",
       bookingUrl: "https://a.feizhu.com/flight/MU5101",
     }]);
+  });
+
+  it("keeps valid live items when a sibling item is malformed", async () => {
+    const diagnostics: unknown[] = [];
+    const execFile = executorReturning({
+      data: {
+        itemList: [
+          liveFlightItem,
+          {
+            ...liveFlightItem,
+            journeys: [{
+              segments: [{
+                ...liveFlightItem.journeys[0].segments[0],
+                marketingTransportNo: undefined,
+              }],
+            }],
+          },
+        ],
+      },
+    });
+
+    const result = await searchFlyAI(baseInput, {
+      execFile,
+      executable: "/safe/flyai",
+      diagnosticLogger: (event) => diagnostics.push(event),
+    });
+
+    expect(result).toHaveLength(1);
+    expect(diagnostics).toEqual([expect.objectContaining({
+      mode: "flight",
+      outcome: "SUCCESS",
+      itemCount: 2,
+      normalizedCount: 1,
+      droppedCount: 1,
+      droppedReasons: ["invalid_item_shape"],
+      cliErrorCode: null,
+    })]);
+  });
+
+  it("classifies a live error envelope without leaking its text into diagnostics", async () => {
+    const secret = "supplier-detail=do-not-log";
+    const diagnostics: unknown[] = [];
+    const execFile = executorReturning({ code: "429", message: `Too many requests ${secret}` });
+
+    await expect(searchFlyAI(baseInput, {
+      execFile,
+      executable: "/safe/flyai",
+      diagnosticLogger: (event) => diagnostics.push(event),
+    })).rejects.toMatchObject({ code: "PROVIDER_RATE_LIMITED" });
+
+    expect(JSON.stringify(diagnostics)).not.toContain(secret);
+    expect(diagnostics).toEqual([expect.objectContaining({
+      outcome: "PROVIDER_RATE_LIMITED",
+      itemCount: 0,
+      normalizedCount: 0,
+    })]);
   });
 
   it("classifies G/C/D services as high-speed rail and excludes normal trains", async () => {

@@ -1,4 +1,5 @@
 import { execFile as nodeExecFile } from "node:child_process";
+import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { z } from "zod";
@@ -81,7 +82,7 @@ const liveItemSchema = z.object({
 
 const liveResponseSchema = z.object({
   data: z.object({
-    itemList: z.array(liveItemSchema),
+    itemList: z.array(z.unknown()),
   }),
 }).passthrough();
 
@@ -103,6 +104,20 @@ export class FlyAIAdapterError extends Error {
   }
 }
 
+export type FlyAIDiagnostic = {
+  routeFingerprint: string;
+  mode: GatewaySearchRequest["mode"];
+  outcome: "SUCCESS" | GatewayErrorCode;
+  topLevelKeys: string[];
+  dataKeys: string[];
+  itemKeys: string[];
+  itemCount: number;
+  normalizedCount: number;
+  droppedCount: number;
+  droppedReasons: string[];
+  cliErrorCode: GatewayErrorCode | null;
+};
+
 interface Logger {
   error(message: string): void;
 }
@@ -111,6 +126,48 @@ export interface FlyAIAdapterDependencies {
   execFile?: ExecFile;
   executable?: string;
   logger?: Logger;
+  diagnosticLogger?: (event: FlyAIDiagnostic) => void;
+}
+
+function routeFingerprint(input: GatewaySearchRequest): string {
+  const routeKey = ["v1", input.originCityCode, input.destinationCityCode, input.meetingDate, input.mode].join(":");
+  return createHash("sha256").update(routeKey).digest("hex").slice(0, 16);
+}
+
+function emitDiagnostic(
+  logger: FlyAIAdapterDependencies["diagnosticLogger"],
+  event: FlyAIDiagnostic,
+): void {
+  try {
+    logger?.(event);
+  } catch {
+    // Diagnostics must not affect ticket availability.
+  }
+}
+
+function objectKeys(value: unknown): string[] {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return [];
+  return Object.keys(value).sort().slice(0, 32);
+}
+
+function diagnosticFor(
+  input: GatewaySearchRequest,
+  outcome: FlyAIDiagnostic["outcome"],
+  details: Partial<Omit<FlyAIDiagnostic, "routeFingerprint" | "mode" | "outcome">> = {},
+): FlyAIDiagnostic {
+  return {
+    routeFingerprint: routeFingerprint(input),
+    mode: input.mode,
+    outcome,
+    topLevelKeys: details.topLevelKeys ?? [],
+    dataKeys: details.dataKeys ?? [],
+    itemKeys: details.itemKeys ?? [],
+    itemCount: details.itemCount ?? 0,
+    normalizedCount: details.normalizedCount ?? 0,
+    droppedCount: details.droppedCount ?? 0,
+    droppedReasons: details.droppedReasons ?? [],
+    cliErrorCode: details.cliErrorCode ?? null,
+  };
 }
 
 function packageLocalExecutable(): string {
@@ -139,23 +196,29 @@ function isTimeout(error: Error): boolean {
   return details.code === "ETIMEDOUT" || (details.killed === true && details.signal === "SIGTERM");
 }
 
+function classifyProviderText(text: string): GatewayErrorCode | null {
+  const normalized = text.toLowerCase();
+
+  if (/(no\s*(route|itinerary|flight|train)|route\s*(not\s*found|unavailable)|无航线|无车次|无线路|没有.*(航班|车次|线路))/.test(normalized)) {
+    return "PROVIDER_NO_ROUTE";
+  }
+  if (/(no\s*(ticket|seat|availability)|sold\s*out|暂无|无票|售罄|余票不足|不可售)/.test(normalized)) {
+    return "PROVIDER_NO_TICKET";
+  }
+  if (/(rate\s*limit|too\s*many\s*requests|\b429\b|\b403\b|risk\s*control|abnormal\s*access|限流|频率|请求过多|风控|访问异常)/.test(normalized)) {
+    return "PROVIDER_RATE_LIMITED";
+  }
+  if (/(upstream|service\s*unavailable|bad\s*gateway|gateway\s*timeout|\b5\d{2}\b|供应商|上游|服务不可用)/.test(normalized)) {
+    return "PROVIDER_UPSTREAM_UNAVAILABLE";
+  }
+  return null;
+}
+
 function classifyCliError(error: Error, stdout: string, stderr: string): GatewayErrorCode {
   if (isTimeout(error)) return "PROVIDER_TIMEOUT";
   const details = error as Error & { code?: string };
-  const text = `${stderr}\n${stdout}\n${error.message}`.toLowerCase();
-
-  if (/(no\s*(route|itinerary|flight|train)|route\s*(not\s*found|unavailable)|无航线|无车次|无线路|没有.*(航班|车次|线路))/.test(text)) {
-    return "PROVIDER_NO_ROUTE";
-  }
-  if (/(no\s*(ticket|seat|availability)|sold\s*out|暂无|无票|售罄|余票不足|不可售)/.test(text)) {
-    return "PROVIDER_NO_TICKET";
-  }
-  if (/(rate\s*limit|too\s*many\s*requests|\b429\b|\b403\b|risk\s*control|abnormal\s*access|限流|频率|请求过多|风控|访问异常)/.test(text)) {
-    return "PROVIDER_RATE_LIMITED";
-  }
-  if (/(upstream|service\s*unavailable|bad\s*gateway|gateway\s*timeout|\b5\d{2}\b|供应商|上游|服务不可用)/.test(text)) {
-    return "PROVIDER_UPSTREAM_UNAVAILABLE";
-  }
+  const classified = classifyProviderText(`${stderr}\n${stdout}\n${error.message}`);
+  if (classified !== null) return classified;
   if (details.code === "ENOENT" || details.code === "EACCES" || details.code === "ECLI") {
     return "PROVIDER_CLI_FAILED";
   }
@@ -250,26 +313,6 @@ function normalizeLiveItem(
   };
 }
 
-function parseRows(stdout: string, mode: GatewaySearchRequest["mode"]): z.infer<typeof rawRowSchema>[] {
-  try {
-    const parsed: unknown = JSON.parse(stdout);
-    const legacy = z.array(rawRowSchema).safeParse(parsed);
-    if (legacy.success) return legacy.data;
-    const live = liveResponseSchema.safeParse(parsed);
-    if (live.success) {
-      return live.data.data.itemList
-        .map((item) => normalizeLiveItem(item, mode))
-        .filter((row): row is z.infer<typeof rawRowSchema> => row !== null);
-    }
-    return z.array(rawRowSchema).parse(parsed);
-  } catch {
-    throw new FlyAIAdapterError(
-      "PROVIDER_INVALID_RESPONSE",
-      "FlyAI returned an invalid response",
-    );
-  }
-}
-
 function normalizeRow(
   row: z.infer<typeof rawRowSchema>,
   mode: GatewaySearchRequest["mode"],
@@ -310,17 +353,91 @@ export async function searchFlyAI(
 ): Promise<GatewayTravelOption[]> {
   const executable = dependencies.executable ?? packageLocalExecutable();
   const execFile = dependencies.execFile ?? nodeExecFile;
-  const stdout = await execute(execFile, executable, buildArgs(input));
+  let stdout: string;
+  try {
+    stdout = await execute(execFile, executable, buildArgs(input));
+  } catch (error) {
+    const code = error instanceof FlyAIAdapterError ? error.code : "PROVIDER_UNAVAILABLE";
+    emitDiagnostic(dependencies.diagnosticLogger, diagnosticFor(input, code, { cliErrorCode: code }));
+    throw error;
+  }
 
   try {
-    return parseRows(stdout, input.mode)
-      .map((row) => normalizeRow(row, input.mode))
-      .filter((row): row is GatewayTravelOption => row !== null);
+    const parsed: unknown = JSON.parse(stdout);
+    const topLevelKeys = objectKeys(parsed);
+    const legacy = z.array(rawRowSchema).safeParse(parsed);
+    if (legacy.success) {
+      const result = legacy.data
+        .map((row) => normalizeRow(row, input.mode))
+        .filter((row): row is GatewayTravelOption => row !== null);
+      emitDiagnostic(dependencies.diagnosticLogger, diagnosticFor(input, "SUCCESS", { topLevelKeys }));
+      return result;
+    }
+
+    const live = liveResponseSchema.safeParse(parsed);
+    if (live.success) {
+      const items = live.data.data.itemList;
+      const itemKeys = [...new Set(items.flatMap((item) => objectKeys(item)))].sort().slice(0, 32);
+      const droppedReasons = new Set<string>();
+      const result: GatewayTravelOption[] = [];
+
+      for (const item of items) {
+        const liveItem = liveItemSchema.safeParse(item);
+        if (!liveItem.success) {
+          droppedReasons.add("invalid_item_shape");
+          continue;
+        }
+        const normalized = normalizeLiveItem(liveItem.data, input.mode);
+        const rawRow = normalized === null ? null : rawRowSchema.safeParse(normalized);
+        if (rawRow === null || !rawRow.success) {
+          droppedReasons.add("missing_required_route_fact");
+          continue;
+        }
+        try {
+          const option = normalizeRow(rawRow.data, input.mode);
+          if (option === null) {
+            droppedReasons.add("missing_required_route_fact");
+          } else {
+            result.push(option);
+          }
+        } catch {
+          droppedReasons.add("missing_required_route_fact");
+        }
+      }
+
+      const details = {
+        topLevelKeys,
+        dataKeys: objectKeys(live.data.data),
+        itemKeys,
+        itemCount: items.length,
+        normalizedCount: result.length,
+        droppedCount: items.length - result.length,
+        droppedReasons: [...droppedReasons].sort(),
+      };
+      if (items.length > 0 && result.length === 0) {
+        emitDiagnostic(dependencies.diagnosticLogger, diagnosticFor(input, "PROVIDER_INVALID_RESPONSE", details));
+        throw new FlyAIAdapterError("PROVIDER_INVALID_RESPONSE", "FlyAI returned an invalid response");
+      }
+      emitDiagnostic(dependencies.diagnosticLogger, diagnosticFor(input, "SUCCESS", details));
+      return result;
+    }
+
+    const envelope = typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
+      ? parsed as Record<string, unknown>
+      : {};
+    const providerText = ["code", "message", "status"]
+      .map((key) => envelope[key])
+      .filter((value): value is string => typeof value === "string")
+      .join("\n");
+    const code = classifyProviderText(providerText) ?? "PROVIDER_INVALID_RESPONSE";
+    emitDiagnostic(dependencies.diagnosticLogger, diagnosticFor(input, code, { topLevelKeys }));
+    throw new FlyAIAdapterError(code, "FlyAI returned an invalid response");
   } catch (error) {
     if (error instanceof FlyAIAdapterError) {
       throw error;
     }
     dependencies.logger?.error("FlyAI response normalization failed");
+    emitDiagnostic(dependencies.diagnosticLogger, diagnosticFor(input, "PROVIDER_INVALID_RESPONSE"));
     throw new FlyAIAdapterError(
       "PROVIDER_INVALID_RESPONSE",
       "FlyAI returned an invalid response",
