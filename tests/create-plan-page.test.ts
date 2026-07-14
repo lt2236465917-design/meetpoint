@@ -17,4 +17,19 @@ describe("CreatePlanPage native input controls", () => {
     expect(pageSource).toContain("<option value={4}>4</option>");
     expect(pageSource).not.toContain('type="number"');
   });
+
+  it("skips the label picker handler for direct native input clicks", () => {
+    const pageSource = readFileSync(
+      path.join(process.cwd(), "src/app/create/page.tsx"),
+      "utf8",
+    );
+
+    expect(pageSource).toContain("event.target === input");
+    expect(pageSource).toContain(
+      "openNativePicker(event, meetingDateInputRef.current)",
+    );
+    expect(pageSource).toContain(
+      "openNativePicker(event, targetArrivalTimeInputRef.current)",
+    );
+  });
 });

@@ -117,7 +117,9 @@ export default function CreatePlanPage() {
           </label>
           <label
             className="block space-y-1.5 text-sm font-medium text-gray-700"
-            onClick={() => openNativePicker(meetingDateInputRef.current)}
+            onClick={(event) =>
+              openNativePicker(event, meetingDateInputRef.current)
+            }
           >
             <span>见面日期</span>
             <input
@@ -132,8 +134,8 @@ export default function CreatePlanPage() {
           <div className="grid grid-cols-2 gap-3">
             <label
               className="block space-y-1.5 text-sm font-medium text-gray-700"
-              onClick={() =>
-                openNativePicker(targetArrivalTimeInputRef.current)
+              onClick={(event) =>
+                openNativePicker(event, targetArrivalTimeInputRef.current)
               }
             >
               <span>目标到达时间</span>
@@ -210,7 +212,11 @@ export default function CreatePlanPage() {
   );
 }
 
-function openNativePicker(input: HTMLInputElement | null) {
+function openNativePicker(
+  event: React.MouseEvent<HTMLLabelElement>,
+  input: HTMLInputElement | null,
+) {
+  if (event.target === input) return;
   if (!input) return;
   input.focus();
   if ("showPicker" in input) input.showPicker();
