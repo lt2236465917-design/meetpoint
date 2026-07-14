@@ -25,7 +25,7 @@ type PublicPlanData = {
     accepted_modes: TransportMode[];
   }>;
   localParticipantEditToken?: string;
-  latestRun: unknown | null;
+  latestRun: { status: string } | null;
 };
 
 export function PublicPlanContent({
@@ -43,6 +43,8 @@ export function PublicPlanContent({
   );
   const [calculateMessage, setCalculateMessage] = useState("");
   const [calculating, setCalculating] = useState(false);
+  const isCalculatingResult = data.latestRun?.status === "running";
+  const hasCompletedResult = data.latestRun?.status === "completed";
   const participantsFull =
     data.participants.length >= data.plan.participant_limit;
   const canCalculateHere =
@@ -59,7 +61,7 @@ export function PublicPlanContent({
       meetingDate: initialData.plan.meeting_date,
       targetArrivalTime: initialData.plan.target_arrival_time,
       role: "viewer",
-      latestRun: Boolean(initialData.latestRun),
+      latestRun: initialData.latestRun?.status === "completed",
       lastVisitedAt: new Date().toISOString(),
     });
   }, [code, initialData.latestRun, initialData.plan]);
@@ -110,7 +112,7 @@ export function PublicPlanContent({
         return;
       }
 
-      setCalculateMessage(`计算完成：${json.candidateCount} 个候选城市`);
+      setCalculateMessage("正在打开结果页。");
       window.location.href = `/p/${code}/result`;
     } catch {
       setCalculateMessage("计算失败，请稍后重试");
@@ -130,7 +132,7 @@ export function PublicPlanContent({
           >
             填写我的信息
           </Link>
-          {data.latestRun ? (
+          {hasCompletedResult ? (
             <Link
               className="rounded-lg border border-gray-200 py-3 text-center font-medium text-gray-950"
               href={`/p/${code}/result`}
@@ -142,7 +144,7 @@ export function PublicPlanContent({
               aria-disabled="true"
               className="rounded-lg border border-gray-200 bg-gray-50 py-3 text-center font-medium text-gray-400"
             >
-              暂无结果
+              {isCalculatingResult ? "结果生成中" : "暂无结果"}
             </div>
           )}
         </div>
@@ -164,6 +166,10 @@ export function PublicPlanContent({
                 {calculateMessage}
               </p>
             )}
+          </div>
+        ) : isCalculatingResult ? (
+          <div className="mt-4">
+            <Notice>正在查询票价并生成结果，请稍后自动刷新。</Notice>
           </div>
         ) : !data.latestRun ? (
           <div className="mt-4">
@@ -187,7 +193,11 @@ export function PublicPlanContent({
 
       <p className="text-center text-xs leading-5 text-gray-500">
         已填写 {data.participants.length} 人 ·{" "}
-        {data.latestRun ? "已有结果" : "等待发起人计算"}
+        {isCalculatingResult
+          ? "正在生成结果"
+          : hasCompletedResult
+            ? "已有结果"
+            : "等待发起人计算"}
       </p>
     </div>
   );

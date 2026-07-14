@@ -1,10 +1,14 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
   hasPrimaryRecommendations,
   ResultContent,
 } from "@/app/p/[code]/result/page";
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ refresh: vi.fn() }),
+}));
 
 describe("result page recommendation eligibility", () => {
   it("treats a completed run with no primary labels as no feasible city", () => {
@@ -54,7 +58,7 @@ describe("result page recommendation eligibility", () => {
       createElement(ResultContent, {
         code: "ABC123",
         title: "杭州周末见面",
-        hasRun: true,
+        runStatus: "completed",
         isStale: false,
         recommendations: [
           {
@@ -78,5 +82,22 @@ describe("result page recommendation eligibility", () => {
     expect(html).toContain("按当前到达时间，没有找到全员可行城市");
     expect(html).toContain("请调整目标到达时间或会议日期后重新计算");
     expect(html).not.toContain("南京");
+  });
+
+  it("does not present an in-progress run as a completed result", () => {
+    const html = renderToStaticMarkup(
+      createElement(ResultContent, {
+        code: "ABC123",
+        title: "杭州周末见面",
+        runStatus: "running",
+        isStale: false,
+        recommendations: [],
+      }),
+    );
+
+    expect(html).toContain("正在查询票价并生成结果，请稍后自动刷新。");
+    expect(html).toContain("正在生成结果");
+    expect(html).toContain("刷新结果");
+    expect(html).not.toContain("没有找到全员可行城市");
   });
 });

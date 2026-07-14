@@ -75,19 +75,37 @@ describe("PublicPlanContent", () => {
     expect(html).not.toContain('href="/p/ABC123/result"');
   });
 
-  it("renders the result action as a link after a run exists", () => {
+  it("renders the result action as a link only after a run completes", () => {
     const html = renderToStaticMarkup(
       createElement(PublicPlanContent, {
         code: "ABC123",
         initialData: {
           ...planData,
-          latestRun: { id: "run-1" },
+          latestRun: { id: "run-1", status: "completed" },
         },
       }),
     );
 
     expect(html).toContain("看结果");
     expect(html).toContain('href="/p/ABC123/result"');
+  });
+
+  it("keeps the result action unavailable while the calculation is running", () => {
+    const html = renderToStaticMarkup(
+      createElement(PublicPlanContent, {
+        code: "ABC123",
+        initialData: {
+          ...planData,
+          latestRun: { id: "run-1", status: "running" },
+        },
+      }),
+    );
+
+    expect(html).toContain("正在查询票价并生成结果");
+    expect(html).toContain("结果生成中");
+    expect(html).toContain("正在生成结果");
+    expect(html).not.toContain('href="/p/ABC123/result"');
+    expect(html).not.toContain("已有结果");
   });
 
   it("shows a direct calculation entry for local participants when participants are full", () => {

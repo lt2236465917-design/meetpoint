@@ -18,18 +18,19 @@ describe("CreatePlanPage native input controls", () => {
     expect(pageSource).not.toContain('type="number"');
   });
 
-  it("skips the label picker handler for direct native input clicks", () => {
+  it("opens the native picker from every date and time field click", () => {
     const pageSource = readFileSync(
       path.join(process.cwd(), "src/app/create/page.tsx"),
       "utf8",
     );
 
-    expect(pageSource).toContain("event.target === input");
-    expect(pageSource).toContain(
-      "openNativePicker(event, meetingDateInputRef.current)",
-    );
+    expect(pageSource).not.toContain("event.target === input");
+    expect(pageSource).toContain("openNativePicker(event, meetingDateInputRef.current)");
     expect(pageSource).toContain(
       "openNativePicker(event, targetArrivalTimeInputRef.current)",
+    );
+    expect(pageSource).toContain(
+      "input.showPicker();\n      event.preventDefault();",
     );
   });
 });

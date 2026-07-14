@@ -1,5 +1,6 @@
 import { ResponsiveShell } from "@/components/layout/ResponsiveShell";
 import { RecommendationCard } from "@/components/result/RecommendationCard";
+import { RefreshingResultNotice } from "@/components/result/RefreshingResultNotice";
 import { Notice } from "@/components/ui/Notice";
 import { readFallbackResult } from "@/lib/fallback/mvp-store";
 import {
@@ -50,18 +51,20 @@ type ParticipantTravelOption = {
 export function ResultContent({
   code,
   title,
-  hasRun,
+  runStatus,
   isStale,
   recommendations,
 }: {
   code: string;
   title: string;
-  hasRun: boolean;
+  runStatus: "running" | "completed" | null;
   isStale: boolean;
   recommendations: Recommendation[];
 }) {
   const topRecommendations = recommendations.slice(0, 3);
   const hasPrimary = hasPrimaryRecommendations(recommendations);
+  const isCalculating = runStatus === "running";
+  const hasCompletedRun = runStatus === "completed";
 
   return (
     <ResponsiveShell
@@ -71,21 +74,26 @@ export function ResultContent({
       backLabel="返回计划页"
       aside={
         <p className="text-center text-xs text-gray-500">
-          {isStale ? "票价可能已变化" : "结果仍可参考"}
+          {isCalculating
+            ? "正在生成结果"
+            : isStale
+              ? "票价可能已变化"
+              : "结果仍可参考"}
         </p>
       }
     >
       <div className="space-y-4">
-        {!hasRun && <Notice>还没有计算结果。</Notice>}
+        {isCalculating && <RefreshingResultNotice />}
+        {!runStatus && <Notice>还没有计算结果。</Notice>}
         {isStale && <Notice>票价可能已变化，建议重新计算。</Notice>}
 
-        {hasRun && !hasPrimary && (
+        {hasCompletedRun && !hasPrimary && (
           <Notice>
             按当前到达时间，没有找到全员可行城市。请调整目标到达时间或会议日期后重新计算。
           </Notice>
         )}
 
-        {hasPrimary && topRecommendations.length > 0 && (
+        {hasCompletedRun && hasPrimary && topRecommendations.length > 0 && (
           <div className="grid gap-4">
             {topRecommendations.map((recommendation) => (
               <RecommendationCard
@@ -121,8 +129,10 @@ export default async function ResultPage({
         </ResponsiveShell>
       );
     }
+    const runStatus = data.latestRun?.status ?? null;
     const staleAfter = data.latestRun?.stale_after;
     const isStale =
+      runStatus === "completed" &&
       typeof staleAfter === "string" &&
       new Date(staleAfter).getTime() < new Date().getTime();
 
@@ -130,7 +140,7 @@ export default async function ResultPage({
       <ResultContent
         code={code}
         title={data.plan.title}
-        hasRun={Boolean(data.latestRun)}
+        runStatus={runStatus}
         isStale={isStale}
         recommendations={data.recommendations}
       />
@@ -164,14 +174,19 @@ export default async function ResultPage({
     .order("started_at", { ascending: false })
     .limit(1);
   const run = runs?.[0] ?? null;
-  const { data: recommendations } = run
+  const runStatus =
+    run?.status === "running" || run?.status === "completed"
+      ? run.status
+      : null;
+  const hasCompletedRun = runStatus === "completed";
+  const { data: recommendations } = hasCompletedRun && run
     ? await supabase
         .from("city_recommendations")
         .select("*")
         .eq("run_id", run.id)
         .order("score_balanced", { ascending: true })
     : { data: [] };
-  const { data: travelOptions } = run
+  const { data: travelOptions } = hasCompletedRun && run
     ? await supabase
         .from("travel_options")
         .select(
@@ -180,6 +195,7 @@ export default async function ResultPage({
         .eq("run_id", run.id)
     : { data: [] };
   const isStale =
+    hasCompletedRun &&
     Boolean(run?.stale_after) &&
     new Date(run.stale_after).getTime() < new Date().getTime();
 
@@ -187,7 +203,7 @@ export default async function ResultPage({
     <ResultContent
       code={code}
       title={plan.title}
-      hasRun={Boolean(run)}
+      runStatus={runStatus}
       isStale={isStale}
       recommendations={attachParticipantOptions(
         recommendations ?? [],

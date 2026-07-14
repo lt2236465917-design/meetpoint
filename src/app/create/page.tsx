@@ -115,14 +115,15 @@ export default function CreatePlanPage() {
               onChange={(event) => setTitle(event.target.value)}
             />
           </label>
-          <label
+          <div
             className="block space-y-1.5 text-sm font-medium text-gray-700"
-            onClick={(event) =>
-              openNativePicker(event, meetingDateInputRef.current)
-            }
+            onClick={(event) => {
+              openNativePicker(event, meetingDateInputRef.current);
+            }}
           >
-            <span>见面日期</span>
+            <span id="meeting-date-label">见面日期</span>
             <input
+              aria-labelledby="meeting-date-label"
               className="w-full rounded-lg border px-4 py-3 font-normal text-gray-950"
               name="meetingDate"
               type="date"
@@ -130,16 +131,17 @@ export default function CreatePlanPage() {
               value={meetingDate}
               onChange={(event) => setMeetingDate(event.target.value)}
             />
-          </label>
+          </div>
           <div className="grid grid-cols-2 gap-3">
-            <label
+            <div
               className="block space-y-1.5 text-sm font-medium text-gray-700"
-              onClick={(event) =>
-                openNativePicker(event, targetArrivalTimeInputRef.current)
-              }
+              onClick={(event) => {
+                openNativePicker(event, targetArrivalTimeInputRef.current);
+              }}
             >
-              <span>目标到达时间</span>
+              <span id="target-arrival-time-label">目标到达时间</span>
               <input
+                aria-labelledby="target-arrival-time-label"
                 className="w-full rounded-lg border px-4 py-3 font-normal text-gray-950"
                 name="targetArrivalTime"
                 type="time"
@@ -147,7 +149,7 @@ export default function CreatePlanPage() {
                 value={targetArrivalTime}
                 onChange={(event) => setTargetArrivalTime(event.target.value)}
               />
-            </label>
+            </div>
             <label className="block space-y-1.5 text-sm font-medium text-gray-700">
               <span>参与人数上限</span>
               <select
@@ -213,13 +215,19 @@ export default function CreatePlanPage() {
 }
 
 function openNativePicker(
-  event: React.MouseEvent<HTMLLabelElement>,
+  event: React.MouseEvent<HTMLDivElement>,
   input: HTMLInputElement | null,
 ) {
-  if (event.target === input) return;
   if (!input) return;
   input.focus();
-  if ("showPicker" in input) input.showPicker();
+  if ("showPicker" in input) {
+    try {
+      input.showPicker();
+      event.preventDefault();
+    } catch {
+      // Preserve the browser's own input activation as a native fallback.
+    }
+  }
 }
 
 function getPublicShareUrl(shareUrl: string): string {
