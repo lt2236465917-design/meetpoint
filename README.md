@@ -63,10 +63,11 @@ Supabase variables:
 - `NEXT_PUBLIC_SUPABASE_URL`: public Supabase project URL used by browser and server clients.
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`: public anon key for browser-side reads.
 - `SUPABASE_SERVICE_ROLE_KEY`: server-only service-role key for route handlers and background calculations.
-- `AMAP_API_KEY`: server-side Amap key for local-miss city validation; Amap-backed city-level results can be selected even when they are not in the local scoring city library.
+- `AMAP_API_KEY`: server-side Amap key for local-miss city validation; normalized city-level results can be selected even when they are absent from the built-in city library.
 - `DEEPSEEK_API_KEY`: server-side DeepSeek key for the provider-neutral Calculation/Supervisor model.
 - `DEEPSEEK_MODEL`: optional server-side model override; defaults to `deepseek-v4-flash`.
 - `FLYAI_PROBE_CLI_PATH`: optional operator-only executable override for the redacted FlyAI capability probe.
+- `PROBE_TRAVEL_DATE`: optional `YYYY-MM-DD` travel date for the operator-only provider probe; defaults to the next UTC date.
 - `TRAVEL_GATEWAY_URL`: server-side internal gateway URL used by the main-app travel provider.
 - `TRAVEL_GATEWAY_TOKEN`: server-side bearer token for the internal gateway.
 - `TRAVEL_GATEWAY_TIMEOUT_MS`: optional main-app gateway request timeout; defaults to `30000` ms.
@@ -96,7 +97,7 @@ The gateway exposes `GET /healthz` and authenticated `POST /v1/search`. It accep
 
 For operations, the default FlyAI path writes a server-only `flyai_diagnostic` log event. It contains only a hashed `routeFingerprint`, `mode`, `outcome`, top-level/data/item field-name arrays, item/normalized/dropped counts, dropped validation categories, and `cliErrorCode`; it is not an HTTP contract, cache entry, or database record, and contains no provider text, ticket facts, city names, personal data, or secrets. Live `data.itemList` entries are validated independently, so one malformed entry does not discard adjacent real routes; only a non-empty list with no valid route returns `PROVIDER_INVALID_RESPONSE`.
 
-Run `npm run probe:providers` only with operator-managed keys. It prints a single redacted JSON summary (status, latency, count, and field names), never provider payload values. The active QueryAgent keeps route/mode work bounded and never replaces missing verified quotes with estimates. Supplier coverage remains an operational acceptance question: use a new full plan and route-fingerprint diagnostics after cooldown, and do not treat `/healthz` or a single successful fare row as proof of supplier-wide authorization, quota recovery, or production readiness.
+Run `npm run probe:providers` only with operator-managed keys exported from root `.env.local` and `services/travel-provider-gateway/.env`; keep `FLYAI_API_KEY` in the gateway file rather than copying it into root configuration. `PROBE_TRAVEL_DATE` optionally fixes the probe date. The command prints a single redacted JSON summary (status, latency, count, and field names), never provider payload values. The active QueryAgent keeps route/mode work bounded and never replaces missing verified quotes with estimates. Supplier coverage remains an operational acceptance question: use a new full plan and route-fingerprint diagnostics after cooldown, and do not treat `/healthz` or a single successful fare row as proof of supplier-wide authorization, quota recovery, or production readiness.
 
 Future Fliggy/FlyAI MCP or skill integrations should be treated as gateway-side provider adapters, not main-app dependencies. Compare them against the same fixed route/mode probe set before replacing FlyAI or changing fallback behavior.
 

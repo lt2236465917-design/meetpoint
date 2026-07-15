@@ -43,6 +43,7 @@ Pre-migration `city_recommendations` and `travel_options` are historical read-on
 | `DEEPSEEK_API_KEY` | Server only | Provider-neutral Calculation/Supervisor model. |
 | `DEEPSEEK_MODEL` | Server only | Optional server-side model override; defaults to `deepseek-v4-flash`. |
 | `FLYAI_PROBE_CLI_PATH` | Server only | Optional operator-only executable override for the redacted FlyAI probe. |
+| `PROBE_TRAVEL_DATE` | Operator shell only | Optional `YYYY-MM-DD` provider-probe date; defaults to the next UTC date. |
 | `TRAVEL_GATEWAY_URL` | Server only | Internal gateway URL used by the main-app travel provider. |
 | `TRAVEL_GATEWAY_TOKEN` | Server only | Bearer token for the internal gateway. |
 | `TRAVEL_GATEWAY_TIMEOUT_MS` | Server only | Main-app gateway request timeout; defaults to `30000` ms. |
@@ -262,7 +263,19 @@ TRAVEL_GATEWAY_TOKEN=<same value as services/travel-provider-gateway/.env>
 
 If these root variables are missing, `src/lib/travel/gateway-client.ts` reports the gateway as unavailable. In the active Multi-Agent path, route tasks follow bounded retry/cooldown rules and incomplete real coverage ends without publishing a shared result; it never converts the missing evidence into an estimate. If `/v1/search` returns `404` with `PROVIDER_NO_ROUTE` or `PROVIDER_NO_TICKET`, the gateway reached FlyAI but no usable route fact was available for that route/mode. If it returns `429` with `PROVIDER_RATE_LIMITED`, reduce probe volume or wait for quota recovery; this includes FlyAI/Fliggy `MCP HTTP 403` risk-control responses such as abnormal access behavior. If it returns `503` with `PROVIDER_UNAVAILABLE` or `PROVIDER_UPSTREAM_UNAVAILABLE`, treat it as supplier instability until a redacted direct gateway probe proves otherwise. If it returns `502` with `PROVIDER_CLI_FAILED` or `PROVIDER_INVALID_RESPONSE`, inspect gateway deployment and adapter normalization before changing retry policy.
 
-The gateway contract, cache/retry/concurrency behavior, and container policy are locally verified with fixtures. The gateway executes supplier calls one at a time, joins same-key cache misses to one in-flight call, and caches only successful normalized responses. QueryAgent also serializes physical route/mode work and shares identical in-flight keys. `PROVIDER_RATE_LIMITED` never retries immediately: it applies a global 5-second cooldown, then a 15-second cooldown if the first post-cooldown supplier call is also limited; the run exposes `cooling_down` and a retry time. Retryable failures receive bounded recovery, while missing complete real coverage ends `incomplete`. Run `npm run probe:providers` from the repository root only with operator-managed keys; it outputs only redacted status/count/latency/field-name summaries. Supplier coverage is unverified until a new full plan has produced route-fingerprint diagnostics after cooldown; neither `/healthz` nor a single successful fare row proves supplier-wide authorization, quota recovery, or production readiness.
+The gateway contract, cache/retry/concurrency behavior, and container policy are locally verified with fixtures. The gateway executes supplier calls one at a time, joins same-key cache misses to one in-flight call, and caches only successful normalized responses. QueryAgent also serializes physical route/mode work and shares identical in-flight keys. `PROVIDER_RATE_LIMITED` never retries immediately: it applies a global 5-second cooldown, then a 15-second cooldown if the first post-cooldown supplier call is also limited; the run exposes `cooling_down` and a retry time. Retryable failures receive bounded recovery, while missing complete real coverage ends `incomplete`.
+
+Run the redacted provider probe only from an operator shell. Keep FlyAI credentials in the gateway environment file and export them only for the command:
+
+```bash
+set -a
+source .env.local
+source services/travel-provider-gateway/.env
+set +a
+PROBE_TRAVEL_DATE=2026-08-20 npm run probe:providers
+```
+
+The probe outputs only redacted status/count/latency/field-name summaries. It is not supplier acceptance evidence: coverage remains unverified until a new full plan has produced route-fingerprint diagnostics after cooldown, and neither `/healthz` nor a single successful fare row proves supplier-wide authorization, quota recovery, or production readiness.
 
 After a supplier cooldown, use a new full plan for a live-ticket check. A completed shared result must contain verified FlyAI routes for every participant in both schemes; any coverage gap must remain unpublished and end with retry/diagnostic guidance.
 
