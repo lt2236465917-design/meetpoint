@@ -1,5 +1,18 @@
 export type TransportMode = "flight" | "high_speed_rail" | "normal_train";
 
+export type RecommendationRunStatus =
+  | "pending"
+  | "collecting"
+  | "cooling_down"
+  | "calculating"
+  | "validating"
+  | "awaiting_host_confirmation"
+  | "completed"
+  | "incomplete"
+  | "failed";
+
+export type RecommendationSchemeKind = "saving" | "fast";
+
 export type PlanStatus =
   | "draft"
   | "collecting"

@@ -1,58 +1,45 @@
-create extension if not exists pgcrypto;
-
-create table if not exists plans (
-  id uuid primary key default gen_random_uuid(),
-  code text unique not null,
-  title text not null,
-  meeting_date date not null,
-  target_arrival_time text not null,
-  participant_limit integer not null check (participant_limit between 2 and 6),
-  status text not null default 'collecting',
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
-  last_calculated_at timestamptz
+create table participant_credentials (
+  participant_id uuid primary key references participants(id) on delete cascade,
+  edit_token_hash text not null,
+  created_at timestamptz not null default now()
 );
 
-create table if not exists participants (
-  id uuid primary key default gen_random_uuid(),
-  plan_id uuid not null references plans(id) on delete cascade,
-  name text not null,
-  departure_city_code text not null,
-  departure_city_name text not null,
-  accepted_modes text[] not null,
-  created_by_host boolean not null default false,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
+insert into participant_credentials (participant_id, edit_token_hash)
+select participants.id, participants.edit_token_hash
+from participants;
 
-create table if not exists plan_credentials (
+alter table participants
+  drop column edit_token_hash;
+
+create table plan_credentials (
   plan_id uuid primary key references plans(id) on delete cascade,
   host_token_hash text not null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
 
-create table if not exists participant_credentials (
-  participant_id uuid primary key references participants(id) on delete cascade,
-  edit_token_hash text not null,
-  created_at timestamptz not null default now()
-);
+drop index if exists recommendation_runs_one_running_per_plan;
 
-create table if not exists candidate_cities (
-  id uuid primary key default gen_random_uuid(),
-  plan_id uuid not null references plans(id) on delete cascade,
-  city_code text not null,
-  city_name text not null,
-  source text not null check (source in ('system', 'manual_add', 'manual_exclude')),
-  enabled boolean not null default true,
-  created_at timestamptz not null default now(),
-  unique(plan_id, city_code, source)
-);
+update recommendation_runs
+set
+  status = 'incomplete',
+  completed_at = coalesce(completed_at, now()),
+  error_summary = coalesce(
+    nullif(btrim(error_summary), ''),
+    'MIGRATED_LEGACY_INCOMPLETE_RUN'
+  )
+where status in ('running', 'partial');
 
-create table if not exists recommendation_runs (
-  id uuid primary key default gen_random_uuid(),
-  plan_id uuid not null references plans(id) on delete cascade,
-  status text not null check (
+alter table recommendation_runs
+  drop constraint recommendation_runs_status_check,
+  add column kind text not null default 'automatic'
+    check (kind in ('automatic', 'alternative')),
+  add column requested_city_code text,
+  add column requested_by_participant_id uuid references participants(id) on delete set null,
+  add column policy_version text not null default '2026-07-15.v1',
+  add column trace_id uuid not null default gen_random_uuid(),
+  add column retry_after timestamptz,
+  add constraint recommendation_runs_status_check check (
     status in (
       'pending',
       'collecting',
@@ -65,29 +52,13 @@ create table if not exists recommendation_runs (
       'failed'
     )
   ),
-  kind text not null default 'automatic'
-    check (kind in ('automatic', 'alternative')),
-  requested_city_code text,
-  requested_by_participant_id uuid references participants(id) on delete set null,
-  policy_version text not null default '2026-07-15.v1',
-  trace_id uuid not null default gen_random_uuid(),
-  retry_after timestamptz,
-  started_at timestamptz not null default now(),
-  completed_at timestamptz,
-  stale_after timestamptz,
-  error_summary text,
-  check (
+  add constraint recommendation_runs_kind_request_check check (
     (kind = 'automatic' and requested_city_code is null and requested_by_participant_id is null)
     or
     (kind = 'alternative' and requested_city_code is not null and requested_by_participant_id is not null)
-  )
-);
+  );
 
-create unique index if not exists recommendation_runs_one_running_per_plan
-  on recommendation_runs (plan_id)
-  where status = 'running';
-
-create unique index if not exists recommendation_runs_one_active_per_plan
+create unique index recommendation_runs_one_active_per_plan
   on recommendation_runs (plan_id)
   where status in (
     'pending',
@@ -98,63 +69,7 @@ create unique index if not exists recommendation_runs_one_active_per_plan
     'awaiting_host_confirmation'
   );
 
-create table if not exists travel_options (
-  id uuid primary key default gen_random_uuid(),
-  run_id uuid not null references recommendation_runs(id) on delete cascade,
-  participant_id uuid not null references participants(id) on delete cascade,
-  candidate_city_code text not null,
-  mode text not null,
-  source text not null check (source in ('real', 'estimated', 'unavailable')),
-  provider text not null,
-  queried_at timestamptz,
-  price_cny integer,
-  depart_at timestamptz,
-  arrive_at timestamptz,
-  duration_minutes integer,
-  wait_minutes integer,
-  is_direct boolean not null default false,
-  has_transfer boolean not null default false,
-  transfer_count integer not null default 0,
-  service_name text,
-  departure_station_name text,
-  arrival_station_name text,
-  booking_url text,
-  failure_reason text,
-  raw_payload_ref text
-);
-
-create table if not exists city_recommendations (
-  id uuid primary key default gen_random_uuid(),
-  run_id uuid not null references recommendation_runs(id) on delete cascade,
-  city_code text not null,
-  city_name text not null,
-  total_price_cny integer not null,
-  avg_price_cny integer not null,
-  total_duration_minutes integer not null,
-  fairness_gap integer not null,
-  waiting_penalty integer not null,
-  transfer_penalty integer not null,
-  estimate_penalty integer not null,
-  missing_penalty integer not null,
-  score_cheapest integer not null,
-  score_balanced integer not null,
-  score_fastest integer not null,
-  labels text[] not null default '{}',
-  explanation text,
-  risk_summary text
-);
-
-create table if not exists ai_explanations (
-  id uuid primary key default gen_random_uuid(),
-  run_id uuid not null references recommendation_runs(id) on delete cascade,
-  city_recommendation_id uuid references city_recommendations(id) on delete cascade,
-  model text not null,
-  input_hash text not null,
-  output_json jsonb not null,
-  created_at timestamptz not null default now()
-);
-
-create table if not exists route_tasks (
+create table route_tasks (
   id uuid primary key default gen_random_uuid(),
   run_id uuid not null references recommendation_runs(id) on delete cascade,
   participant_id uuid not null references participants(id) on delete cascade,
@@ -181,7 +96,7 @@ create table if not exists route_tasks (
   unique (run_id, physical_key)
 );
 
-create table if not exists verified_quotes (
+create table verified_quotes (
   id uuid primary key default gen_random_uuid(),
   route_task_id uuid not null references route_tasks(id) on delete cascade,
   run_id uuid not null references recommendation_runs(id) on delete cascade,
@@ -207,7 +122,7 @@ create table if not exists verified_quotes (
   unique (run_id, participant_id, quote_id)
 );
 
-create table if not exists agent_events (
+create table agent_events (
   id uuid primary key default gen_random_uuid(),
   run_id uuid not null references recommendation_runs(id) on delete cascade,
   trace_id uuid not null,
@@ -217,7 +132,7 @@ create table if not exists agent_events (
   created_at timestamptz not null default now()
 );
 
-create table if not exists recommendation_proposals (
+create table recommendation_proposals (
   id uuid primary key default gen_random_uuid(),
   run_id uuid not null references recommendation_runs(id) on delete cascade,
   version integer not null check (version > 0),
@@ -232,10 +147,13 @@ create table if not exists recommendation_proposals (
   created_at timestamptz not null default now(),
   reviewed_at timestamptz,
   unique (run_id, version),
-  check (status <> 'approved' or supervisor_approved_version = version)
+  check (
+    status <> 'approved'
+    or supervisor_approved_version = version
+  )
 );
 
-create table if not exists recommendation_results (
+create table recommendation_results (
   id uuid primary key default gen_random_uuid(),
   plan_id uuid not null references plans(id) on delete cascade,
   run_id uuid not null unique references recommendation_runs(id) on delete cascade,
@@ -250,11 +168,11 @@ create table if not exists recommendation_results (
   check (not is_shared or published_at is not null)
 );
 
-create unique index if not exists recommendation_results_one_shared_per_plan
+create unique index recommendation_results_one_shared_per_plan
   on recommendation_results (plan_id)
   where is_shared and superseded_at is null;
 
-create table if not exists recommendation_schemes (
+create table recommendation_schemes (
   id uuid primary key default gen_random_uuid(),
   result_id uuid not null references recommendation_results(id) on delete cascade,
   kind text not null check (kind in ('saving', 'fast')),
@@ -266,7 +184,7 @@ create table if not exists recommendation_schemes (
   unique (result_id, kind)
 );
 
-create table if not exists recommendation_scheme_routes (
+create table recommendation_scheme_routes (
   id uuid primary key default gen_random_uuid(),
   scheme_id uuid not null references recommendation_schemes(id) on delete cascade,
   participant_id uuid not null references participants(id) on delete cascade,
@@ -276,13 +194,6 @@ create table if not exists recommendation_scheme_routes (
   unique (scheme_id, verified_quote_id)
 );
 
-alter table plans enable row level security;
-alter table participants enable row level security;
-alter table candidate_cities enable row level security;
-alter table recommendation_runs enable row level security;
-alter table travel_options enable row level security;
-alter table city_recommendations enable row level security;
-alter table ai_explanations enable row level security;
 alter table plan_credentials enable row level security;
 alter table participant_credentials enable row level security;
 alter table route_tasks enable row level security;
@@ -293,23 +204,28 @@ alter table recommendation_results enable row level security;
 alter table recommendation_schemes enable row level security;
 alter table recommendation_scheme_routes enable row level security;
 
-create policy "public read plan by code" on plans for select using (true);
-create policy "public read participants" on participants for select using (true);
-create policy "public read candidate cities" on candidate_cities for select using (true);
-create policy "public read runs" on recommendation_runs for select using (true);
-create policy "public read travel options" on travel_options for select using (true);
-create policy "public read city recommendations" on city_recommendations for select using (true);
+revoke all on table plan_credentials from public, anon, authenticated;
+revoke all on table participant_credentials from public, anon, authenticated;
+revoke all on table route_tasks from public, anon, authenticated;
+revoke all on table verified_quotes from public, anon, authenticated;
+revoke all on table agent_events from public, anon, authenticated;
+revoke all on table recommendation_proposals from public, anon, authenticated;
+
 create policy "public read shared recommendation results"
-  on recommendation_results for select using (is_shared);
+  on recommendation_results for select
+  using (is_shared);
+
 create policy "public read shared recommendation schemes"
   on recommendation_schemes for select
   using (
     exists (
-      select 1 from recommendation_results
+      select 1
+      from recommendation_results
       where recommendation_results.id = recommendation_schemes.result_id
         and recommendation_results.is_shared
     )
   );
+
 create policy "public read shared recommendation scheme routes"
   on recommendation_scheme_routes for select
   using (
@@ -323,19 +239,10 @@ create policy "public read shared recommendation scheme routes"
     )
   );
 
-revoke all on table plan_credentials from public, anon, authenticated;
-revoke all on table participant_credentials from public, anon, authenticated;
-revoke all on table route_tasks from public, anon, authenticated;
-revoke all on table verified_quotes from public, anon, authenticated;
-revoke all on table agent_events from public, anon, authenticated;
-revoke all on table recommendation_proposals from public, anon, authenticated;
-
-alter publication supabase_realtime add table participants;
-alter publication supabase_realtime add table candidate_cities;
-alter publication supabase_realtime add table recommendation_runs;
-alter publication supabase_realtime add table city_recommendations;
-
-create function publish_shared_result(p_run_id uuid, p_proposal_id uuid)
+create function publish_shared_result(
+  p_run_id uuid,
+  p_proposal_id uuid
+)
 returns uuid
 language plpgsql
 security invoker
@@ -348,11 +255,15 @@ declare
   v_meeting_date date;
   v_participant_count integer;
 begin
-  select * into v_run
+  select *
+  into v_run
   from public.recommendation_runs
   where public.recommendation_runs.id = p_run_id
   for update;
-  if not found then raise exception 'run not found'; end if;
+
+  if not found then
+    raise exception 'run not found';
+  end if;
   if v_run.kind <> 'automatic' then
     raise exception 'automatic publication requires an automatic run';
   end if;
@@ -360,16 +271,19 @@ begin
     raise exception 'automatic run must be validating';
   end if;
 
-  select public.plans.meeting_date into v_meeting_date
+  select public.plans.meeting_date
+  into v_meeting_date
   from public.plans
   where public.plans.id = v_run.plan_id
   for update;
 
-  select * into v_proposal
+  select *
+  into v_proposal
   from public.recommendation_proposals
   where public.recommendation_proposals.id = p_proposal_id
     and public.recommendation_proposals.run_id = p_run_id
   for update;
+
   if not found
     or v_proposal.status <> 'approved'
     or v_proposal.policy_version <> v_run.policy_version
@@ -379,11 +293,13 @@ begin
     raise exception 'proposal is not approved for this run and policy';
   end if;
 
-  select * into v_result
+  select *
+  into v_result
   from public.recommendation_results
   where public.recommendation_results.run_id = p_run_id
     and public.recommendation_results.proposal_id = p_proposal_id
   for update;
+
   if not found
     or v_result.plan_id <> v_run.plan_id
     or v_result.is_shared
@@ -395,8 +311,10 @@ begin
   then
     raise exception 'exactly one matching result is required';
   end if;
+
   if exists (
-    select 1 from public.recommendation_results
+    select 1
+    from public.recommendation_results
     where public.recommendation_results.plan_id = v_run.plan_id
       and public.recommendation_results.is_shared
       and public.recommendation_results.superseded_at is null
@@ -404,17 +322,23 @@ begin
     raise exception 'shared result already exists';
   end if;
 
-  select count(*) into v_participant_count
+  select count(*)
+  into v_participant_count
   from public.participants
   where public.participants.plan_id = v_run.plan_id;
+
   if v_participant_count = 0
     or (select count(*) from public.recommendation_schemes where result_id = v_result.id) <> 2
     or (select count(distinct kind) from public.recommendation_schemes where result_id = v_result.id) <> 2
     or exists (
-      select 1 from public.recommendation_schemes as scheme
+      select 1
+      from public.recommendation_schemes as scheme
       where scheme.result_id = v_result.id
-        and (select count(*) from public.recommendation_scheme_routes as scheme_route
-          where scheme_route.scheme_id = scheme.id) <> v_participant_count
+        and (
+          select count(*)
+          from public.recommendation_scheme_routes as scheme_route
+          where scheme_route.scheme_id = scheme.id
+        ) <> v_participant_count
     )
     or exists (
       select 1
@@ -423,9 +347,11 @@ begin
       left join public.participants as participant
         on participant.id = scheme_route.participant_id
         and participant.plan_id = v_run.plan_id
-      left join public.verified_quotes as quote on quote.id = scheme_route.verified_quote_id
+      left join public.verified_quotes as quote
+        on quote.id = scheme_route.verified_quote_id
       where scheme.result_id = v_result.id
-        and (participant.id is null
+        and (
+          participant.id is null
           or quote.id is null
           or quote.run_id <> p_run_id
           or quote.participant_id <> scheme_route.participant_id
@@ -436,32 +362,43 @@ begin
             case when scheme.kind = 'saving' then '0' else '1' end,
             'quoteIdsByParticipant',
             scheme_route.participant_id::text
-          ])
+          ]
+        )
     )
     or exists (
-      select 1 from public.recommendation_schemes as scheme
+      select 1
+      from public.recommendation_schemes as scheme
       where scheme.result_id = v_result.id
-        and ((select count(*) from jsonb_object_keys(
-          v_proposal.output_json -> 'schemes'
-            -> (case when scheme.kind = 'saving' then 0 else 1 end)
-            -> 'quoteIdsByParticipant'
-        )) <> v_participant_count
-        or scheme.total_fare_cny is distinct from (
-          v_proposal.output_json #>> array[
-            'schemes',
-            case when scheme.kind = 'saving' then '0' else '1' end,
-            'totalFareCny'
-          ])::integer
-        or scheme.total_fare_cny <> (
-          select coalesce(sum(quote.price_cny), 0)
-          from public.recommendation_scheme_routes as scheme_route
-          join public.verified_quotes as quote on quote.id = scheme_route.verified_quote_id
-          where scheme_route.scheme_id = scheme.id)
-        or scheme.total_duration_minutes <> (
-          select coalesce(sum(quote.duration_minutes), 0)
-          from public.recommendation_scheme_routes as scheme_route
-          join public.verified_quotes as quote on quote.id = scheme_route.verified_quote_id
-          where scheme_route.scheme_id = scheme.id))
+        and (
+          (
+            select count(*)
+            from jsonb_object_keys(
+              v_proposal.output_json -> 'schemes'
+                -> (case when scheme.kind = 'saving' then 0 else 1 end)
+                -> 'quoteIdsByParticipant'
+            )
+          ) <> v_participant_count
+          or scheme.total_fare_cny is distinct from (
+            v_proposal.output_json #>> array[
+              'schemes',
+              case when scheme.kind = 'saving' then '0' else '1' end,
+              'totalFareCny'
+            ]
+          )::integer
+          or
+          scheme.total_fare_cny <> (
+            select coalesce(sum(quote.price_cny), 0)
+            from public.recommendation_scheme_routes as scheme_route
+            join public.verified_quotes as quote on quote.id = scheme_route.verified_quote_id
+            where scheme_route.scheme_id = scheme.id
+          )
+          or scheme.total_duration_minutes <> (
+            select coalesce(sum(quote.duration_minutes), 0)
+            from public.recommendation_scheme_routes as scheme_route
+            join public.verified_quotes as quote on quote.id = scheme_route.verified_quote_id
+            where scheme_route.scheme_id = scheme.id
+          )
+        )
     )
   then
     raise exception 'result evidence or participant coverage is invalid';
@@ -470,9 +407,11 @@ begin
   update public.recommendation_results
   set is_shared = true, published_at = now()
   where public.recommendation_results.id = v_result.id;
+
   update public.recommendation_runs
   set status = 'completed', completed_at = now(), retry_after = null
   where public.recommendation_runs.id = p_run_id;
+
   return v_result.id;
 end;
 $$;
@@ -495,11 +434,15 @@ declare
   v_meeting_date date;
   v_participant_count integer;
 begin
-  select * into v_run
+  select *
+  into v_run
   from public.recommendation_runs
   where public.recommendation_runs.id = p_run_id
   for update;
-  if not found then raise exception 'run not found'; end if;
+
+  if not found then
+    raise exception 'run not found';
+  end if;
   if v_run.kind <> 'alternative' then
     raise exception 'host confirmation requires an alternative run';
   end if;
@@ -507,23 +450,28 @@ begin
     raise exception 'alternative run must await host confirmation';
   end if;
 
-  select public.plans.meeting_date into v_meeting_date
+  select public.plans.meeting_date
+  into v_meeting_date
   from public.plans
   where public.plans.id = v_run.plan_id
   for update;
+
   if p_host_token_hash is null or not exists (
-    select 1 from public.plan_credentials
+    select 1
+    from public.plan_credentials
     where public.plan_credentials.plan_id = v_run.plan_id
       and public.plan_credentials.host_token_hash = p_host_token_hash
   ) then
     raise exception 'invalid host credential';
   end if;
 
-  select * into v_proposal
+  select *
+  into v_proposal
   from public.recommendation_proposals
   where public.recommendation_proposals.id = p_proposal_id
     and public.recommendation_proposals.run_id = p_run_id
   for update;
+
   if not found
     or v_proposal.status <> 'approved'
     or v_proposal.policy_version <> v_run.policy_version
@@ -533,11 +481,13 @@ begin
     raise exception 'proposal is not approved for this run and policy';
   end if;
 
-  select * into v_result
+  select *
+  into v_result
   from public.recommendation_results
   where public.recommendation_results.run_id = p_run_id
     and public.recommendation_results.proposal_id = p_proposal_id
   for update;
+
   if not found
     or v_result.plan_id <> v_run.plan_id
     or v_result.city_code <> v_run.requested_city_code
@@ -551,25 +501,35 @@ begin
     raise exception 'exactly one matching alternative result is required';
   end if;
 
-  select public.recommendation_results.id into v_current_result_id
+  select public.recommendation_results.id
+  into v_current_result_id
   from public.recommendation_results
   where public.recommendation_results.plan_id = v_run.plan_id
     and public.recommendation_results.is_shared
     and public.recommendation_results.superseded_at is null
   for update;
-  if not found then raise exception 'no shared result to replace'; end if;
 
-  select count(*) into v_participant_count
+  if not found then
+    raise exception 'no shared result to replace';
+  end if;
+
+  select count(*)
+  into v_participant_count
   from public.participants
   where public.participants.plan_id = v_run.plan_id;
+
   if v_participant_count = 0
     or (select count(*) from public.recommendation_schemes where result_id = v_result.id) <> 2
     or (select count(distinct kind) from public.recommendation_schemes where result_id = v_result.id) <> 2
     or exists (
-      select 1 from public.recommendation_schemes as scheme
+      select 1
+      from public.recommendation_schemes as scheme
       where scheme.result_id = v_result.id
-        and (select count(*) from public.recommendation_scheme_routes as scheme_route
-          where scheme_route.scheme_id = scheme.id) <> v_participant_count
+        and (
+          select count(*)
+          from public.recommendation_scheme_routes as scheme_route
+          where scheme_route.scheme_id = scheme.id
+        ) <> v_participant_count
     )
     or exists (
       select 1
@@ -578,9 +538,11 @@ begin
       left join public.participants as participant
         on participant.id = scheme_route.participant_id
         and participant.plan_id = v_run.plan_id
-      left join public.verified_quotes as quote on quote.id = scheme_route.verified_quote_id
+      left join public.verified_quotes as quote
+        on quote.id = scheme_route.verified_quote_id
       where scheme.result_id = v_result.id
-        and (participant.id is null
+        and (
+          participant.id is null
           or quote.id is null
           or quote.run_id <> p_run_id
           or quote.participant_id <> scheme_route.participant_id
@@ -591,46 +553,62 @@ begin
             case when scheme.kind = 'saving' then '0' else '1' end,
             'quoteIdsByParticipant',
             scheme_route.participant_id::text
-          ])
+          ]
+        )
     )
     or exists (
-      select 1 from public.recommendation_schemes as scheme
+      select 1
+      from public.recommendation_schemes as scheme
       where scheme.result_id = v_result.id
-        and ((select count(*) from jsonb_object_keys(
-          v_proposal.output_json -> 'schemes'
-            -> (case when scheme.kind = 'saving' then 0 else 1 end)
-            -> 'quoteIdsByParticipant'
-        )) <> v_participant_count
-        or scheme.total_fare_cny is distinct from (
-          v_proposal.output_json #>> array[
-            'schemes',
-            case when scheme.kind = 'saving' then '0' else '1' end,
-            'totalFareCny'
-          ])::integer
-        or scheme.total_fare_cny <> (
-          select coalesce(sum(quote.price_cny), 0)
-          from public.recommendation_scheme_routes as scheme_route
-          join public.verified_quotes as quote on quote.id = scheme_route.verified_quote_id
-          where scheme_route.scheme_id = scheme.id)
-        or scheme.total_duration_minutes <> (
-          select coalesce(sum(quote.duration_minutes), 0)
-          from public.recommendation_scheme_routes as scheme_route
-          join public.verified_quotes as quote on quote.id = scheme_route.verified_quote_id
-          where scheme_route.scheme_id = scheme.id))
+        and (
+          (
+            select count(*)
+            from jsonb_object_keys(
+              v_proposal.output_json -> 'schemes'
+                -> (case when scheme.kind = 'saving' then 0 else 1 end)
+                -> 'quoteIdsByParticipant'
+            )
+          ) <> v_participant_count
+          or scheme.total_fare_cny is distinct from (
+            v_proposal.output_json #>> array[
+              'schemes',
+              case when scheme.kind = 'saving' then '0' else '1' end,
+              'totalFareCny'
+            ]
+          )::integer
+          or
+          scheme.total_fare_cny <> (
+            select coalesce(sum(quote.price_cny), 0)
+            from public.recommendation_scheme_routes as scheme_route
+            join public.verified_quotes as quote on quote.id = scheme_route.verified_quote_id
+            where scheme_route.scheme_id = scheme.id
+          )
+          or scheme.total_duration_minutes <> (
+            select coalesce(sum(quote.duration_minutes), 0)
+            from public.recommendation_scheme_routes as scheme_route
+            join public.verified_quotes as quote on quote.id = scheme_route.verified_quote_id
+            where scheme_route.scheme_id = scheme.id
+          )
+        )
     )
   then
     raise exception 'result evidence or participant coverage is invalid';
   end if;
 
   update public.recommendation_results
-  set superseded_at = now(), superseded_by_result_id = v_result.id
+  set
+    superseded_at = now(),
+    superseded_by_result_id = v_result.id
   where public.recommendation_results.id = v_current_result_id;
+
   update public.recommendation_results
   set is_shared = true, published_at = now()
   where public.recommendation_results.id = v_result.id;
+
   update public.recommendation_runs
   set status = 'completed', completed_at = now(), retry_after = null
   where public.recommendation_runs.id = p_run_id;
+
   return v_result.id;
 end;
 $$;
@@ -639,5 +617,8 @@ revoke execute on function publish_shared_result(uuid, uuid)
   from public, anon, authenticated;
 revoke execute on function confirm_alternative_result(uuid, uuid, text)
   from public, anon, authenticated;
-grant execute on function publish_shared_result(uuid, uuid) to service_role;
-grant execute on function confirm_alternative_result(uuid, uuid, text) to service_role;
+
+grant execute on function publish_shared_result(uuid, uuid)
+  to service_role;
+grant execute on function confirm_alternative_result(uuid, uuid, text)
+  to service_role;
