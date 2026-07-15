@@ -28,6 +28,15 @@ describe("multi-agent migration", () => {
     }
   });
 
+  it("keeps participant tasks distinct when a supplier lookup is shared", async () => {
+    for (const path of [migrationPath, "supabase/schema.sql"]) {
+      const sql = (await readFile(path, "utf8")).toLowerCase();
+
+      expect(sql).toContain("unique (run_id, participant_id, physical_key)");
+      expect(sql).not.toContain("unique (run_id, physical_key)");
+    }
+  });
+
   it("isolates credentials and migrates legacy incomplete runs", async () => {
     const sql = (await readFile(migrationPath, "utf8")).toLowerCase();
 

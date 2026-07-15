@@ -95,7 +95,7 @@ create table route_tasks (
   error_code text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  unique (run_id, physical_key)
+  unique (run_id, participant_id, physical_key)
 );
 
 create table verified_quotes (

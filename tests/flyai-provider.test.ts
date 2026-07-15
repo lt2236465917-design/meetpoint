@@ -17,6 +17,7 @@ const input = {
   destinationCityCode: "wuhan",
   destinationCityName: "武汉",
   meetingDate: "2026-08-20",
+  departureDate: "2026-08-19",
   acceptedModes: ["flight"] as const,
 };
 
@@ -58,6 +59,16 @@ describe("FlyAITravelProvider gateway retries", () => {
       mode: "flight",
       failureReason: "PROVIDER_RATE_LIMITED",
     })]);
+  });
+
+  it("queries the explicit departure date", async () => {
+    searchGatewayMock.mockResolvedValue(gatewayResponse);
+
+    await new FlyAITravelProvider().search(input);
+
+    expect(searchGatewayMock).toHaveBeenCalledWith(expect.objectContaining({
+      departureDate: "2026-08-19",
+    }));
   });
 
   it("retries a provider timeout once before returning real rows", async () => {

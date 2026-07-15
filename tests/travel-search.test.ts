@@ -1,310 +1,103 @@
-import { describe, expect, it, vi } from "vitest";
-import { scoreCandidateCity } from "@/lib/recommendation/scoring";
-import type { TravelOption } from "@/types/domain";
-import type { TravelProvider, TravelSearchInput } from "@/lib/travel/types";
-import {
-  collectTravelOptions,
-  resolveTravelCollectionTimeoutMs,
-  travelSearchKey,
-} from "@/lib/recommendation/travel-search";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-const participants = [
-  {
-    id: "p1",
-    departureCityCode: "beijing",
-    departureCityName: "北京",
-    acceptedModes: ["flight"] as const,
-  },
-  {
-    id: "p2",
-    departureCityCode: "beijing",
-    departureCityName: "北京",
-    acceptedModes: ["flight"] as const,
-  },
-];
+const searchGatewayMock = vi.hoisted(() => vi.fn());
 
-const candidates = [{ code: "wuhan", name: "武汉" }];
-
-function option(overrides: Partial<TravelOption> = {}): TravelOption {
-  return {
-    participantId: "provider-participant",
-    candidateCityCode: "wuhan",
-    mode: "flight",
-    source: "real",
-    provider: "flyai",
-    queriedAt: "2026-07-12T08:30:00.000Z",
-    priceCny: 500,
-    departAt: "2026-08-01T00:30:00.000Z",
-    arriveAt: "2026-08-01T03:00:00.000Z",
-    durationMinutes: 150,
-    waitMinutes: null,
-    isDirect: true,
-    hasTransfer: false,
-    transferCount: 0,
-    serviceName: "MU5101",
-    bookingUrl: null,
-    failureReason: null,
-    ...overrides,
-  };
-}
-
-function providerFrom(
-  search: (input: TravelSearchInput) => Promise<TravelOption[]>,
-): TravelProvider {
-  return { search: vi.fn(search) };
-}
-
-describe("travelSearchKey", () => {
-  it("creates a versioned key from the route, date, and mode", () => {
-    expect(
-      travelSearchKey({
-        originCityCode: "beijing",
-        destinationCityCode: "wuhan",
-        meetingDate: "2026-08-01",
-        mode: "flight",
-      }),
-    ).toBe("beijing:wuhan:2026-08-01:flight:v1");
-  });
+vi.mock("@/lib/travel/gateway-client", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/travel/gateway-client")>("@/lib/travel/gateway-client");
+  return { ...actual, searchGateway: searchGatewayMock };
 });
 
-describe("collectTravelOptions", () => {
-  it("searches each identical route once and clones the facts per participant", async () => {
-    const provider = providerFrom(async () => [option()]);
+import { executeRouteTask } from "@/lib/recommendation/travel-search";
+import { GatewayClientError } from "@/lib/travel/gateway-client";
 
-    const result = await collectTravelOptions({
-      participants,
-      candidates,
-      meetingDate: "2026-08-01",
-      provider,
-      timeoutMs: 100,
+const task = {
+  participantId: "p1",
+  cityCode: "wuhan",
+  originCityCode: "beijing",
+  mode: "normal_train" as const,
+  searchDate: "2026-08-13",
+  arrivalDate: "2026-08-15",
+  physicalKey: "beijing:wuhan:normal_train:2026-08-13",
+};
+
+const quote = {
+  quoteId: `flyai:${"a".repeat(64)}`,
+  providerQuoteId: null,
+  mode: "normal_train" as const,
+  source: "real" as const,
+  provider: "flyai" as const,
+  priceCny: 220,
+  departAt: "2026-08-13T23:00:00+08:00",
+  arriveAt: "2026-08-15T00:01:00+08:00",
+  durationMinutes: 1501,
+  isDirect: true,
+  hasTransfer: false,
+  transferCount: 0,
+  serviceName: "K123",
+  departureStationName: "北京西",
+  arrivalStationName: "武汉",
+  bookingUrl: null,
+};
+
+describe("executeRouteTask", () => {
+  afterEach(() => vi.clearAllMocks());
+
+  it("returns verified overnight quotes that arrive on the selected Shanghai date", async () => {
+    searchGatewayMock.mockResolvedValue({
+      options: [quote, { ...quote, quoteId: `flyai:${"b".repeat(64)}`, mode: "flight" }],
+      queriedAt: "2026-07-15T08:00:00.000Z",
+      traceId: "57f56c4d-20f6-4a8c-bf9f-349d288e07ab",
+      cache: "miss",
     });
 
-    expect(provider.search).toHaveBeenCalledTimes(1);
-    expect(provider.search).toHaveBeenCalledWith(
-      expect.objectContaining({
+    await expect(executeRouteTask(task)).resolves.toEqual({
+      status: "success",
+      quotes: [expect.objectContaining({
+        id: quote.quoteId,
+        quoteId: quote.quoteId,
+        providerQuoteId: null,
         participantId: "p1",
-        acceptedModes: ["flight"],
-      }),
-    );
-    expect(provider.search.mock.calls[0]?.[0]).not.toHaveProperty(
-      "targetArrivalTime",
-    );
-    expect(result.options).toHaveLength(2);
-    expect(result.options.map((item) => item.participantId)).toEqual(["p1", "p2"]);
-    expect(result.options.map((item) => item.serviceName)).toEqual(["MU5101", "MU5101"]);
-    expect(result.usedFallback).toBe(false);
+        cityCode: "wuhan",
+        searchDate: "2026-08-13",
+        serviceName: "K123",
+      })],
+    });
+    expect(searchGatewayMock).toHaveBeenCalledWith(expect.objectContaining({
+      departureDate: "2026-08-13",
+      mode: "normal_train",
+    }));
   });
 
-  it("accepts a previous-day overnight route when its Shanghai arrival date matches", async () => {
-    const provider = providerFrom(async () => [
-      option({
-        serviceName: "overnight",
-        departAt: "2026-07-31T15:30:00.000Z",
-        arriveAt: "2026-07-31T18:00:00.000Z",
-      }),
-    ]);
-
-    const result = await collectTravelOptions({
-      participants: [participants[0]],
-      candidates,
-      meetingDate: "2026-08-01",
-      provider,
-      timeoutMs: 100,
+  it("returns empty for successful responses with no feasible facts", async () => {
+    searchGatewayMock.mockResolvedValue({
+      options: [{ ...quote, arriveAt: "2026-08-15T16:01:00Z" }],
+      queriedAt: "2026-07-15T08:00:00.000Z",
+      traceId: "57f56c4d-20f6-4a8c-bf9f-349d288e07ab",
+      cache: "hit",
     });
 
-    expect(result.options).toHaveLength(1);
-    expect(result.options[0]?.serviceName).toBe("overnight");
+    await expect(executeRouteTask(task)).resolves.toEqual({ status: "empty" });
   });
 
-  it("rejects a real route whose Shanghai arrival date does not match", async () => {
-    const provider = providerFrom(async () => [
-      option({
-        serviceName: "wrong-arrival-day",
-        departAt: "2026-08-01T15:30:00.000Z",
-        arriveAt: "2026-08-01T18:00:00.000Z",
-      }),
-    ]);
-
-    const result = await collectTravelOptions({
-      participants: [participants[0]],
-      candidates,
-      meetingDate: "2026-08-01",
-      provider,
-      timeoutMs: 100,
+  it("preserves retry metadata instead of estimating", async () => {
+    searchGatewayMock.mockRejectedValue(new GatewayClientError("PROVIDER_RATE_LIMITED", null, 800));
+    await expect(executeRouteTask(task)).resolves.toEqual({
+      status: "retryable_failure",
+      code: "PROVIDER_RATE_LIMITED",
+      retryAfterMs: 800,
     });
-
-    expect(result.options).toEqual([
-      expect.objectContaining({
-        source: "unavailable",
-        failureReason: "NO_FEASIBLE_SAME_DAY_ROUTE",
-      }),
-    ]);
   });
 
-  it("uses the total deadline to estimate only unfinished groups", async () => {
-    const provider = providerFrom(async () => new Promise<TravelOption[]>(() => {}));
-
-    const result = await collectTravelOptions({
-      participants: [participants[0]],
-      candidates,
-      meetingDate: "2026-08-01",
-      provider,
-      timeoutMs: 1,
+  it("maps invalid responses and CLI failures to terminal failures", async () => {
+    searchGatewayMock.mockRejectedValue(new GatewayClientError("PROVIDER_CLI_FAILED"));
+    await expect(executeRouteTask(task)).resolves.toEqual({
+      status: "terminal_failure",
+      code: "PROVIDER_CLI_FAILED",
     });
-
-    expect(result.options).toEqual([
-      expect.objectContaining({
-        participantId: "p1",
-        source: "estimated",
-        provider: "estimate",
-      }),
-    ]);
-    expect(result.usedFallback).toBe(true);
   });
 
-  it("runs a secondary lookup for unfinished groups before estimating", async () => {
-    let attempts = 0;
-    const provider = providerFrom(async () => {
-      attempts += 1;
-      if (attempts === 1) return new Promise<TravelOption[]>(() => {});
-      return [option({ serviceName: "second-try" })];
-    });
-
-    const result = await collectTravelOptions({
-      participants: [participants[0]],
-      candidates,
-      meetingDate: "2026-08-01",
-      provider,
-      timeoutMs: 1200,
-    });
-
-    expect(attempts).toBe(2);
-    expect(result.options).toEqual([
-      expect.objectContaining({
-        participantId: "p1",
-        source: "real",
-        serviceName: "second-try",
-      }),
-    ]);
-    expect(result.usedFallback).toBe(false);
-  });
-
-  it("limits provider concurrency so queued live searches do not consume request timeout", async () => {
-    let active = 0;
-    let maxActive = 0;
-    const provider = providerFrom(async (input) => {
-      active += 1;
-      maxActive = Math.max(maxActive, active);
-      await new Promise((resolve) => setTimeout(resolve, 10));
-      active -= 1;
-      return [option({ candidateCityCode: input.destinationCityCode })];
-    });
-
-    const result = await collectTravelOptions({
-      participants: [participants[0]],
-      candidates: [
-        { code: "wuhan", name: "武汉" },
-        { code: "changsha", name: "长沙" },
-        { code: "nanjing", name: "南京" },
-        { code: "hangzhou", name: "杭州" },
-        { code: "zhengzhou", name: "郑州" },
-        { code: "xian", name: "西安" },
-      ],
-      meetingDate: "2026-08-01",
-      provider,
-      timeoutMs: 200,
-    });
-
-    expect(provider.search).toHaveBeenCalledTimes(6);
-    expect(maxActive).toBe(1);
-    expect(result.options).toHaveLength(6);
-    expect(result.usedFallback).toBe(false);
-  });
-
-  it("keeps the default collection budget long enough for a serial gateway", async () => {
-    expect(resolveTravelCollectionTimeoutMs({ groupCount: 12 })).toBeGreaterThan(84_000);
-    expect(resolveTravelCollectionTimeoutMs({ groupCount: 12, explicitTimeoutMs: 100 })).toBe(100);
-  });
-
-  it("starts the total deadline when collection begins", async () => {
-    const provider = providerFrom(async () => {
-      const startedAt = Date.now();
-      while (Date.now() - startedAt < 30) {
-        // Simulate expensive synchronous provider setup before its promise settles.
-      }
-      return [option()];
-    });
-
-    const result = await collectTravelOptions({
-      participants: [participants[0]],
-      candidates,
-      meetingDate: "2026-08-01",
-      provider,
-      timeoutMs: 1,
-    });
-
-    expect(result.options).toEqual([
-      expect.objectContaining({
-        participantId: "p1",
-        source: "estimated",
-        provider: "estimate",
-      }),
-    ]);
-    expect(result.usedFallback).toBe(true);
-  });
-
-  it("does not restart the total deadline after synchronous provider setup", async () => {
-    const startedAt = Date.now();
-    const provider = providerFrom(async () => {
-      while (Date.now() - startedAt < 60) {
-        // Simulate setup that consumes the whole collection budget.
-      }
-      return new Promise<TravelOption[]>(() => {});
-    });
-
-    const result = await collectTravelOptions({
-      participants: [participants[0]],
-      candidates,
-      meetingDate: "2026-08-01",
-      provider,
-      timeoutMs: 50,
-    });
-
-    expect(Date.now() - startedAt).toBeLessThan(90);
-    expect(result.options).toEqual([
-      expect.objectContaining({
-        participantId: "p1",
-        source: "estimated",
-        provider: "estimate",
-      }),
-    ]);
-  });
-
-  it("stabilizes selected routes when the provider returns the same facts in a different order", async () => {
-    const routes = [
-      option({ serviceName: "later", priceCny: 500, durationMinutes: 150 }),
-      option({ serviceName: "earlier", priceCny: 500, durationMinutes: 150 }),
-    ];
-    const first = await collectTravelOptions({
-      participants: [participants[0]],
-      candidates,
-      meetingDate: "2026-08-01",
-      provider: providerFrom(async () => routes),
-      timeoutMs: 100,
-    });
-    const second = await collectTravelOptions({
-      participants: [participants[0]],
-      candidates,
-      meetingDate: "2026-08-01",
-      provider: providerFrom(async () => [...routes].reverse()),
-      timeoutMs: 100,
-    });
-
-    expect(first.options).toEqual(second.options);
-    expect(
-      scoreCandidateCity({ cityCode: "wuhan", cityName: "武汉", options: first.options }),
-    ).toEqual(
-      scoreCandidateCity({ cityCode: "wuhan", cityName: "武汉", options: second.options }),
-    );
+  it("maps explicit no-route supplier responses to empty", async () => {
+    searchGatewayMock.mockRejectedValue(new GatewayClientError("PROVIDER_NO_ROUTE"));
+    await expect(executeRouteTask(task)).resolves.toEqual({ status: "empty" });
   });
 });

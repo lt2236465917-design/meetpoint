@@ -289,7 +289,7 @@ create table if not exists route_tasks (
   error_code text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  unique (run_id, physical_key)
+  unique (run_id, participant_id, physical_key)
 );
 
 create table if not exists verified_quotes (
