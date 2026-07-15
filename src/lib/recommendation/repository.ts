@@ -69,7 +69,7 @@ type RouteTaskRow = {
   recommendation_runs: unknown;
 };
 
-const ROUTE_TASK_SELECT = "id,run_id,participant_id,city_code,origin_city_code,mode,search_date,physical_key,status,attempt_count,retry_after,error_code,recommendation_runs!inner(plans!inner(arrival_date))";
+const ROUTE_TASK_SELECT = "id,run_id,participant_id,city_code,origin_city_code,mode,search_date,physical_key,status,attempt_count,retry_after,error_code,recommendation_runs!inner(plans!inner(meeting_date))";
 
 function firstRelation(value: unknown): Record<string, unknown> | null {
   const relation = Array.isArray(value) ? value[0] : value;
@@ -81,10 +81,10 @@ function firstRelation(value: unknown): Record<string, unknown> | null {
 function taskArrivalDate(row: RouteTaskRow): string {
   const run = firstRelation(row.recommendation_runs);
   const plan = firstRelation(run?.plans);
-  if (typeof plan?.arrival_date !== "string") {
+  if (typeof plan?.meeting_date !== "string") {
     throw new Error(`Route task arrival date not found: ${row.id}`);
   }
-  return plan.arrival_date;
+  return plan.meeting_date;
 }
 
 function toStoredTask(row: RouteTaskRow): StoredRouteTask {
