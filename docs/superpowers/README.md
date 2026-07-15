@@ -10,4 +10,4 @@ Use this order when documents disagree:
 
 All earlier dated plans and specifications are historical implementation records. They intentionally preserve the target-time, estimated-fare, three-city, and explanation-only designs that existed when authored; they are not the current backlog or publication contract. Do not update their original checklists to represent current progress.
 
-As of 2026-07-15, Multi-Agent Tasks 1–12 are implemented. Task 13 removes the remaining legacy recommendation paths. Task 14 is the release gate for real PostgreSQL/Supabase migration smoke, supplier coverage, and real-device acceptance.
+As of 2026-07-16, Multi-Agent Tasks 1–13 are implemented. Task 14 remains blocked at the release gate for real PostgreSQL/Supabase migration smoke, a fresh persisted supplier coverage plan, and real-device acceptance; see `docs/acceptance/2026-07-15-multi-agent-live-acceptance.md`.

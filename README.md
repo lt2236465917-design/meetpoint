@@ -4,9 +4,7 @@ Mobile-first H5 MVP for choosing a fair cross-city meeting city for 2-6 people i
 
 ## Multi-Agent Migration Status
 
-The approved [2026-07-15 Multi-Agent design](docs/superpowers/specs/2026-07-15-multi-agent-recommendation-design.md) is in progress. Tasks 1–12 are implemented: plans use an arrival date and host credential, verified quote evidence and route tasks are persisted, deterministic saving/fast/unique-city policy and agent review exist, bounded runs publish through an atomic guard, the shared result renders one city with two persisted schemes, and participants can create private one-city previews that only the host can confirm as the replacement. Tasks 13–14 are not complete. The PostgreSQL/Supabase migration has not received its live smoke test. Do not describe the target experience as released.
-
-Legacy estimate and three-city modules remain only as cleanup targets for Task 13. They do not define the shared-result publication contract.
+The approved [2026-07-15 Multi-Agent design](docs/superpowers/specs/2026-07-15-multi-agent-recommendation-design.md) is implemented through Task 13: plans use an arrival date and host credential, verified quote evidence and route tasks are persisted, deterministic saving/fast/unique-city policy and agent review exist, bounded runs publish through an atomic guard, the shared result renders one city with two persisted schemes, participants can create private one-city previews that only the host can confirm as the replacement, and the legacy estimate/three-city/explanation-only paths have been removed. Task 14 live acceptance remains open. Do not describe the target experience as released until the PostgreSQL/Supabase migration smoke, fixed supplier coverage plan, and device/browser acceptance are recorded in `docs/acceptance/2026-07-15-multi-agent-live-acceptance.md`.
 
 ## Scripts
 
@@ -35,16 +33,14 @@ Legacy estimate and three-city modules remain only as cleanup targets for Task 1
 - `POST /api/plans/[code]/previews`: creates a one-city alternative run from `{ cityCode, cityName }`; requires `x-participant-token` and returns HTTP 202.
 - `GET /api/plans/[code]/previews/[runId]`: reads private progress and preview data only for the requesting participant or host; unauthorized callers receive 404.
 - `POST /api/plans/[code]/previews/[runId]/confirm`: atomically replaces the current shared result; authority comes only from `x-host-token` and repeated successful confirmation is idempotent.
-- `POST /api/plans/[code]/explain`: regenerates DeepSeek/fallback explanations for the latest run and returns `{ ok, count }`.
 
 ## Core Modules
 
 - `src/lib/city/candidate-generator.ts`: deterministic candidate-city generation from participant cities and host controls.
 - `src/lib/city/amap-client.ts` and `src/lib/city/city-provider.ts`: local-first city search with a 3-second server-side Amap validation fallback for city-level results.
 - `src/lib/fallback/mvp-store.ts`: server-side in-memory fallback store that preserves the target run states and publication guards for local tests; it never synthesizes estimates or calls suppliers.
-- `src/lib/travel/types.ts`: normalized travel-provider boundary, including gateway request/response types and query timestamps for real prices.
+- `src/lib/travel/types.ts`: strict main-app request contract for the isolated travel gateway.
 - `src/lib/travel/gateway-client.ts`: server-side authenticated gateway client used by QueryAgent to persist verified quotes without participant identity crossing the gateway boundary.
-- `src/lib/travel/flyai-provider.ts` and `estimate-provider.ts`: legacy estimate path retained only until Task 13; it does not feed the guarded shared result.
 - `services/travel-provider-gateway/`: independently runnable FlyAI gateway with strict contracts, safe CLI execution, cache, concurrency limit, retry, authenticated HTTP API, and container configuration.
 - `src/lib/recommendation/policy.ts` and `validators.ts`: deterministic direct-first saving/fast schemes, unique-city ranking, evidence replay, and bounded policy evaluation.
 - `src/lib/agent/`: provider-neutral model boundary plus Manager, Query, Calculation, Supervisor, Fallback, tracing, and bounded orchestration modules.
@@ -68,25 +64,23 @@ Supabase variables:
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`: public anon key for browser-side reads.
 - `SUPABASE_SERVICE_ROLE_KEY`: server-only service-role key for route handlers and background calculations.
 - `AMAP_API_KEY`: server-side Amap key for local-miss city validation; Amap-backed city-level results can be selected even when they are not in the local scoring city library.
-- `DEEPSEEK_API_KEY`: server-side DeepSeek key for the provider-neutral Calculation/Supervisor model and the legacy explanation endpoint.
+- `DEEPSEEK_API_KEY`: server-side DeepSeek key for the provider-neutral Calculation/Supervisor model.
 - `DEEPSEEK_MODEL`: optional server-side model override; defaults to `deepseek-v4-flash`.
 - `FLYAI_PROBE_CLI_PATH`: optional operator-only executable override for the redacted FlyAI capability probe.
 - `TRAVEL_GATEWAY_URL`: server-side internal gateway URL used by the main-app travel provider.
 - `TRAVEL_GATEWAY_TOKEN`: server-side bearer token for the internal gateway.
 - `TRAVEL_GATEWAY_TIMEOUT_MS`: optional main-app gateway request timeout; defaults to `30000` ms.
 - `AGENT_QUERY_CONCURRENCY`: optional logical QueryAgent worker count, clamped to `1..8`; defaults to `4` and does not change the gateway's physical supplier concurrency.
-- `TRAVEL_CALCULATION_TIMEOUT_MS`: legacy travel-search budget retained until Task 13; defaults to `45000` ms.
-- `TRAVEL_SECONDARY_QUERY_TIMEOUT_MS`: legacy second-pass travel-search budget retained until Task 13; defaults to `15000` ms.
 
-The provider-neutral `AgentModel` uses DeepSeek for Calculation and Supervisor when Supabase-backed runs reach complete real-quote coverage. Missing or invalid model output fails closed and cannot publish; deterministic policy replay and publication guards remain authoritative. The separate legacy explanation endpoint still uses deterministic fallback copy on DeepSeek failure until Task 13 removes that path.
+The provider-neutral `AgentModel` uses DeepSeek for Calculation and Supervisor when Supabase-backed runs reach complete real-quote coverage. Missing or invalid model output fails closed and cannot publish; deterministic policy replay and publication guards remain authoritative.
 
 For local real-ticket smoke tests, run the gateway separately and set `TRAVEL_GATEWAY_URL=http://127.0.0.1:8080` in `.env.local`. The `.env.local` `TRAVEL_GATEWAY_TOKEN` must match `services/travel-provider-gateway/.env`; otherwise QueryAgent records the gateway failure and the run cannot publish without complete verified coverage.
 
 ## Travel Provider Status
 
-Tasks 1-10 of the historical [Amap and FlyAI implementation plan](docs/superpowers/plans/2026-07-12-amap-flyai-integration.md) are complete: Amap city validation, travel query freshness persistence, the isolated gateway, and its authenticated client are fixture-verified. The active Multi-Agent path now persists only validated real options as verified quotes; retryable failures receive bounded recovery, and incomplete coverage publishes nothing. Historical estimate behavior remains only in legacy modules pending Task 13 cleanup.
+Tasks 1-10 of the historical [Amap and FlyAI implementation plan](docs/superpowers/plans/2026-07-12-amap-flyai-integration.md) are complete: Amap city validation, travel query freshness persistence, the isolated gateway, and its authenticated client are fixture-verified. The active Multi-Agent path persists only validated real options as verified quotes; retryable failures receive bounded recovery, and incomplete coverage publishes nothing.
 
-The shared result no longer reads historical `city_recommendations` or `travel_options`. It loads the guarded `recommendation_results`, `recommendation_schemes`, and selected verified-quote routes, then renders one city with saving and fast schemes. Legacy estimate/scoring modules and the legacy explanation path remain in the repository only until Task 13 removes them.
+The shared result never promotes pre-migration `city_recommendations` or `travel_options`: those rows are historical read-only data. New publication loads guarded `recommendation_results`, `recommendation_schemes`, and selected verified-quote routes, then renders one city with saving and fast schemes. A pre-migration plan without a stored host credential may still view historical data but must create a new plan to use host-confirmed alternatives.
 
 The gateway has its own environment file at `services/travel-provider-gateway/.env.example` and commands:
 
@@ -102,7 +96,7 @@ The gateway exposes `GET /healthz` and authenticated `POST /v1/search`. It accep
 
 For operations, the default FlyAI path writes a server-only `flyai_diagnostic` log event. It contains only a hashed `routeFingerprint`, `mode`, `outcome`, top-level/data/item field-name arrays, item/normalized/dropped counts, dropped validation categories, and `cliErrorCode`; it is not an HTTP contract, cache entry, or database record, and contains no provider text, ticket facts, city names, personal data, or secrets. Live `data.itemList` entries are validated independently, so one malformed entry does not discard adjacent real routes; only a non-empty list with no valid route returns `PROVIDER_INVALID_RESPONSE`.
 
-Run `npm run probe:providers` only with operator-managed keys. It prints a single redacted JSON summary (status, latency, count, and field names), never provider payload values. The active QueryAgent keeps route/mode work bounded and never replaces missing verified quotes with estimates. The older travel-search second pass and rate-limit-to-estimate behavior remain isolated legacy code until Task 13 removes them; they are not the shared-result contract. Supplier coverage remains an operational acceptance question: use a new full plan and route-fingerprint diagnostics after cooldown, and do not treat `/healthz` or a single successful fare row as proof of supplier-wide authorization, quota recovery, or production readiness.
+Run `npm run probe:providers` only with operator-managed keys. It prints a single redacted JSON summary (status, latency, count, and field names), never provider payload values. The active QueryAgent keeps route/mode work bounded and never replaces missing verified quotes with estimates. Supplier coverage remains an operational acceptance question: use a new full plan and route-fingerprint diagnostics after cooldown, and do not treat `/healthz` or a single successful fare row as proof of supplier-wide authorization, quota recovery, or production readiness.
 
 Future Fliggy/FlyAI MCP or skill integrations should be treated as gateway-side provider adapters, not main-app dependencies. Compare them against the same fixed route/mode probe set before replacing FlyAI or changing fallback behavior.
 
@@ -131,7 +125,7 @@ For UI changes, also verify a mobile viewport around `390x844` and a desktop vie
 
 ## Manual Handoff Smoke
 
-After the automated verification above, run this browser smoke before Tasks 13–14:
+After the automated verification above, run this browser smoke for Task 14:
 
 1. Create a plan.
 2. Return to `/` and confirm the created plan appears in recent meeting records on the same device.

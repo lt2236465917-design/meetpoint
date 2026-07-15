@@ -30,6 +30,8 @@ Fallback data is cleared when the dev server restarts. Use Supabase variables fo
 
 Recent meeting records are browser-local convenience data stored in `localStorage`. They help the same device return to plans that were created, opened, or joined, refresh when the user returns to a cached homepage tab, and are not shared across devices or treated as a security boundary.
 
+Pre-migration `city_recommendations` and `travel_options` are historical read-only data. They cannot become new published results. A pre-migration plan without a stored host credential may still view history but must create a new plan to use private previews and host confirmation.
+
 ## Environment Variables
 
 | Variable | Scope | Purpose |
@@ -38,15 +40,13 @@ Recent meeting records are browser-local convenience data stored in `localStorag
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Browser and server | Public anon key for browser reads. |
 | `SUPABASE_SERVICE_ROLE_KEY` | Server only | Service-role key for route handlers and calculations. |
 | `AMAP_API_KEY` | Server only | Local-miss Amap city validation for city-level selectable results. |
-| `DEEPSEEK_API_KEY` | Server only | Provider-neutral Calculation/Supervisor model and the legacy explanation endpoint. |
+| `DEEPSEEK_API_KEY` | Server only | Provider-neutral Calculation/Supervisor model. |
 | `DEEPSEEK_MODEL` | Server only | Optional server-side model override; defaults to `deepseek-v4-flash`. |
 | `FLYAI_PROBE_CLI_PATH` | Server only | Optional operator-only executable override for the redacted FlyAI probe. |
 | `TRAVEL_GATEWAY_URL` | Server only | Internal gateway URL used by the main-app travel provider. |
 | `TRAVEL_GATEWAY_TOKEN` | Server only | Bearer token for the internal gateway. |
 | `TRAVEL_GATEWAY_TIMEOUT_MS` | Server only | Main-app gateway request timeout; defaults to `30000` ms. |
 | `AGENT_QUERY_CONCURRENCY` | Server only | Logical QueryAgent workers, clamped to `1..8`; defaults to `4` without increasing gateway supplier concurrency. |
-| `TRAVEL_CALCULATION_TIMEOUT_MS` | Server only | Legacy travel-search budget retained until Task 13; defaults to `45000` ms. |
-| `TRAVEL_SECONDARY_QUERY_TIMEOUT_MS` | Server only | Legacy second-pass travel-search budget retained until Task 13; defaults to `15000` ms. |
 
 ## API Quick Reference
 
@@ -150,6 +150,8 @@ Both paths return HTTP 202 and do not wait for supplier work. The durable orches
 
 Requires `x-participant-token`. Each request performs at most one state transition or one bounded query batch, then returns `{ runId, status, traceId, retryAt, diagnosticCode }`. The durable path persists an advance lease so repeated or concurrent requests return the current state rather than duplicate supplier work.
 
+Run statuses are `pending`, `collecting`, `cooling_down`, `calculating`, `validating`, `awaiting_host_confirmation`, `completed`, `incomplete`, and `failed`. Only the `completed` run that owns the current non-superseded shared result may expose scheme cards. Before a shared result exists, every other automatic status exposes progress, retry, or diagnostic guidance instead.
+
 ### Create a Private Alternative Preview
 
 `POST /api/plans/[code]/previews`
@@ -176,23 +178,6 @@ Requires either the requesting participant's `x-participant-token` or the plan's
 `POST /api/plans/[code]/previews/[runId]/confirm`
 
 Requires `x-host-token`; participant tokens, query parameters, request bodies, browser-local roles, and client-supplied proposal IDs are not confirmation authority. The server selects the exact Supervisor-approved proposal for the run and atomically replaces the shared result. A repeated successful confirmation is idempotent and returns the completed result without creating another replacement.
-
-### Regenerate Recommendation Explanations
-
-`POST /api/plans/[code]/explain`
-
-Regenerates explanations for the latest recommendation run. The route uses DeepSeek when `DEEPSEEK_API_KEY` is configured and deterministic fallback copy otherwise.
-
-The server requests exactly four Chinese JSON fields: `short_reason`, `risk_badges`, `share_summary`, and `detail_explanation`. Unknown fields, blank values, or values without a Han character are rejected. Each provider attempt has a 15-second timeout and the SDK retries at most once; missing credentials, timeouts, request failures, empty content, malformed JSON, and schema-invalid output all use deterministic fallback copy without failing the endpoint.
-
-Returns:
-
-```json
-{
-  "ok": true,
-  "count": 3
-}
-```
 
 ## Error Codes
 
@@ -263,8 +248,8 @@ npm run dev
 The gateway defaults to `PORT=8080`, matching the documented container port; an explicitly supplied `PORT` overrides it.
 
 - `GET /healthz` returns `{ "status": "ok" }` without authentication or secrets. A successful health response proves only that the gateway process is reachable; it does not prove FlyAI quota, risk-control clearance, or real-ticket availability.
-- `POST /v1/search` requires `Authorization: Bearer <TRAVEL_GATEWAY_TOKEN>` and a strict normalized request. It returns normalized `options` and an ISO `queriedAt`; the gateway's own cache remains an internal detail.
-- Stable gateway errors are `UNAUTHORIZED`, `INVALID_REQUEST`, `PROVIDER_TIMEOUT`, `PROVIDER_UNAVAILABLE`, `PROVIDER_NO_ROUTE`, `PROVIDER_NO_TICKET`, `PROVIDER_RATE_LIMITED`, `PROVIDER_UPSTREAM_UNAVAILABLE`, `PROVIDER_CLI_FAILED`, `PROVIDER_INVALID_RESPONSE`, and `INTERNAL_ERROR`. The service does not return provider exception text or raw response bodies.
+- `POST /v1/search` requires `Authorization: Bearer <TRAVEL_GATEWAY_TOKEN>` and a strict normalized request with `originCityCode`, `originCityName`, `destinationCityCode`, `destinationCityName`, `departureDate`, and `mode`. It returns normalized real `options`, ISO `queriedAt`, `traceId`, and cache status. Each option carries a stable gateway-issued `quoteId` plus nullable upstream-native `providerQuoteId`; the gateway's own cache remains an internal detail.
+- Stable gateway errors are `UNAUTHORIZED`, `INVALID_REQUEST`, `PROVIDER_TIMEOUT`, `PROVIDER_UNAVAILABLE`, `PROVIDER_NO_ROUTE`, `PROVIDER_NO_TICKET`, `PROVIDER_RATE_LIMITED`, `PROVIDER_UPSTREAM_UNAVAILABLE`, `PROVIDER_CLI_FAILED`, `PROVIDER_INVALID_RESPONSE`, and `INTERNAL_ERROR`. Every error response carries `traceId` and nullable `retryAfterMs`; only `PROVIDER_RATE_LIMITED` may return a non-null retry delay. The service does not return provider exception text or raw response bodies.
 
 The default FlyAI adapter additionally writes a server-only `flyai_diagnostic` event. Its allowed fields are `routeFingerprint`, `mode`, `outcome`, top-level/data/item field-name arrays, item/normalized/dropped counts, dropped validation categories, and `cliErrorCode`; it is neither an HTTP response, cache value, nor database record. It never includes supplier text, cities, fares, service numbers, times, URLs, identities, or secrets. A live `data.itemList` validates each item independently: a malformed item is dropped without losing a valid sibling, and only a non-empty list with no usable item becomes `PROVIDER_INVALID_RESPONSE`.
 
@@ -275,7 +260,7 @@ TRAVEL_GATEWAY_URL=http://127.0.0.1:8080
 TRAVEL_GATEWAY_TOKEN=<same value as services/travel-provider-gateway/.env>
 ```
 
-If these root variables are missing, `src/lib/travel/gateway-client.ts` reports the gateway as unavailable. In the active Multi-Agent path, route tasks follow bounded retry/cooldown rules and incomplete real coverage ends without publishing a shared result; it never converts the missing evidence into an estimate. If `/v1/search` returns `404` with `PROVIDER_NO_ROUTE` or `PROVIDER_NO_TICKET`, the gateway reached FlyAI but no usable route fact was available for that route/mode. If it returns `429` with `PROVIDER_RATE_LIMITED`, reduce probe volume or wait for quota recovery; this includes FlyAI/Fliggy `MCP HTTP 403` risk-control responses such as abnormal access behavior. If it returns `503` with `PROVIDER_UNAVAILABLE` or `PROVIDER_UPSTREAM_UNAVAILABLE`, treat it as supplier instability until a redacted direct gateway probe proves otherwise. If it returns `502` with `PROVIDER_CLI_FAILED` or `PROVIDER_INVALID_RESPONSE`, inspect gateway deployment and adapter normalization before changing retry policy. Legacy estimate modules still retain stable failure reasons but are not part of the guarded shared-result path and remain scheduled for Task 13 removal.
+If these root variables are missing, `src/lib/travel/gateway-client.ts` reports the gateway as unavailable. In the active Multi-Agent path, route tasks follow bounded retry/cooldown rules and incomplete real coverage ends without publishing a shared result; it never converts the missing evidence into an estimate. If `/v1/search` returns `404` with `PROVIDER_NO_ROUTE` or `PROVIDER_NO_TICKET`, the gateway reached FlyAI but no usable route fact was available for that route/mode. If it returns `429` with `PROVIDER_RATE_LIMITED`, reduce probe volume or wait for quota recovery; this includes FlyAI/Fliggy `MCP HTTP 403` risk-control responses such as abnormal access behavior. If it returns `503` with `PROVIDER_UNAVAILABLE` or `PROVIDER_UPSTREAM_UNAVAILABLE`, treat it as supplier instability until a redacted direct gateway probe proves otherwise. If it returns `502` with `PROVIDER_CLI_FAILED` or `PROVIDER_INVALID_RESPONSE`, inspect gateway deployment and adapter normalization before changing retry policy.
 
 The gateway contract, cache/retry/concurrency behavior, and container policy are locally verified with fixtures. The gateway executes supplier calls one at a time, joins same-key cache misses to one in-flight call, and caches only successful normalized responses. QueryAgent also serializes physical route/mode work and shares identical in-flight keys. `PROVIDER_RATE_LIMITED` never retries immediately: it applies a global 5-second cooldown, then a 15-second cooldown if the first post-cooldown supplier call is also limited; the run exposes `cooling_down` and a retry time. Retryable failures receive bounded recovery, while missing complete real coverage ends `incomplete`. Run `npm run probe:providers` from the repository root only with operator-managed keys; it outputs only redacted status/count/latency/field-name summaries. Supplier coverage is unverified until a new full plan has produced route-fingerprint diagnostics after cooldown; neither `/healthz` nor a single successful fare row proves supplier-wide authorization, quota recovery, or production readiness.
 
@@ -299,4 +284,3 @@ Use these checks after wiring FlyAI/Fliggy or another ticket source and Amap cit
 1. Store a valid `DEEPSEEK_API_KEY` only in `.env.local` and optionally set `DEEPSEEK_MODEL`; never paste the key into commands, logs, or documentation.
 2. For the active Supabase-backed flow, advance a fully covered run through `calculating` and `validating`; confirm Calculation and Supervisor outputs reference only persisted verified quote IDs and the publication guard replays the proposal before `completed`.
 3. Remove or invalidate the key and repeat with a new run; confirm it fails closed with `AGENT_MODEL_UNAVAILABLE` or a model validation diagnostic and publishes no result.
-4. The legacy `POST /api/plans/[code]/explain` endpoint still falls back to deterministic Chinese copy on provider failure without changing legacy scores or routes. Treat it as a compatibility path scheduled for Task 13 removal, not as the Multi-Agent publication flow.
