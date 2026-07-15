@@ -4,7 +4,7 @@ Mobile-first H5 MVP for choosing a fair cross-city meeting city for 2-6 people i
 
 ## Multi-Agent Migration Status
 
-The approved [2026-07-15 Multi-Agent design](docs/superpowers/specs/2026-07-15-multi-agent-recommendation-design.md) is in progress. Tasks 1–10 are implemented in code: plans use an arrival date and host credential, verified quote evidence and route tasks are persisted, deterministic saving/fast/unique-city policy and agent review exist, and bounded runs publish through an atomic guard. Task 10 still needs its independent review; Tasks 11–14 are not complete. The PostgreSQL/Supabase migration has not received its live smoke test. Do not describe the target experience as released.
+The approved [2026-07-15 Multi-Agent design](docs/superpowers/specs/2026-07-15-multi-agent-recommendation-design.md) is in progress. Tasks 1–10 are implemented and independently reviewed: plans use an arrival date and host credential, verified quote evidence and route tasks are persisted, deterministic saving/fast/unique-city policy and agent review exist, and bounded runs publish through an atomic guard. Tasks 11–14 are not complete. The PostgreSQL/Supabase migration has not received its live smoke test. Do not describe the target experience as released.
 
 The legacy MVP details below apply only to paths not yet migrated, especially the result UI and estimate-based travel presentation. They are not the target publication contract.
 

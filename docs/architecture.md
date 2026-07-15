@@ -2,7 +2,7 @@
 
 This document is the stable technical map for the running system. Detailed task history lives in git commits and `docs/superpowers/plans/`.
 
-The approved next product and Multi-Agent architecture is documented separately in `docs/superpowers/specs/2026-07-15-multi-agent-recommendation-design.md`. Tasks 1–10 are implemented; Task 10 still needs independent review, while Tasks 11–14 remain. The PostgreSQL/Supabase migration and real supplier/device acceptance have not run. The result UI is still legacy and cannot validate the target publication contract.
+The approved next product and Multi-Agent architecture is documented separately in `docs/superpowers/specs/2026-07-15-multi-agent-recommendation-design.md`. Tasks 1–10 are implemented and independently reviewed; Tasks 11–14 remain. The PostgreSQL/Supabase migration and real supplier/device acceptance have not run. The result UI is still legacy and cannot validate the target publication contract.
 
 ## Runtime Shape
 

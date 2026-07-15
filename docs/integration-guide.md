@@ -200,7 +200,7 @@ Use these checks after layout or component changes:
 3. Open `/p/[code]`, `/p/[code]/join`, and `/p/[code]/result` on desktop; confirm each route stays in the centered H5 canvas and does not switch to multi-column desktop layout.
 4. On `/p/[code]/join`, type a departure city, confirm city candidates do not cover the transport-mode buttons, then select a city and confirm the candidates disappear.
 5. Confirm no browser or framework overlay visually covers the right side of the app. If a red overlay appears while the DOM has no app-level fixed red element, check browser extensions before changing app CSS.
-6. On `/create` in a WebKit/Chrome browser, click the middle of each date and time white field, then confirm the platform-native picker opens and the selected value appears. The native picker controls its own closing behavior.
+6. On `/create` in a WebKit/Chrome browser, click the middle of the “计划到达日期” field, then confirm the platform-native date picker opens and the selected value appears. The native picker controls its own closing behavior.
 7. On `/create`, click "参与人数上限". Confirm the app-styled 2–6 person panel opens, and selecting one option updates the field and closes the panel.
 
 ## Gateway Setup And Contract (internal service)
