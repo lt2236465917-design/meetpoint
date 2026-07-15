@@ -30,7 +30,7 @@ The approved product and Multi-Agent architecture is documented separately in `d
 | Route | Method | Purpose | Auth |
 | --- | --- | --- | --- |
 | `/api/plans` | `POST` | Create a plan from title, arrival date, and participant limit; return a one-time host token. | None |
-| `/api/plans/[code]` | `GET` | Read public plan data, progress, and a shared result only after completion. | None |
+| `/api/plans/[code]` | `GET` | Read public plan data and the current shared-result run, or latest automatic progress before any shared result exists. | None |
 | `/api/plans/[code]/participants` | `POST` | Submit participant city and transport preferences. | None |
 | `/api/plans/[code]/candidates` | `GET` | Read stored candidate-city controls. | None |
 | `/api/plans/[code]/candidates` | `POST` | Currently unavailable for manual edits. | None |
@@ -90,10 +90,10 @@ In fallback mode, the same logical records are kept in process memory instead of
 | `services/travel-provider-gateway/src/contracts.ts` | Strict normalized gateway request, option, response, and stable error contracts. |
 | `services/travel-provider-gateway/src/flyai-adapter.ts` | Safe FlyAI CLI adapter with fixture and live `data.itemList` response normalization. |
 | `services/travel-provider-gateway/src/service.ts`, `src/server.ts` | Cache/retry/concurrency orchestration and authenticated internal HTTP service. |
-| `src/lib/recommendation/scoring.ts` | Deterministic scoring and primary recommendation selection from one selected route per participant for each candidate city. |
-| `src/lib/recommendation/calculate-run.ts` | Calculation orchestration, explanation generation, and Supabase persistence. |
+| `src/lib/recommendation/scoring.ts` | Legacy weighted three-city scoring retained only for Task 13 removal; it must not feed the guarded shared result. |
+| `src/lib/recommendation/calculate-run.ts` | Compatibility entry that dispatches automatic run creation to Supabase or the fallback store; scheduled for Task 13 cleanup. |
 | `src/lib/ai/deepseek-client.ts` | Server-only DeepSeek client and model configuration; each SDK attempt has a 15-second timeout and at most one retry. |
-| `src/lib/ai/recommendation-explainer.ts` | Strict Chinese JSON prompt, validation, and deterministic fallback for recommendation explanations. |
+| `src/lib/ai/recommendation-explainer.ts` | Legacy explanation-only prompt and fallback retained only for Task 13 removal. |
 | `src/lib/ui/meeting-history.ts` | Browser-local recent-record parsing, dedupe, snapshot caching, and storage helpers. |
 
 ## Agent And Legacy Explanation Flows
@@ -110,6 +110,8 @@ In fallback mode, the same logical records are kept in process memory instead of
 - Participant edit tokens are stored as hashes only.
 - Calculation requires a participant edit token from a participant in the plan, and the server checks that the participant limit has been reached before calculating.
 - Local participant permissions are a same-device convenience and not an auth boundary; server-side calculation still verifies the participant edit token hash.
+- Private previews are readable only by their requesting participant or the host. Unauthorized tokens and plan/run mismatches return the same 404 response.
+- Preview confirmation accepts authority only from `x-host-token` and publishes the server-selected exact Supervisor-approved proposal; participant tokens and client-supplied proposal IDs cannot authorize or alter replacement.
 - Ticket normalization, coverage checks, policy replay, evidence validation, and publication guards remain deterministic. An agent may propose only from verified quote IDs; it cannot invent or mutate supplier facts, and publication replays the policy deterministically.
 - Result recommendations are plan-level shared decisions, not personalized rankings. The UI should surface team total fare and per-person route choices instead of average fare.
 - Fallback mode is local-only and must not be treated as durable storage.

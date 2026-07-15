@@ -11,7 +11,9 @@ This project is a mobile-first Web H5 app for multi-person cross-city meeting pl
 - Keep supplier facts, fare arithmetic, date filtering, evidence validation, and publication guardrails deterministic. The Calculation Agent may choose routes and the winning city only from verified quote IDs; see `docs/superpowers/specs/2026-07-15-multi-agent-recommendation-design.md`.
 - Treat results as shared team decisions: publish one city with saving and fast schemes, show per-participant travel details, and do not use average fare as a UI decision metric.
 - Do not publish estimated fares or incomplete participant coverage. Legacy estimate modules remain only for removal in Task 13 and must not feed the shared result.
-- Expose the shared result and its saving/fast scheme cards only after the latest run is `completed`; all other run states render progress, retry, or diagnostic guidance without result cards.
+- Expose saving/fast scheme cards only from the `completed` run that owns the current non-superseded shared result. Before any shared result exists, all non-completed automatic run states render progress, retry, or diagnostic guidance; a pending private preview never hides or replaces the current shared city.
+- Keep alternative previews private to their requesting participant and the host. Unauthorized reads and plan/run mismatches return 404.
+- Confirm a preview only from a valid `x-host-token` and the server-selected exact Supervisor-approved proposal. Never derive host authority from participant tokens, request bodies, query parameters, browser-local roles, or client-supplied proposal IDs.
 - Keep the agent model provider-neutral behind an `AgentModel` boundary. Calculation and Supervisor may use DeepSeek without authority to invent or mutate supplier facts; deterministic validators and publication guards remain decisive.
 - Keep secrets in server-side environment variables only.
 - Keep browser Supabase access limited to the anon client; use the service-role client only in server-side code.
@@ -38,5 +40,6 @@ This project is a mobile-first Web H5 app for multi-person cross-city meeting pl
 - `src/components/result/`: shared one-city/two-scheme rendering and bounded run-progress feedback; render persisted scheme routes directly and never reselect routes client-side.
 - `docs/architecture.md`: stable technical map for routes, data flow, modules, and security boundaries.
 - `docs/integration-guide.md`: stable setup, API, error-code, and smoke-test reference for handoff.
+- `docs/superpowers/README.md`: authority order for current specifications, plans, the recovery ledger, and historical records.
 - `docs/superpowers/specs/`: approved product and technical design specs.
 - `docs/superpowers/plans/`: implementation plans derived from approved specs.

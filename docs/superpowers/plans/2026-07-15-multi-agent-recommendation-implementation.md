@@ -1,5 +1,7 @@
 # Multi-Agent Unique-City Recommendation Implementation Plan
 
+**Execution status (2026-07-15):** Tasks 1–12 are implemented and recorded in `.superpowers/sdd/progress.md`. Task 13 legacy-path removal and Task 14 live acceptance remain. The checkboxes below preserve the reviewed execution sequence; the ledger is the recovery authority.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Replace the current target-time, estimated-fallback, three-city flow with an auditable Multi-Agent workflow that publishes one city with exactly one saving scheme and one fast scheme only from complete verified real quotes.

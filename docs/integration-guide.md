@@ -88,7 +88,7 @@ Returns:
 }
 ```
 
-`latestRun` exposes `{ runId, status, traceId, pendingGroups, retryAt, diagnosticCode }`. Any non-`"completed"` status is in progress, incomplete, or failed—not a result. `latestSharedResult` is present only when the latest run is `"completed"`.
+`latestRun` exposes `{ status, traceId, pendingGroups, retryAt, diagnosticCode }`. When a current shared result exists, the public projection stays anchored to the completed run that owns it; a pending private alternative run never hides or replaces that city. Without a shared result, `latestRun` reports the latest automatic run. `latestSharedResult` is present only when its owning run is `"completed"`.
 
 ### Search Cities
 
@@ -150,6 +150,33 @@ Both paths return HTTP 202 and do not wait for supplier work. The durable orches
 
 Requires `x-participant-token`. Each request performs at most one state transition or one bounded query batch, then returns `{ runId, status, traceId, retryAt, diagnosticCode }`. The durable path persists an advance lease so repeated or concurrent requests return the current state rather than duplicate supplier work.
 
+### Create a Private Alternative Preview
+
+`POST /api/plans/[code]/previews`
+
+Requires `x-participant-token` from a participant in this plan and a canonical built-in city pair:
+
+```json
+{
+  "cityCode": "hangzhou",
+  "cityName": "杭州"
+}
+```
+
+Returns HTTP 202 with the private run ID and initial status. The route-task matrix contains only the requested city, follows the normal verified-quote and review pipeline, and stops at `awaiting_host_confirmation` instead of changing the shared result.
+
+### Read a Private Alternative Preview
+
+`GET /api/plans/[code]/previews/[runId]`
+
+Requires either the requesting participant's `x-participant-token` or the plan's `x-host-token`. It returns private run progress and, after approval, the one-city preview result. Other participants, missing or invalid credentials, and plan/run mismatches all receive 404 `PREVIEW_NOT_FOUND`, preventing the endpoint from revealing whether a private run exists.
+
+### Confirm a Private Alternative Preview
+
+`POST /api/plans/[code]/previews/[runId]/confirm`
+
+Requires `x-host-token`; participant tokens, query parameters, request bodies, browser-local roles, and client-supplied proposal IDs are not confirmation authority. The server selects the exact Supervisor-approved proposal for the run and atomically replaces the shared result. A repeated successful confirmation is idempotent and returns the completed result without creating another replacement.
+
 ### Regenerate Recommendation Explanations
 
 `POST /api/plans/[code]/explain`
@@ -177,6 +204,12 @@ Returns:
 | `PARTICIPANT_TOKEN_REQUIRED` | Calculation was called without `x-participant-token`. |
 | `INVALID_PARTICIPANT_TOKEN` | The participant token does not belong to this plan. |
 | `PARTICIPANT_LIMIT_NOT_REACHED` | The plan is not full yet, so calculation is not allowed. |
+| `UNSUPPORTED_CITY` | The requested preview city is not a canonical supported city. |
+| `PREVIEW_NOT_FOUND` | The private preview is absent, belongs to another plan, or is not visible to this credential. |
+| `HOST_TOKEN_REQUIRED` | Preview confirmation was called without `x-host-token`. |
+| `INVALID_HOST_TOKEN` | The host token does not belong to this plan. |
+| `APPROVED_PROPOSAL_NOT_FOUND` | No exact Supervisor-approved proposal is available for confirmation. |
+| `HOST_CONFIRMATION_FAILED` | Atomic shared-result replacement failed after host authorization. |
 | `CANDIDATE_EDITING_UNAVAILABLE` | Manual candidate editing is disabled in the current flow. |
 | `CALCULATION_FAILED` | Recommendation calculation failed. |
 | `CALCULATION_IN_PROGRESS` | A calculation for this plan is already running; clients should wait for polling refresh. |
