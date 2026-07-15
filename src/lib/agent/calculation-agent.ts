@@ -1,10 +1,16 @@
 import {
   calculationOutputSchema,
   POLICY_VERSION,
+  type CalculationOutput,
   type ValidationDecision,
   type VerifiedQuote,
 } from "@/lib/agent/contracts";
 import type { AgentModel } from "@/lib/agent/model";
+import {
+  isTrustedAgentModel,
+  recordAgentEvent,
+  type AgentEventRecorder,
+} from "@/lib/agent/trace";
 import {
   buildCalculationSystemPrompt,
   validateExplanationFacts,
@@ -34,6 +40,7 @@ export type CalculationSnapshot = {
 export type CalculationProposalStore = Pick<AgentProposalRepository, "saveProposal">;
 
 type CalculationDependencies = CalculationProposalStore & {
+  recordEvent?: AgentEventRecorder;
   validatePolicy?: (input: ValidateRecommendationPolicyInput) => ValidationDecision;
   validateExplanation?: (
     explanationZh: string,
@@ -83,6 +90,7 @@ function modelInput(snapshot: CalculationSnapshot): Record<string, unknown> {
 export class CalculationAgent {
   private readonly validatePolicy: (input: ValidateRecommendationPolicyInput) => ValidationDecision;
   private readonly validateExplanation: NonNullable<CalculationDependencies["validateExplanation"]>;
+  private readonly recordEvent: AgentEventRecorder;
 
   constructor(
     private readonly model: AgentModel,
@@ -90,47 +98,110 @@ export class CalculationAgent {
   ) {
     this.validatePolicy = dependencies.validatePolicy ?? validateRecommendationPolicy;
     this.validateExplanation = dependencies.validateExplanation ?? validateExplanationFacts;
+    this.recordEvent = dependencies.recordEvent ?? recordAgentEvent;
   }
 
   async propose(snapshot: CalculationSnapshot) {
     if (snapshot.policyVersion !== POLICY_VERSION) {
       throw new Error("Unsupported recommendation policy version");
     }
+    await this.record("agent_started", "running", snapshot, {
+      counts: {
+        candidateCount: snapshot.cityInputs.length,
+        quoteCount: snapshot.cityInputs.reduce((count, city) => count + city.quotes.length, 0),
+      },
+    });
     if (snapshot.missingTaskIds.length > 0) {
+      await this.record("agent_completed", "completed", snapshot, {
+        counts: { missingTaskCount: snapshot.missingTaskIds.length },
+      });
       return calculationOutputSchema.parse({
         status: "incomplete",
         missingTaskIds: [...snapshot.missingTaskIds],
       });
     }
 
-    const output = calculationOutputSchema.parse(await this.model.generate({
-      agent: "calculation",
-      system: buildCalculationSystemPrompt({
-        quoteIds: snapshot.cityInputs.flatMap((city) => city.quotes.map((quote) => quote.quoteId)),
+    let output: CalculationOutput;
+    try {
+      await this.recordModel("model_requested", "running", snapshot);
+      output = calculationOutputSchema.parse(await this.model.generate({
+        agent: "calculation",
+        system: buildCalculationSystemPrompt({
+          quoteIds: snapshot.cityInputs.flatMap((city) => city.quotes.map((quote) => quote.quoteId)),
+          policyVersion: snapshot.policyVersion,
+        }),
+        input: modelInput(snapshot),
+        outputSchema: calculationOutputSchema,
+        traceId: snapshot.traceId,
+      }));
+      await this.recordModel("model_completed", "completed", snapshot);
+    } catch (error) {
+      await this.recordModel("model_failed", "invalid_output", snapshot);
+      await this.record("agent_failed", "failed", snapshot);
+      throw error;
+    }
+    const decision: ValidationDecision = output.status === "proposal"
+      ? combineDecisions([
+        this.validatePolicy(policyInput(snapshot, output)),
+        this.validateExplanation(output.explanationZh, {
+          quotes: snapshot.cityInputs.flatMap((city) => city.quotes),
+          cityCodes: snapshot.cityInputs.map((city) => city.cityCode),
+        }),
+      ])
+      : { ok: false, codes: ["INVALID_PROPOSAL"] };
+    const proposalId = deterministicAgentProposalId(snapshot.runId, snapshot.proposalVersion);
+    try {
+      await this.dependencies.saveProposal({
+        proposalId,
+        runId: snapshot.runId,
+        version: snapshot.proposalVersion,
         policyVersion: snapshot.policyVersion,
-      }),
-      input: modelInput(snapshot),
-      outputSchema: calculationOutputSchema,
-      traceId: snapshot.traceId,
-    }));
-    if (output.status === "incomplete") return output;
+        output,
+        validationDecision: decision,
+        status: decision.ok ? "pending" : "rejected",
+      });
+      await this.record("proposal_created", decision.ok ? "running" : "rejected", snapshot, { proposalId });
+      await this.record("proposal_validated", decision.ok ? "completed" : "rejected", snapshot, {
+        proposalId,
+        validationCodes: decision.ok ? [] : decision.codes,
+      });
+      await this.record("agent_completed", decision.ok ? "completed" : "rejected", snapshot, { proposalId });
+      return output;
+    } catch (error) {
+      await this.record("agent_failed", "failed", snapshot, { proposalId });
+      throw error;
+    }
+  }
 
-    const decision = combineDecisions([
-      this.validatePolicy(policyInput(snapshot, output)),
-      this.validateExplanation(output.explanationZh, {
-        quotes: snapshot.cityInputs.flatMap((city) => city.quotes),
-        cityCodes: snapshot.cityInputs.map((city) => city.cityCode),
-      }),
-    ]);
-    await this.dependencies.saveProposal({
-      proposalId: deterministicAgentProposalId(snapshot.runId, snapshot.proposalVersion),
+  private async record(
+    eventType: "agent_started" | "agent_completed" | "agent_failed" | "proposal_created" | "proposal_validated",
+    status: "running" | "completed" | "failed" | "rejected",
+    snapshot: CalculationSnapshot,
+    extra: Omit<Parameters<AgentEventRecorder>[0], "runId" | "traceId" | "agent" | "eventType" | "status"> = {},
+  ): Promise<void> {
+    await this.recordEvent({
       runId: snapshot.runId,
-      version: snapshot.proposalVersion,
-      policyVersion: snapshot.policyVersion,
-      output,
-      validationDecision: decision,
-      status: decision.ok ? "pending" : "rejected",
+      traceId: snapshot.traceId,
+      agent: "calculation",
+      eventType,
+      status,
+      ...extra,
     });
-    return output;
+  }
+
+  private async recordModel(
+    eventType: "model_requested" | "model_completed" | "model_failed",
+    status: "running" | "completed" | "invalid_output",
+    snapshot: CalculationSnapshot,
+  ): Promise<void> {
+    if (!isTrustedAgentModel(this.model.model)) return;
+    await this.recordEvent({
+      runId: snapshot.runId,
+      traceId: snapshot.traceId,
+      agent: "calculation",
+      eventType,
+      status,
+      model: this.model.model,
+    });
   }
 }

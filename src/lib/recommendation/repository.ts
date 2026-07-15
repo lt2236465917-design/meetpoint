@@ -301,6 +301,7 @@ export class SupabaseRecommendationRepository
       })
       .eq("run_id", input.runId)
       .eq("version", input.version)
+      .eq("status", "pending")
       .select("id");
     if (error || !Array.isArray(data) || data.length !== 1) {
       throw new Error("Failed to persist Supervisor review");

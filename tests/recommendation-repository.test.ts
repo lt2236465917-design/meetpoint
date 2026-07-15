@@ -161,4 +161,24 @@ describe("SupabaseRecommendationRepository", () => {
     )).rejects.toThrow("exactly one");
     expect(secondEq).toHaveBeenCalledWith("status", "pending");
   });
+
+  it("uses a pending-only CAS review update so a concurrent reviewer cannot overwrite a decision", async () => {
+    const select = vi.fn().mockResolvedValue({ data: [], error: null });
+    const statusEq = vi.fn().mockReturnValue({ select });
+    const versionEq = vi.fn().mockReturnValue({ eq: statusEq });
+    const runEq = vi.fn().mockReturnValue({ eq: versionEq });
+    const update = vi.fn(() => ({ eq: runEq }));
+    mocks.from.mockReturnValue({ update });
+
+    await expect(new SupabaseRecommendationRepository().reviewProposal({
+      runId: "run-1",
+      version: 1,
+      approved: true,
+      codes: [],
+    })).rejects.toThrow("Supervisor review");
+
+    expect(runEq).toHaveBeenCalledWith("run_id", "run-1");
+    expect(versionEq).toHaveBeenCalledWith("version", 1);
+    expect(statusEq).toHaveBeenCalledWith("status", "pending");
+  });
 });

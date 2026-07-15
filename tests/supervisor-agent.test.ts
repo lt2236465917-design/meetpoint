@@ -5,6 +5,11 @@ import type { AgentModel } from "@/lib/agent/model";
 import { runProposalReviewLoop, SupervisorAgent } from "@/lib/agent/supervisor-agent";
 import type { RecommendationProposal, VerifiedQuote } from "@/lib/agent/contracts";
 
+vi.mock("@/lib/agent/trace", () => ({
+  isTrustedAgentModel: (value: string) => value === "deepseek-v4-flash",
+  recordAgentEvent: vi.fn(async () => undefined),
+}));
+
 const runId = "00000000-0000-4000-8000-000000000101";
 const traceId = "00000000-0000-4000-8000-000000000102";
 
@@ -24,7 +29,7 @@ const proposal: RecommendationProposal = {
     { kind: "fast", quoteIdsByParticipant: { p1: "p1-fast", p2: "p2-fast" }, totalFareCny: 240 },
   ],
   comparisonEvidence: { eligibleCityCodes: ["wuhan"], orderedCityCodes: ["wuhan"] },
-  explanationZh: "已核验武汉真实路线。",
+  explanationZh: "已依据已验证报价及既定规则生成推荐方案。",
 };
 
 const snapshot: CalculationSnapshot = {
@@ -47,6 +52,34 @@ describe("SupervisorAgent", () => {
 
     await expect(supervisor.review(snapshot, proposal)).resolves.toEqual({ decision: "approve" });
     expect(reviewProposal).toHaveBeenCalledWith(expect.objectContaining({ approved: true, codes: [] }));
+  });
+
+  it("records allowlisted supervisor model, validation, and review events", async () => {
+    const recordEvent = vi.fn(async () => undefined);
+    const trustedModel: AgentModel = {
+      provider: "fake",
+      model: "deepseek-v4-flash",
+      generate: async ({ outputSchema }) => outputSchema.parse({ decision: "approve" }),
+    };
+    const supervisor = new SupervisorAgent(trustedModel, {
+      reviewProposal: vi.fn(async () => undefined),
+      recordEvent,
+    } as never);
+
+    await supervisor.review(snapshot, proposal);
+
+    expect(recordEvent).toHaveBeenCalledWith(expect.objectContaining({
+      agent: "supervisor",
+      eventType: "model_requested",
+      model: "deepseek-v4-flash",
+    }));
+    expect(recordEvent).toHaveBeenCalledWith(expect.objectContaining({
+      agent: "supervisor",
+      eventType: "validation_finished",
+      status: "approved",
+      validationCodes: [],
+    }));
+    expect(JSON.stringify(recordEvent.mock.calls)).not.toMatch(/system|prompt|input|participant/i);
   });
 
   it("rejects a proposal while route coverage remains incomplete", async () => {
@@ -85,6 +118,38 @@ describe("SupervisorAgent", () => {
     });
   });
 
+  it("rejects an unknown model correction code before it is persisted or forwarded", async () => {
+    const reviewProposal = vi.fn(async () => undefined);
+    const supervisor = new SupervisorAgent(model({
+      decision: "correct",
+      codes: ["SOMETHING_ELSE"],
+    }), { reviewProposal });
+
+    await expect(supervisor.review(snapshot, proposal)).rejects.toThrow();
+    expect(reviewProposal).not.toHaveBeenCalled();
+  });
+
+  it("reviews and fails twice when complete coverage receives an invented incomplete output", async () => {
+    const saveProposal = vi.fn(async () => undefined);
+    const reviewProposal = vi.fn(async () => undefined);
+    const markRunFailed = vi.fn(async () => undefined);
+    const calculation = new CalculationAgent(model({
+      status: "incomplete",
+      missingTaskIds: ["invented-missing-task"],
+    }), { saveProposal });
+    const supervisor = new SupervisorAgent(model({ decision: "approve" }), { reviewProposal });
+    const review = vi.spyOn(supervisor, "review");
+
+    await expect(runProposalReviewLoop({ calculation, supervisor, snapshot, markRunFailed })).resolves.toEqual({
+      decision: "correct",
+      codes: ["INVALID_PROPOSAL"],
+    });
+    expect(saveProposal).toHaveBeenCalledTimes(2);
+    expect(review).toHaveBeenCalledTimes(2);
+    expect(reviewProposal).not.toHaveBeenCalled();
+    expect(markRunFailed).toHaveBeenCalledWith(runId, "AGENT_PROPOSAL_INVALID");
+  });
+
   it("stops after two rejected proposal attempts with the public invalid-proposal code", async () => {
     const saveProposal = vi.fn(async () => undefined);
     const reviewProposal = vi.fn(async () => undefined);
@@ -96,7 +161,7 @@ describe("SupervisorAgent", () => {
       decision: "correct", codes: expect.arrayContaining(["TOTAL_FARE_MISMATCH"]),
     });
     expect(saveProposal).toHaveBeenCalledTimes(2);
-    expect(reviewProposal).toHaveBeenCalledTimes(2);
+    expect(reviewProposal).not.toHaveBeenCalled();
     expect(markRunFailed).toHaveBeenCalledWith(runId, "AGENT_PROPOSAL_INVALID");
   });
 });

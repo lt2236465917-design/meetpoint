@@ -7,6 +7,11 @@ import {
 } from "@/lib/agent/calculation-agent";
 import type { RecommendationProposal, VerifiedQuote } from "@/lib/agent/contracts";
 
+vi.mock("@/lib/agent/trace", () => ({
+  isTrustedAgentModel: (value: string) => value === "deepseek-v4-flash",
+  recordAgentEvent: vi.fn(async () => undefined),
+}));
+
 const runId = "00000000-0000-4000-8000-000000000001";
 const traceId = "00000000-0000-4000-8000-000000000002";
 
@@ -43,7 +48,7 @@ const validProposal: RecommendationProposal = {
     { kind: "fast", quoteIdsByParticipant: { p1: "p1-fast", p2: "p2-fast" }, totalFareCny: 240 },
   ],
   comparisonEvidence: { eligibleCityCodes: ["wuhan"], orderedCityCodes: ["wuhan"] },
-  explanationZh: "已按真实票价核验武汉路线。",
+  explanationZh: "已依据已验证报价及既定规则生成推荐方案。",
 };
 
 function snapshot(overrides: Partial<CalculationSnapshot> = {}): CalculationSnapshot {
@@ -98,6 +103,33 @@ describe("CalculationAgent", () => {
     }));
   });
 
+  it("records allowlisted calculation, model, and validation trace events without prompt or identity data", async () => {
+    const recordEvent = vi.fn(async () => undefined);
+    const trustedModel: AgentModel = {
+      provider: "fake",
+      model: "deepseek-v4-flash",
+      generate: async ({ outputSchema }) => outputSchema.parse(validProposal),
+    };
+    const agent = new CalculationAgent(trustedModel, {
+      saveProposal: vi.fn(async () => undefined),
+      recordEvent,
+    } as never);
+
+    await agent.propose(snapshot());
+
+    expect(recordEvent).toHaveBeenCalledWith(expect.objectContaining({
+      agent: "calculation",
+      eventType: "model_requested",
+      model: "deepseek-v4-flash",
+    }));
+    expect(recordEvent).toHaveBeenCalledWith(expect.objectContaining({
+      agent: "calculation",
+      eventType: "proposal_validated",
+      validationCodes: [],
+    }));
+    expect(JSON.stringify(recordEvent.mock.calls)).not.toMatch(/system|prompt|input|participant/i);
+  });
+
   it("returns deterministic incomplete output without asking the model to invent coverage", async () => {
     const generate = vi.fn();
     const agent = new CalculationAgent({ provider: "fake", model: "fake", generate }, {
@@ -111,13 +143,30 @@ describe("CalculationAgent", () => {
     expect(generate).not.toHaveBeenCalled();
   });
 
+  it("persists a model-invented incomplete output when controlled coverage is complete", async () => {
+    const saveProposal = vi.fn(async () => undefined);
+    const agent = new CalculationAgent(model({
+      status: "incomplete",
+      missingTaskIds: ["invented-missing-task"],
+    }), { saveProposal });
+
+    await expect(agent.propose(snapshot())).resolves.toEqual({
+      status: "incomplete",
+      missingTaskIds: ["invented-missing-task"],
+    });
+    expect(saveProposal).toHaveBeenCalledWith(expect.objectContaining({
+      status: "rejected",
+      validationDecision: { ok: false, codes: ["INVALID_PROPOSAL"] },
+    }));
+  });
+
   it("keeps validator-equivalent facts when only the Chinese explanation changes", async () => {
     const firstSave = vi.fn(async () => undefined);
     const secondSave = vi.fn(async () => undefined);
     const first = new CalculationAgent(model(validProposal), { saveProposal: firstSave });
     const second = new CalculationAgent(model({
       ...validProposal,
-      explanationZh: "武汉的全员真实路线已通过核验。",
+      explanationZh: "推荐方案仅使用已验证报价，并遵循既定规则。",
     }), { saveProposal: secondSave });
 
     await first.propose(snapshot());

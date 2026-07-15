@@ -2,11 +2,19 @@ import { z } from "zod";
 
 import {
   calculationOutputSchema,
+  CORRECTION_CODES,
+  isCorrectionCode,
+  type CorrectionCode,
   type RecommendationProposal,
   type ValidationDecision,
   type VerifiedQuote,
 } from "@/lib/agent/contracts";
 import type { AgentModel } from "@/lib/agent/model";
+import {
+  isTrustedAgentModel,
+  recordAgentEvent,
+  type AgentEventRecorder,
+} from "@/lib/agent/trace";
 import type { CalculationAgent, CalculationSnapshot } from "@/lib/agent/calculation-agent";
 import { buildSupervisorSystemPrompt, validateExplanationFacts } from "@/lib/agent/prompts";
 import {
@@ -16,7 +24,7 @@ import {
 import type { AgentProposalRepository } from "@/lib/recommendation/repository";
 import { deterministicAgentProposalId } from "@/lib/recommendation/repository";
 
-const correctionCodeSchema = z.string().regex(/^[A-Z][A-Z0-9_]{0,63}$/);
+const correctionCodeSchema = z.enum(CORRECTION_CODES);
 const supervisorOutputSchema = z.discriminatedUnion("decision", [
   z.object({ decision: z.literal("approve") }).strict(),
   z.object({ decision: z.literal("correct"), codes: z.array(correctionCodeSchema).min(1).max(8) }).strict(),
@@ -24,11 +32,12 @@ const supervisorOutputSchema = z.discriminatedUnion("decision", [
 
 export type SupervisorDecision =
   | { decision: "approve" }
-  | { decision: "correct"; codes: string[] };
+  | { decision: "correct"; codes: CorrectionCode[] };
 
 export type SupervisorProposalStore = Pick<AgentProposalRepository, "reviewProposal">;
 
 type SupervisorDependencies = SupervisorProposalStore & {
+  recordEvent?: AgentEventRecorder;
   validatePolicy?: (input: ValidateRecommendationPolicyInput) => ValidationDecision;
   validateExplanation?: (
     explanationZh: string,
@@ -65,9 +74,18 @@ function deterministicDecision(
   return codes.length === 0 ? { ok: true } : { ok: false, codes: [...new Set(codes)] };
 }
 
+function correctionDecision(codes: readonly unknown[]): SupervisorDecision {
+  const boundedCodes = [...new Set(codes.filter(isCorrectionCode))];
+  return {
+    decision: "correct",
+    codes: boundedCodes.length > 0 ? boundedCodes : ["INVALID_PROPOSAL"],
+  };
+}
+
 export class SupervisorAgent {
   private readonly validatePolicy: (input: ValidateRecommendationPolicyInput) => ValidationDecision;
   private readonly validateExplanation: NonNullable<SupervisorDependencies["validateExplanation"]>;
+  private readonly recordEvent: AgentEventRecorder;
 
   constructor(
     private readonly model: AgentModel,
@@ -75,25 +93,29 @@ export class SupervisorAgent {
   ) {
     this.validatePolicy = dependencies.validatePolicy ?? validateRecommendationPolicy;
     this.validateExplanation = dependencies.validateExplanation ?? validateExplanationFacts;
+    this.recordEvent = dependencies.recordEvent ?? recordAgentEvent;
   }
 
   async review(
     snapshot: CalculationSnapshot,
     proposal: unknown,
   ): Promise<SupervisorDecision> {
+    await this.record("agent_started", "running", snapshot);
     if (snapshot.missingTaskIds.length > 0) {
       const decision: SupervisorDecision = { decision: "correct", codes: ["MISSING_COVERAGE"] };
-      await this.persist(snapshot, decision);
+      await this.recordDecision(snapshot, decision);
       return decision;
     }
     const parsed = calculationOutputSchema.safeParse(proposal);
-    if (!parsed.success || parsed.data.status !== "proposal") {
+    if (!parsed.success) {
       const deterministic = this.validatePolicy(validationInput(snapshot, proposal));
-      const decision: SupervisorDecision = {
-        decision: "correct",
-        codes: deterministic.ok ? ["INVALID_PROPOSAL"] : deterministic.codes,
-      };
-      await this.persist(snapshot, decision);
+      const decision = correctionDecision(deterministic.ok ? ["INVALID_PROPOSAL"] : deterministic.codes);
+      await this.recordDecision(snapshot, decision);
+      return decision;
+    }
+    if (parsed.data.status === "incomplete") {
+      const decision: SupervisorDecision = { decision: "correct", codes: ["INVALID_PROPOSAL"] };
+      await this.recordDecision(snapshot, decision);
       return decision;
     }
     const deterministic = deterministicDecision(
@@ -103,34 +125,50 @@ export class SupervisorAgent {
       this.validateExplanation,
     );
     if (!deterministic.ok) {
-      const decision: SupervisorDecision = { decision: "correct", codes: deterministic.codes };
-      await this.persist(snapshot, decision);
+      const decision = correctionDecision(deterministic.codes);
+      await this.recordDecision(snapshot, decision);
       return decision;
     }
 
-    const modelDecision = await this.model.generate({
-      agent: "supervisor",
-      system: buildSupervisorSystemPrompt({
-        completeParticipantCount: snapshot.participantIds.length,
-        participantCount: snapshot.participantIds.length,
-        validationCodes: [],
-        proposalVersion: snapshot.proposalVersion,
-        proposalId: deterministicAgentProposalId(snapshot.runId, snapshot.proposalVersion),
-      }),
-      input: {
-        proposalVersion: snapshot.proposalVersion,
-        proposalId: deterministicAgentProposalId(snapshot.runId, snapshot.proposalVersion),
-        coverage: { completeParticipantCount: snapshot.participantIds.length, participantCount: snapshot.participantIds.length },
-        deterministicValidation: { ok: true, codes: [] },
-      },
-      outputSchema: supervisorOutputSchema,
-      traceId: snapshot.traceId,
-    });
+    await this.record("validation_finished", "completed", snapshot, { validationCodes: [] });
+    let modelDecision: z.infer<typeof supervisorOutputSchema>;
+    try {
+      await this.recordModel("model_requested", "running", snapshot);
+      modelDecision = await this.model.generate({
+        agent: "supervisor",
+        system: buildSupervisorSystemPrompt({
+          completeParticipantCount: snapshot.participantIds.length,
+          participantCount: snapshot.participantIds.length,
+          validationCodes: [],
+          proposalVersion: snapshot.proposalVersion,
+          proposalId: deterministicAgentProposalId(snapshot.runId, snapshot.proposalVersion),
+        }),
+        input: {
+          proposalVersion: snapshot.proposalVersion,
+          proposalId: deterministicAgentProposalId(snapshot.runId, snapshot.proposalVersion),
+          coverage: { completeParticipantCount: snapshot.participantIds.length, participantCount: snapshot.participantIds.length },
+          deterministicValidation: { ok: true, codes: [] },
+        },
+        outputSchema: supervisorOutputSchema,
+        traceId: snapshot.traceId,
+      });
+      await this.recordModel("model_completed", "completed", snapshot);
+    } catch (error) {
+      await this.recordModel("model_failed", "invalid_output", snapshot);
+      await this.record("agent_failed", "failed", snapshot);
+      throw error;
+    }
     const decision: SupervisorDecision = modelDecision.decision === "approve"
       ? { decision: "approve" }
-      : { decision: "correct", codes: modelDecision.codes };
-    await this.persist(snapshot, decision);
-    return decision;
+      : correctionDecision(modelDecision.codes);
+    try {
+      await this.persist(snapshot, decision);
+      await this.recordDecision(snapshot, decision);
+      return decision;
+    } catch (error) {
+      await this.record("agent_failed", "failed", snapshot);
+      throw error;
+    }
   }
 
   private async persist(snapshot: CalculationSnapshot, decision: SupervisorDecision): Promise<void> {
@@ -141,6 +179,52 @@ export class SupervisorAgent {
       codes: decision.decision === "approve" ? [] : decision.codes,
     });
   }
+
+  private async recordDecision(snapshot: CalculationSnapshot, decision: SupervisorDecision): Promise<void> {
+    await this.record(
+      "validation_finished",
+      decision.decision === "approve" ? "approved" : "rejected",
+      snapshot,
+      { validationCodes: decision.decision === "approve" ? [] : decision.codes },
+    );
+    await this.record(
+      "agent_completed",
+      decision.decision === "approve" ? "approved" : "rejected",
+      snapshot,
+    );
+  }
+
+  private async record(
+    eventType: "agent_started" | "agent_completed" | "agent_failed" | "validation_finished",
+    status: "running" | "completed" | "failed" | "approved" | "rejected",
+    snapshot: CalculationSnapshot,
+    extra: Omit<Parameters<AgentEventRecorder>[0], "runId" | "traceId" | "agent" | "eventType" | "status"> = {},
+  ): Promise<void> {
+    await this.recordEvent({
+      runId: snapshot.runId,
+      traceId: snapshot.traceId,
+      agent: "supervisor",
+      eventType,
+      status,
+      ...extra,
+    });
+  }
+
+  private async recordModel(
+    eventType: "model_requested" | "model_completed" | "model_failed",
+    status: "running" | "completed" | "invalid_output",
+    snapshot: CalculationSnapshot,
+  ): Promise<void> {
+    if (!isTrustedAgentModel(this.model.model)) return;
+    await this.recordEvent({
+      runId: snapshot.runId,
+      traceId: snapshot.traceId,
+      agent: "supervisor",
+      eventType,
+      status,
+      model: this.model.model,
+    });
+  }
 }
 
 export async function runProposalReviewLoop(input: {
@@ -149,7 +233,10 @@ export async function runProposalReviewLoop(input: {
   snapshot: CalculationSnapshot;
   markRunFailed(runId: string, code: "AGENT_PROPOSAL_INVALID"): Promise<void>;
 }): Promise<SupervisorDecision> {
-  let lastDecision: SupervisorDecision = { decision: "correct", codes: ["AGENT_PROPOSAL_INVALID"] };
+  if (input.snapshot.missingTaskIds.length > 0) {
+    return { decision: "correct", codes: ["MISSING_COVERAGE"] };
+  }
+  let lastDecision: SupervisorDecision = { decision: "correct", codes: ["INVALID_PROPOSAL"] };
   let correctionCodes: readonly string[] = [];
   for (let attempt = 0; attempt < 2; attempt += 1) {
     const attemptSnapshot: CalculationSnapshot = {
@@ -158,9 +245,6 @@ export async function runProposalReviewLoop(input: {
       correctionCodes,
     };
     const output = await input.calculation.propose(attemptSnapshot);
-    if (output.status === "incomplete") {
-      return { decision: "correct", codes: ["MISSING_COVERAGE"] };
-    }
     lastDecision = await input.supervisor.review(attemptSnapshot, output);
     if (lastDecision.decision === "approve") return lastDecision;
     correctionCodes = lastDecision.codes;

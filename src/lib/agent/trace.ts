@@ -62,6 +62,12 @@ export interface AgentEvent {
   [key: string]: unknown;
 }
 
+export type AgentEventRecorder = (event: AgentEvent) => Promise<void>;
+
+export function isTrustedAgentModel(value: string): value is TrustedAgentModel {
+  return trustedAgentModels.has(value);
+}
+
 const forbiddenCountKey =
   /(authorization|token|secret|bookingurl|rawpayload|name|prompt|message|system|input|auth|env)/i;
 

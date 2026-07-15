@@ -130,10 +130,34 @@ export type RouteTask = z.infer<typeof routeTaskSchema>;
 export type QueryOutcome = z.infer<typeof queryOutcomeSchema>;
 export type VerifiedQuote = z.infer<typeof verifiedQuoteSchema>;
 export type SchemeProposal = z.infer<typeof schemeProposalSchema>;
+export type CalculationOutput = z.infer<typeof calculationOutputSchema>;
 export type RecommendationProposal = Extract<
-  z.infer<typeof calculationOutputSchema>,
+  CalculationOutput,
   { status: "proposal" }
 >;
 export type ValidationDecision =
   | { ok: true }
   | { ok: false; codes: string[] };
+
+export const CORRECTION_CODES = [
+  "ARRIVAL_DATE_MISMATCH",
+  "ESTIMATED_QUOTE",
+  "EXPLANATION_UNSUPPORTED_FACT",
+  "INVALID_CITY_EVIDENCE",
+  "INVALID_PROPOSAL",
+  "INVALID_SCHEMES",
+  "MISSING_COVERAGE",
+  "MISSING_PARTICIPANT",
+  "POLICY_INPUT_LIMIT_EXCEEDED",
+  "POLICY_MISMATCH",
+  "TOTAL_FARE_MISMATCH",
+  "UNKNOWN_QUOTE_ID",
+] as const;
+
+export type CorrectionCode = (typeof CORRECTION_CODES)[number];
+
+const correctionCodeSet = new Set<string>(CORRECTION_CODES);
+
+export function isCorrectionCode(value: unknown): value is CorrectionCode {
+  return typeof value === "string" && correctionCodeSet.has(value);
+}

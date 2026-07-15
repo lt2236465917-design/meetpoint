@@ -1,6 +1,9 @@
-import { CITIES } from "@/data/cities";
-
 import type { ValidationDecision, VerifiedQuote } from "@/lib/agent/contracts";
+
+export const SAFE_EXPLANATIONS_ZH = [
+  "已依据已验证报价及既定规则生成推荐方案。",
+  "推荐方案仅使用已验证报价，并遵循既定规则。",
+] as const;
 
 export function buildCalculationSystemPrompt(input: {
   quoteIds: readonly string[];
@@ -15,6 +18,7 @@ export function buildCalculationSystemPrompt(input: {
     "城市排序依次为团队省钱总价、直达人数、票价公平差、团队时长、城市代码；不得引入权重。",
     "必须引用每位参与者在 saving 和 fast 中的 quote_id，并调用算术和证据校验。",
     "覆盖不完整时返回 incomplete 和缺失任务 ID；不得估算、推断或修改票价、时间、服务或供应商事实。",
+    `说明文字只能逐字使用以下一句，不能加入城市、服务、时间、时长或票价：${SAFE_EXPLANATIONS_ZH.join(" 或 ")}`,
     "你不能发布结果或修改任何报价。",
   ].join("\n");
 }
@@ -41,42 +45,12 @@ export type ExplanationFactInput = {
   cityCodes: readonly string[];
 };
 
-function allowedCityNames(cityCodes: readonly string[]): Set<string> {
-  return new Set(
-    CITIES.filter((city) => cityCodes.includes(city.code)).map((city) => city.name),
-  );
-}
-
-function allMatches(text: string, expression: RegExp): string[] {
-  return [...text.matchAll(expression)].map((match) => match[0]);
-}
-
 export function validateExplanationFacts(
   explanationZh: string,
   input: ExplanationFactInput,
 ): ValidationDecision {
-  const allowedServices = new Set(input.quotes.map((quote) => quote.serviceName));
-  const allowedCurrency = new Set(input.quotes.map((quote) => `${quote.priceCny}元`));
-  const allowedDuration = new Set(input.quotes.map((quote) => `${quote.durationMinutes}分钟`));
-  const allowedTimes = new Set(input.quotes.flatMap((quote) => [
-    quote.departAt.slice(11, 16),
-    quote.arriveAt.slice(11, 16),
-  ]));
-  const allowedCities = allowedCityNames(input.cityCodes);
-
-  const unsupported = [
-    ...allMatches(explanationZh, /\d+(?:\.\d+)?\s*(?:元|块|CNY|人民币)/giu)
-      .filter((token) => !allowedCurrency.has(token.replace(/\s+/g, ""))),
-    ...allMatches(explanationZh, /\b[A-Z]{1,4}\d{1,6}\b/g)
-      .filter((token) => !allowedServices.has(token)),
-    ...allMatches(explanationZh, /\b\d{1,2}:\d{2}\b/g)
-      .filter((token) => !allowedTimes.has(token)),
-    ...allMatches(explanationZh, /\d+\s*分钟/g)
-      .filter((token) => !allowedDuration.has(token.replace(/\s+/g, ""))),
-    ...CITIES.map((city) => city.name)
-      .filter((cityName) => explanationZh.includes(cityName) && !allowedCities.has(cityName)),
-  ];
-  return unsupported.length === 0
+  void input;
+  return SAFE_EXPLANATIONS_ZH.includes(explanationZh.trim() as typeof SAFE_EXPLANATIONS_ZH[number])
     ? { ok: true }
     : { ok: false, codes: ["EXPLANATION_UNSUPPORTED_FACT"] };
 }

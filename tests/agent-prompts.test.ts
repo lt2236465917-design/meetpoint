@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildCalculationSystemPrompt,
   buildSupervisorSystemPrompt,
+  SAFE_EXPLANATIONS_ZH,
   validateExplanationFacts,
 } from "@/lib/agent/prompts";
 import type { VerifiedQuote } from "@/lib/agent/contracts";
@@ -32,11 +33,19 @@ describe("agent prompts", () => {
   });
 
   it.each([
-    ["supported structured facts", "G123 票价123元，行程120分钟。", true],
+    ["supported fact-free Chinese explanation", SAFE_EXPLANATIONS_ZH[0], true],
+    ["structured explanation is rejected to fail closed", "G123 票价123元，行程120分钟。", false],
     ["unsupported currency", "票价999元。", false],
+    ["unsupported yuan sign fare", "票价￥999。", false],
+    ["unsupported yen sign fare", "票价¥999。", false],
+    ["unsupported CNY fare", "票价999 CNY。", false],
+    ["unsupported renminbi fare", "票价999人民币。", false],
     ["unsupported service", "乘坐G999。", false],
     ["unsupported duration", "全程90分钟。", false],
+    ["unsupported Chinese duration", "全程2小时。", false],
+    ["unsupported Chinese time", "8点00分到达。", false],
     ["unsupported Chinese city", "北京路线已核验。", false],
+    ["invented Chinese city", "火星城路线已核验。", false],
   ])("%s", (_label, explanationZh, expected) => {
     expect(validateExplanationFacts(explanationZh, { quotes: [quote], cityCodes: ["wuhan"] }).ok).toBe(expected);
   });
