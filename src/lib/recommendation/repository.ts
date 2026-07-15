@@ -10,7 +10,7 @@ export type CandidateRecord = {
   source: "system";
 };
 
-export type StoredRouteTask = RouteTask;
+export type StoredRouteTask = RouteTask & { arrivalDate: string };
 
 export type CreateRunMatrixInput = {
   planId: string;
@@ -66,7 +66,26 @@ type RouteTaskRow = {
   attempt_count: number;
   retry_after: string | null;
   error_code: string | null;
+  recommendation_runs: unknown;
 };
+
+const ROUTE_TASK_SELECT = "id,run_id,participant_id,city_code,origin_city_code,mode,search_date,physical_key,status,attempt_count,retry_after,error_code,recommendation_runs!inner(plans!inner(arrival_date))";
+
+function firstRelation(value: unknown): Record<string, unknown> | null {
+  const relation = Array.isArray(value) ? value[0] : value;
+  return typeof relation === "object" && relation !== null
+    ? relation as Record<string, unknown>
+    : null;
+}
+
+function taskArrivalDate(row: RouteTaskRow): string {
+  const run = firstRelation(row.recommendation_runs);
+  const plan = firstRelation(run?.plans);
+  if (typeof plan?.arrival_date !== "string") {
+    throw new Error(`Route task arrival date not found: ${row.id}`);
+  }
+  return plan.arrival_date;
+}
 
 function toStoredTask(row: RouteTaskRow): StoredRouteTask {
   return {
@@ -77,6 +96,7 @@ function toStoredTask(row: RouteTaskRow): StoredRouteTask {
     originCityCode: row.origin_city_code,
     mode: row.mode,
     searchDate: row.search_date,
+    arrivalDate: taskArrivalDate(row),
     physicalKey: row.physical_key,
     status: row.status,
     attemptCount: row.attempt_count,
@@ -145,7 +165,7 @@ export class SupabaseRecommendationRepository implements RecommendationRepositor
   async getRouteTask(taskId: string): Promise<StoredRouteTask | null> {
     const { data, error } = await createServiceSupabaseClient()
       .from("route_tasks")
-      .select("id,run_id,participant_id,city_code,origin_city_code,mode,search_date,physical_key,status,attempt_count,retry_after,error_code")
+      .select(ROUTE_TASK_SELECT)
       .eq("id", taskId)
       .maybeSingle();
     if (error) throw new Error(`Failed to load route task: ${error.message}`);
@@ -166,7 +186,7 @@ export class SupabaseRecommendationRepository implements RecommendationRepositor
       })
       .eq("id", taskId)
       .in("status", ["pending", "retryable_failure"])
-      .select("id,run_id,participant_id,city_code,origin_city_code,mode,search_date,physical_key,status,attempt_count,retry_after,error_code")
+      .select(ROUTE_TASK_SELECT)
       .single();
     if (error || !data) throw new Error(`Failed to start route task: ${error?.message ?? taskId}`);
     return toStoredTask(data as RouteTaskRow);

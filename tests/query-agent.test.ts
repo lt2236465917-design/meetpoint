@@ -15,6 +15,7 @@ function task(id: string, participantId: string): StoredRouteTask {
     originCityCode: "beijing",
     mode: "flight",
     searchDate: "2026-08-14",
+    arrivalDate: "2026-08-15",
     physicalKey: "beijing:wuhan:flight:2026-08-14",
     status: "pending",
     attemptCount: 0,
@@ -54,8 +55,8 @@ const result = {
     provider: "flyai" as const,
     priceCny: 500,
     departAt: "2026-08-14T10:00:00+08:00",
-    arriveAt: "2026-08-14T12:00:00+08:00",
-    durationMinutes: 120,
+    arriveAt: "2026-08-15T00:30:00+08:00",
+    durationMinutes: 870,
     isDirect: true,
     hasTransfer: false,
     transferCount: 0,
@@ -107,6 +108,31 @@ describe("QueryAgent", () => {
     });
     expect(ticketTool).toHaveBeenCalledTimes(1);
     expect(repository.statuses).toContainEqual({ runId: "run-1", status: "cooling_down" });
+  });
+
+  it("filters quotes that arrive outside the stored Shanghai arrival date", async () => {
+    const repository = queryRepository([task("t1", "p1")]);
+    const ticketTool = vi.fn(async () => ({
+      ...result,
+      options: [{ ...result.options[0], arriveAt: "2026-08-16T00:30:00+08:00" }],
+    }));
+    const agent = new QueryAgent(repository.repository, ticketTool, createPhysicalTicketScheduler());
+
+    await expect(agent.execute("t1")).resolves.toEqual({ status: "empty" });
+    expect(repository.outcomes).toEqual([{ taskId: "t1", outcome: { status: "empty" } }]);
+  });
+
+  it("treats provider CLI failures as terminal", async () => {
+    const repository = queryRepository([task("t1", "p1")]);
+    const ticketTool = vi.fn(async () => {
+      throw new GatewayClientError("PROVIDER_CLI_FAILED");
+    });
+    const agent = new QueryAgent(repository.repository, ticketTool, createPhysicalTicketScheduler());
+
+    await expect(agent.execute("t1")).resolves.toEqual({
+      status: "terminal_failure",
+      code: "PROVIDER_CLI_FAILED",
+    });
   });
 
   it("rejects evidence whose mode does not match the stored task", async () => {

@@ -63,6 +63,7 @@ describe("ManagerAgent", () => {
     expect(first.tasks.length).toBeGreaterThan(0);
     expect(firstResult.taskIds).toEqual(first.tasks.map((task) => task.id));
     expect(firstResult.taskIds).toEqual(secondResult.taskIds);
+    expect(first.tasks.every((task) => task.arrivalDate === "2026-08-15")).toBe(true);
     expect(first.tasks.map((task) => task.participantId)).toEqual(
       [...first.tasks.map((task) => task.participantId)].sort(),
     );

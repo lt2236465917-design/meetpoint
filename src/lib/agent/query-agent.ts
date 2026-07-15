@@ -5,6 +5,7 @@ import {
   type RecommendationRepository,
   type StoredRouteTask,
 } from "@/lib/recommendation/repository";
+import { validateArrivalDate } from "@/lib/recommendation/date";
 import {
   GatewayClientError,
   searchGateway,
@@ -45,7 +46,6 @@ const retryableCodes = new Set([
   "PROVIDER_UNAVAILABLE",
   "PROVIDER_RATE_LIMITED",
   "PROVIDER_UPSTREAM_UNAVAILABLE",
-  "PROVIDER_CLI_FAILED",
 ]);
 
 const emptyCodes = new Set(["PROVIDER_NO_ROUTE", "PROVIDER_NO_TICKET"]);
@@ -99,11 +99,8 @@ export class QueryAgent {
         const result = await this.scheduler.run(task.physicalKey, () => this.ticketTool(request));
         if (result.options.some((option) => option.mode !== task.mode)) {
           outcome = { status: "terminal_failure", code: "GATEWAY_EVIDENCE_MISMATCH" };
-        } else outcome = result.options.length === 0
-          ? { status: "empty" }
-          : {
-              status: "success",
-              quotes: result.options.map((option) => ({
+        } else {
+          const quotes = result.options.map((option) => ({
                 id: deterministicVerifiedQuoteId(task.runId, task.participantId, option.quoteId),
                 quoteId: option.quoteId,
                 providerQuoteId: option.providerQuoteId,
@@ -119,8 +116,9 @@ export class QueryAgent {
                 transferCount: option.transferCount,
                 isDirect: option.isDirect,
                 serviceName: option.serviceName,
-              })),
-            };
+              })).filter((quote) => validateArrivalDate(quote, task.arrivalDate).ok);
+          outcome = quotes.length > 0 ? { status: "success", quotes } : { status: "empty" };
+        }
       } catch (error) {
         outcome = errorOutcome(error);
       }
