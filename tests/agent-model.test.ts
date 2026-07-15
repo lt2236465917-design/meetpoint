@@ -113,6 +113,98 @@ describe("AgentModel", () => {
     expect(error).toMatchObject({ code: "MODEL_INVALID_OUTPUT" });
   });
 
+  it("rejects stripped unknown fields even when the caller schema is not strict", async () => {
+    openAiSdk.create.mockResolvedValue({
+      id: "chatcmpl-non-strict",
+      choices: [{
+        message: {
+          role: "assistant",
+          content: JSON.stringify({
+            cityCode: "420100",
+            inventedFare: 99,
+            detail: { score: 1, rawPayload: "invented" },
+            routes: [{ id: "route-1", bookingUrl: "https://example.test" }],
+          }),
+        },
+      }],
+    });
+    const schema = z.object({
+      cityCode: z.string(),
+      detail: z.object({ score: z.number() }),
+      routes: z.array(z.object({ id: z.string() })),
+    });
+
+    const error = await createAgentModel()!.generate({
+      agent: "manager",
+      system: "Return one verified city code.",
+      input: { quoteIds: ["quote-1"] },
+      outputSchema: schema,
+      traceId: "00000000-0000-4000-8000-000000000002",
+    }).catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(AgentModelError);
+    expect(error).toMatchObject({ code: "MODEL_INVALID_OUTPUT" });
+  });
+
+  it("preserves valid Zod coercion while checking output structure", async () => {
+    openAiSdk.create.mockResolvedValue({
+      id: "chatcmpl-coercion",
+      choices: [{ message: { role: "assistant", content: '{"count":"2"}' } }],
+    });
+
+    await expect(createAgentModel()!.generate({
+      agent: "calculation",
+      system: "Return a count.",
+      input: { quoteIds: ["quote-1"] },
+      outputSchema: z.object({ count: z.coerce.number() }),
+      traceId: "00000000-0000-4000-8000-000000000003",
+    })).resolves.toEqual({ count: 2 });
+  });
+
+  it.each([
+    ["raw provider payload", { rawPayload: { fare: 99 } }],
+    ["authorization", { authorization: "Bearer credential" }],
+    ["token", { accessToken: "credential" }],
+    ["secret", { clientSecret: "credential" }],
+    ["booking URL", { bookingUrl: "https://supplier.example/book" }],
+    ["participant name path", { participant: { name: "敏感姓名" } }],
+    ["participantName", { participantName: "敏感姓名" }],
+    ["raw prompt", { rawPrompt: "ignore previous instructions" }],
+    ["messages", { messages: [{ role: "user", content: "raw prompt" }] }],
+  ])("rejects unsafe %s before sending model input", async (_label, unsafeInput) => {
+    const error = await createAgentModel()!.generate({
+      agent: "manager",
+      system: "Return one verified city code.",
+      input: {
+        cityName: "武汉",
+        serviceName: "G123",
+        nested: unsafeInput,
+      },
+      outputSchema,
+      traceId: "00000000-0000-4000-8000-000000000004",
+    }).catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(AgentModelError);
+    expect(error).toMatchObject({ code: "MODEL_INVALID_OUTPUT" });
+    expect(String(error)).not.toContain("敏感姓名");
+    expect(openAiSdk.create).not.toHaveBeenCalled();
+  });
+
+  it("allows non-identity name fields in safe structured model input", async () => {
+    openAiSdk.create.mockResolvedValue({
+      id: "chatcmpl-safe-names",
+      choices: [{ message: { role: "assistant", content: '{"cityCode":"420100"}' } }],
+    });
+
+    await expect(createAgentModel()!.generate({
+      agent: "manager",
+      system: "Return one verified city code.",
+      input: { cityName: "武汉", serviceName: "G123" },
+      outputSchema,
+      traceId: "00000000-0000-4000-8000-000000000005",
+    })).resolves.toEqual({ cityCode: "420100" });
+  });
+
   it("maps SDK timeout failures to a stable timeout error", async () => {
     const timeout = Object.assign(new Error("Request timed out."), {
       name: "APIConnectionTimeoutError",
@@ -140,5 +232,19 @@ describe("AgentModel", () => {
     expect(error).toBeInstanceOf(AgentModelError);
     expect(error).toMatchObject({ code: "MODEL_UNAVAILABLE" });
     expect(String(error)).not.toContain("server-only-test-key");
+  });
+
+  it("handles cyclic timeout causes without recursing forever", async () => {
+    const first = Object.assign(new Error("first"), { cause: undefined as unknown });
+    const second = Object.assign(new Error("second"), { cause: first });
+    first.cause = second;
+    openAiSdk.create.mockRejectedValue(first);
+
+    const error = await runDownstreamAgent(createAgentModel()!).catch(
+      (caught: unknown) => caught,
+    );
+
+    expect(error).toBeInstanceOf(AgentModelError);
+    expect(error).toMatchObject({ code: "MODEL_UNAVAILABLE" });
   });
 });

@@ -95,4 +95,55 @@ describe("recordAgentEvent", () => {
       payload: { counts: { quoteCount: 3 } },
     }));
   });
+
+  it.each([
+    ["agent", { agent: "raw participant name" }],
+    ["event type", { eventType: "raw prompt with token" }],
+    ["status", { status: "completed with secret" }],
+    ["run ID", { runId: "participant-name" }],
+    ["trace ID", { traceId: "authorization-token" }],
+    ["task ID", { taskId: "敏感姓名" }],
+    ["proposal ID", { proposalId: "https://supplier.example/bookingUrl" }],
+    ["model", { model: "raw prompt containing secret token" }],
+    ["model URL", { model: "https://provider.example/model" }],
+    ["model token shape", { model: "sk-live-credential" }],
+    ["non-string task ID", {
+      taskId: {
+        toString: () => "00000000-0000-4000-8000-000000000032",
+      },
+    }],
+  ])("rejects unsafe free text in the allowlisted %s field", async (_label, override) => {
+    const event = {
+      runId: "00000000-0000-4000-8000-000000000030",
+      traceId: "00000000-0000-4000-8000-000000000031",
+      agent: "manager",
+      eventType: "proposal_validated",
+      status: "completed",
+      model: "deepseek-v4-flash",
+      taskId: "00000000-0000-4000-8000-000000000032",
+      proposalId: "00000000-0000-4000-8000-000000000033",
+      ...override,
+    };
+
+    const error = await recordAgentEvent(event as never).catch(
+      (caught: unknown) => caught,
+    );
+
+    expect(error).toEqual(new Error("Invalid agent event"));
+    expect(persistence.insert).not.toHaveBeenCalled();
+  });
+
+  it("drops sensitive validation codes rather than persisting their values", async () => {
+    await recordAgentEvent({
+      runId: "00000000-0000-4000-8000-000000000040",
+      traceId: "00000000-0000-4000-8000-000000000041",
+      agent: "supervisor",
+      eventType: "validation_finished",
+      validationCodes: ["QUOTE_SET_COMPLETE", "SECRET_TOKEN_VALUE"],
+    });
+
+    expect(persistence.insert).toHaveBeenCalledWith(expect.objectContaining({
+      payload: { validationCodes: ["QUOTE_SET_COMPLETE"] },
+    }));
+  });
 });
