@@ -8,7 +8,7 @@
 
 This specification defines the approved product and architecture version. It supersedes conflicting product decisions in earlier MVP specifications about target arrival time, estimated recommendations, three result cities/cards, and explanation-only LLM use. Earlier specifications and plans remain unchanged as historical implementation records.
 
-Implementation progress is tracked exclusively in `.superpowers/sdd/progress.md`. Tasks 1–11 are implemented; Tasks 12–14 remain. The shared result is one city with saving/fast schemes, but private alternative confirmation, legacy-path removal, PostgreSQL/Supabase migration smoke, supplier coverage, and real-device acceptance are not complete. Do not describe the full architecture as released before the Task 14 gate passes.
+Implementation progress is tracked exclusively in `.superpowers/sdd/progress.md`. Tasks 1–12 are implemented; Tasks 13–14 remain. The shared result is one city with saving/fast schemes, and private alternatives require requester-or-host reads plus host-only confirmation; legacy-path removal, PostgreSQL/Supabase migration smoke, supplier coverage, and real-device acceptance are not complete. Do not describe the full architecture as released before the Task 14 gate passes.
 
 ## Product Goal
 

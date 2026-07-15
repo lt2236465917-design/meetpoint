@@ -31,9 +31,19 @@ function mockParticipantsLookup(participants: unknown[] | null) {
 function mockLatestRunLookup(run: unknown | null) {
   mocks.runsLimit.mockResolvedValue({ data: run ? [run] : [] });
   const order = vi.fn(() => ({ limit: mocks.runsLimit }));
-  const eq = vi.fn(() => ({ order }));
-  const select = vi.fn(() => ({ eq }));
-  return { select, eq, order, limit: mocks.runsLimit };
+  const kindEq = vi.fn(() => ({ order }));
+  const planEq = vi.fn(() => ({ eq: kindEq }));
+  const select = vi.fn(() => ({ eq: planEq }));
+  return { select, planEq, kindEq, order, limit: mocks.runsLimit };
+}
+
+function mockCurrentSharedLookup(result: unknown | null) {
+  const limit = vi.fn().mockResolvedValue({ data: result ? [result] : [] });
+  const isNull = vi.fn(() => ({ limit }));
+  const sharedEq = vi.fn(() => ({ is: isNull }));
+  const planEq = vi.fn(() => ({ eq: sharedEq }));
+  const select = vi.fn(() => ({ eq: planEq }));
+  return { select, planEq, sharedEq, isNull, limit };
 }
 
 function mockPendingGroups(count: number) {
@@ -93,11 +103,13 @@ describe("GET /api/plans/[code]", () => {
     };
     const planLookup = mockPlanLookup(plan);
     const participantLookup = mockParticipantsLookup(participants);
+    const currentSharedLookup = mockCurrentSharedLookup(null);
     const latestRunLookup = mockLatestRunLookup(latestRun);
     const pendingGroups = mockPendingGroups(3);
     mocks.from
       .mockReturnValueOnce({ select: planLookup.select })
       .mockReturnValueOnce({ select: participantLookup.select })
+      .mockReturnValueOnce({ select: currentSharedLookup.select })
       .mockReturnValueOnce({ select: latestRunLookup.select })
       .mockReturnValueOnce({ select: pendingGroups.select });
 
@@ -132,6 +144,9 @@ describe("GET /api/plans/[code]", () => {
       "id, name, departure_city_name, accepted_modes",
     );
     expect(mocks.participantsEq).toHaveBeenCalledWith("plan_id", "plan-1");
+    expect(currentSharedLookup.sharedEq).toHaveBeenCalledWith("is_shared", true);
+    expect(currentSharedLookup.isNull).toHaveBeenCalledWith("superseded_at", null);
+    expect(latestRunLookup.kindEq).toHaveBeenCalledWith("kind", "automatic");
     expect(latestRunLookup.order).toHaveBeenCalledWith("started_at", {
       ascending: false,
     });

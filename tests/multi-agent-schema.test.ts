@@ -111,6 +111,22 @@ describe("multi-agent migration", () => {
     }
   });
 
+  it("binds an alternative matrix to one requested city and participant without exposing it as a shared candidate", async () => {
+    for (const path of [migrationPath, "supabase/schema.sql"]) {
+      const sql = (await readFile(path, "utf8")).toLowerCase();
+      const start = sql.indexOf("create function create_recommendation_run_matrix");
+      const end = sql.indexOf("create function save_route_task_outcome");
+      const createMatrix = sql.slice(start, end);
+
+      expect(createMatrix).toContain("p_kind text default 'automatic'");
+      expect(createMatrix).toContain("p_requested_city_code text default null");
+      expect(createMatrix).toContain("p_requested_by_participant_id uuid default null");
+      expect(createMatrix).toContain("jsonb_array_length(p_candidates) <> 1");
+      expect(createMatrix).toContain("p_candidates -> 0 ->> 'city_code' is distinct from p_requested_city_code");
+      expect(createMatrix).toContain("where p_kind = 'automatic'");
+    }
+  });
+
   it("prevents automatic replacement and reserves superseding for host confirmation", async () => {
     const sql = (await readFile(migrationPath, "utf8")).toLowerCase();
 

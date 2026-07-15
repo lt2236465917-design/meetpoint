@@ -36,7 +36,7 @@ const allowedTransitions: Readonly<Record<RunStatus, readonly RunStatus[]>> = {
   collecting: ["cooling_down", "calculating", "incomplete", "failed"],
   cooling_down: ["collecting", "failed"],
   calculating: ["validating", "incomplete", "failed"],
-  validating: ["completed", "failed"],
+  validating: ["awaiting_host_confirmation", "completed", "failed"],
   awaiting_host_confirmation: ["completed", "failed"],
   completed: [],
   incomplete: [],
@@ -242,6 +242,9 @@ export class RunOrchestrator {
     if (!proposal) return this.transition(run, "failed", { errorCode: "AGENT_PROPOSAL_INVALID" });
     try {
       await this.repository.materializeApprovedProposal({ run, proposal, quotes });
+      if (run.kind === "alternative") {
+        return this.transition(run, "awaiting_host_confirmation");
+      }
       await this.repository.publishSharedResult(run.id, proposal.id);
     } catch {
       return this.transition(run, "failed", { errorCode: "PUBLICATION_GUARD_REJECTED" });

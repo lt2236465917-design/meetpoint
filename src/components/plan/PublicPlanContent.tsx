@@ -171,6 +171,14 @@ export function PublicPlanContent({
             </div>
           )}
         </div>
+        {hasCompletedResult ? (
+          <Link
+            className="mt-3 block w-full rounded-lg border border-gray-200 py-3 text-center font-medium text-gray-950"
+            href={`/p/${code}/alternatives`}
+          >
+            换个城市看看
+          </Link>
+        ) : null}
         {canCalculateHere ? (
           <div className="mt-4">
             <Notice>

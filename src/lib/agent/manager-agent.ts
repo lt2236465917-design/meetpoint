@@ -35,6 +35,11 @@ const managerInputSchema = z.object({
   }),
   manualAddCityCodes: z.array(z.string()).optional(),
   manualExcludeCityCodes: z.array(z.string()).optional(),
+  alternative: z.object({
+    cityCode: z.string().trim().min(1),
+    cityName: z.string().trim().min(1),
+    requestedByParticipantId: z.string().trim().min(1),
+  }).strict().optional(),
 }).strict();
 
 export type ManagerInput = z.input<typeof managerInputSchema>;
@@ -44,11 +49,21 @@ export class ManagerAgent {
 
   async prepare(input: ManagerInput): Promise<{ runId: string; taskIds: string[] }> {
     const parsed = managerInputSchema.parse(input);
-    const candidates = generateCandidateCities({
-      departureCityCodes: parsed.participants.map((participant) => participant.departureCityCode),
-      manualAddCityCodes: parsed.manualAddCityCodes,
-      manualExcludeCityCodes: parsed.manualExcludeCityCodes,
-    });
+    const requestedCity = parsed.alternative
+      ? findCityByCode(parsed.alternative.cityCode)
+      : null;
+    if (parsed.alternative && (
+      !requestedCity
+      || requestedCity.name !== parsed.alternative.cityName
+      || !parsed.participants.some((participant) => participant.id === parsed.alternative?.requestedByParticipantId)
+    )) throw new Error("invalid alternative city request");
+    const candidates = requestedCity
+      ? [requestedCity]
+      : generateCandidateCities({
+          departureCityCodes: parsed.participants.map((participant) => participant.departureCityCode),
+          manualAddCityCodes: parsed.manualAddCityCodes,
+          manualExcludeCityCodes: parsed.manualExcludeCityCodes,
+        });
     const tasks = buildRouteTasks({
       participants: parsed.participants,
       candidates,
@@ -66,6 +81,9 @@ export class ManagerAgent {
         source: "system",
       })),
       tasks,
+      kind: parsed.alternative ? "alternative" : "automatic",
+      requestedCityCode: parsed.alternative?.cityCode ?? null,
+      requestedByParticipantId: parsed.alternative?.requestedByParticipantId ?? null,
     });
   }
 }

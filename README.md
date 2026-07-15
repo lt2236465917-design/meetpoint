@@ -4,7 +4,7 @@ Mobile-first H5 MVP for choosing a fair cross-city meeting city for 2-6 people i
 
 ## Multi-Agent Migration Status
 
-The approved [2026-07-15 Multi-Agent design](docs/superpowers/specs/2026-07-15-multi-agent-recommendation-design.md) is in progress. Tasks 1–11 are implemented: plans use an arrival date and host credential, verified quote evidence and route tasks are persisted, deterministic saving/fast/unique-city policy and agent review exist, bounded runs publish through an atomic guard, and the shared result renders one city with two persisted schemes. Tasks 12–14 are not complete. The PostgreSQL/Supabase migration has not received its live smoke test. Do not describe the target experience as released.
+The approved [2026-07-15 Multi-Agent design](docs/superpowers/specs/2026-07-15-multi-agent-recommendation-design.md) is in progress. Tasks 1–12 are implemented: plans use an arrival date and host credential, verified quote evidence and route tasks are persisted, deterministic saving/fast/unique-city policy and agent review exist, bounded runs publish through an atomic guard, the shared result renders one city with two persisted schemes, and participants can create private one-city previews that only the host can confirm as the replacement. Tasks 13–14 are not complete. The PostgreSQL/Supabase migration has not received its live smoke test. Do not describe the target experience as released.
 
 Legacy estimate and three-city modules remain only as cleanup targets for Task 13. They do not define the shared-result publication contract.
 
@@ -23,6 +23,7 @@ Legacy estimate and three-city modules remain only as cleanup targets for Task 1
 - `/p/[code]/join`: participant submits name, departure city, and accepted transport modes, then returns to the public plan page automatically.
 - `/p/[code]/manage`: legacy route that points users back to the public plan page.
 - `/p/[code]/result`: shared team result page that renders one recommended city plus exactly “省钱方案” and “省时方案” from persisted scheme routes only after completion. Pending, collecting, cooling, calculating, validating, incomplete, and failed states show bounded progress, retry, or diagnostic guidance without result cards.
+- `/p/[code]/alternatives`: participant-only one-city recalculation flow. The preview stays private to its requester and the host until the host confirms replacement.
 - `POST /api/plans`: creates a plan from `{ title, arrivalDate, participantLimit }` and returns `{ code, shareUrl, hostToken }`; the host token is returned once.
 - `GET /api/plans/[code]`: returns public plan data, `latestRun` progress, and `latestSharedResult` only when the latest run is `completed`.
 - `GET /api/cities/search?q=...`: searches the built-in city library first, then uses Amap to validate city-level local misses; returns `{ cities }`.
@@ -31,6 +32,9 @@ Legacy estimate and three-city modules remain only as cleanup targets for Task 1
 - `POST /api/plans/[code]/candidates`: currently returns `CANDIDATE_EDITING_UNAVAILABLE`.
 - `POST /api/plans/[code]/calculate`: creates a bounded automatic run and returns HTTP 202 `{ runId, status: "pending" }`; requires `x-participant-token`.
 - `POST /api/plans/[code]/runs/[runId]/advance`: advances at most one state transition or one bounded query batch; requires `x-participant-token`.
+- `POST /api/plans/[code]/previews`: creates a one-city alternative run from `{ cityCode, cityName }`; requires `x-participant-token` and returns HTTP 202.
+- `GET /api/plans/[code]/previews/[runId]`: reads private progress and preview data only for the requesting participant or host; unauthorized callers receive 404.
+- `POST /api/plans/[code]/previews/[runId]/confirm`: atomically replaces the current shared result; authority comes only from `x-host-token` and repeated successful confirmation is idempotent.
 - `POST /api/plans/[code]/explain`: regenerates DeepSeek/fallback explanations for the latest run and returns `{ ok, count }`.
 
 ## Core Modules
@@ -46,6 +50,7 @@ Legacy estimate and three-city modules remain only as cleanup targets for Task 1
 - `src/lib/recommendation/policy.ts` and `validators.ts`: deterministic direct-first saving/fast schemes, unique-city ranking, evidence replay, and bounded policy evaluation.
 - `src/lib/agent/`: provider-neutral model boundary plus Manager, Query, Calculation, Supervisor, Fallback, tracing, and bounded orchestration modules.
 - `src/lib/agent/run-orchestrator.ts`: creates and incrementally advances durable runs with a persisted lease; it dispatches to the guarded in-memory fallback when Supabase is absent.
+- `src/lib/recommendation/alternative-preview.ts` and `src/lib/security/host-confirmation.ts`: bind a private run to one canonical city and requesting participant, authorize private reads, and pass the exact Supervisor-approved proposal to host-only atomic confirmation.
 - `src/components/result/SharedRecommendation.tsx` and `SchemeCard.tsx`: render the published city once and map persisted participant routes directly, including team totals, route facts, quote fingerprints, and China-time freshness; they never render booking links or client-side route selection.
 - `src/components/result/RefreshingResultNotice.tsx`: maps every run status to Chinese progress/retry guidance and uses bounded refresh backoff.
 - `src/lib/ui/meeting-history.ts`: browser-only local recent-record storage; it caches `useSyncExternalStore` snapshots so the homepage does not trigger React update loops.
@@ -127,7 +132,7 @@ For UI changes, also verify a mobile viewport around `390x844` and a desktop vie
 
 ## Manual Handoff Smoke
 
-After the automated verification above, run this browser smoke before Tasks 12–14:
+After the automated verification above, run this browser smoke before Tasks 13–14:
 
 1. Create a plan.
 2. Return to `/` and confirm the created plan appears in recent meeting records on the same device.
@@ -138,3 +143,5 @@ After the automated verification above, run this browser smoke before Tasks 12�
 7. Confirm the calculate request returns a pending run and the progress route is reachable with the participant token.
 8. Do not use local fallback to claim a published target result: it has no supplier adapter and will finish as `incomplete` without injected verified quotes. Full PostgreSQL, supplier, and device acceptance remains Task 14.
 9. With a completed fixture or Supabase-backed run, confirm `/p/[code]/result` shows the city once, exactly “省钱方案” and “省时方案”, every participant route, quote freshness in China time, and no estimate, average-fare, three-city, or booking-link UI.
+10. From a completed result, open “换个城市看看”, select one supported city, and confirm the requester sees “仅你可见的预览” while the shared result remains unchanged.
+11. Open the preview URL in the host browser, confirm “确认替换共享结果” appears only there, then confirm once and repeat the request; both calls should end completed and the shared result should show the replacement city.

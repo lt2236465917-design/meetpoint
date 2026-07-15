@@ -736,25 +736,25 @@ git commit -m "feat: show one city with two schemes"
 - Participant-authenticated preview GET returns only when token belongs to the requesting participant; host token may also read it.
 - Host-authenticated confirmation POST returns `{ runId, status: 'completed' }` after atomic RPC.
 
-- [ ] **Step 1: Write failing authorization/privacy tests**
+- [x] **Step 1: Write failing authorization/privacy tests**
 
 Cover any participant creating a supported-city preview, city search validation, preview matrix restricted to one requested city, another participant receiving 404 for the private payload, public shared route still showing the prior result, participant token unable to confirm, wrong/missing host token rejected, correct host token confirming the exact approved proposal version, and double confirmation being idempotent.
 
-- [ ] **Step 2: Run focused tests and verify missing endpoints**
+- [x] **Step 2: Run focused tests and verify missing endpoints**
 
 Run: `npm run test -- tests/alternative-preview-route.test.ts tests/host-confirmation-route.test.ts tests/alternative-city-flow.test.ts tests/host-confirmation.test.ts`
 
 Expected: FAIL because no preview/host-confirmation flow exists.
 
-- [ ] **Step 3: Implement preview creation and private reads**
+- [x] **Step 3: Implement preview creation and private reads**
 
 Reuse city search normalization, Manager task expansion, collection, Calculation, Supervisor, and validators with `kind = 'alternative'` and exactly one candidate. On approval store result/schemes/routes as `private_preview` and set `awaiting_host_confirmation`; do not call shared publication.
 
-- [ ] **Step 4: Implement host verification and atomic replacement**
+- [x] **Step 4: Implement host verification and atomic replacement**
 
 Read `hostToken` only from `x-host-token`, hash it, compare through the server repository, then call `confirm_alternative_result`. Never accept local-history role, participant token, query parameter, or request body role as authority.
 
-- [ ] **Step 5: Implement the mobile-first flow**
+- [x] **Step 5: Implement the mobile-first flow**
 
 Add “换个城市看看” after a completed shared result, reuse `CityCombobox`, show private progress/preview on `/alternatives`, label it “仅你可见的预览”, and show “请发起人确认替换” unless this browser holds the host token; host sees “确认替换共享结果”.
 

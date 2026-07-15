@@ -248,7 +248,10 @@ create function create_recommendation_run_matrix(
   p_plan_id uuid,
   p_arrival_date date,
   p_candidates jsonb,
-  p_tasks jsonb
+  p_tasks jsonb,
+  p_kind text default 'automatic',
+  p_requested_city_code text default null,
+  p_requested_by_participant_id uuid default null
 )
 returns jsonb
 language plpgsql
@@ -265,6 +268,20 @@ begin
     or jsonb_typeof(p_tasks) is distinct from 'array'
     or jsonb_array_length(p_candidates) = 0
     or jsonb_array_length(p_tasks) = 0
+    or p_kind not in ('automatic', 'alternative')
+    or (
+      p_kind = 'automatic'
+      and (p_requested_city_code is not null or p_requested_by_participant_id is not null)
+    )
+    or (
+      p_kind = 'alternative'
+      and (
+        p_requested_city_code is null
+        or p_requested_by_participant_id is null
+        or jsonb_array_length(p_candidates) <> 1
+        or p_candidates -> 0 ->> 'city_code' is distinct from p_requested_city_code
+      )
+    )
   then
     raise exception 'invalid run matrix input';
   end if;
@@ -276,6 +293,15 @@ begin
   for update;
   if not found or v_meeting_date is distinct from p_arrival_date then
     raise exception 'plan arrival date mismatch';
+  end if;
+
+  if p_kind = 'alternative' and not exists (
+    select 1
+    from public.participants
+    where public.participants.id = p_requested_by_participant_id
+      and public.participants.plan_id = p_plan_id
+  ) then
+    raise exception 'alternative requester is not a plan participant';
   end if;
 
   if exists (
@@ -333,9 +359,9 @@ begin
   end if;
 
   insert into public.recommendation_runs (
-    id, plan_id, status, kind
+    id, plan_id, status, kind, requested_city_code, requested_by_participant_id
   ) values (
-    p_run_id, p_plan_id, 'pending', 'automatic'
+    p_run_id, p_plan_id, 'pending', p_kind, p_requested_city_code, p_requested_by_participant_id
   );
 
   insert into public.candidate_cities (
@@ -352,6 +378,7 @@ begin
     city_name text,
     source text
   )
+  where p_kind = 'automatic'
   on conflict (plan_id, city_code, source) do update
   set city_name = excluded.city_name, enabled = true;
 
@@ -991,7 +1018,7 @@ begin
 end;
 $$;
 
-revoke execute on function create_recommendation_run_matrix(uuid, uuid, date, jsonb, jsonb)
+revoke execute on function create_recommendation_run_matrix(uuid, uuid, date, jsonb, jsonb, text, text, uuid)
   from public, anon, authenticated;
 revoke execute on function save_route_task_outcome(uuid, jsonb, jsonb)
   from public, anon, authenticated;
@@ -1000,7 +1027,7 @@ revoke execute on function publish_shared_result(uuid, uuid)
 revoke execute on function confirm_alternative_result(uuid, uuid, text)
   from public, anon, authenticated;
 
-grant execute on function create_recommendation_run_matrix(uuid, uuid, date, jsonb, jsonb)
+grant execute on function create_recommendation_run_matrix(uuid, uuid, date, jsonb, jsonb, text, text, uuid)
   to service_role;
 grant execute on function save_route_task_outcome(uuid, jsonb, jsonb)
   to service_role;

@@ -34,13 +34,20 @@ export async function GET(
     .from("participants")
     .select("id, name, departure_city_name, accepted_modes")
     .eq("plan_id", plan.id);
-  const { data: runs } = await supabase
-    .from("recommendation_runs")
-    .select("id, status, trace_id, retry_after, error_summary, started_at")
+  const { data: currentSharedResults } = await supabase
+    .from("recommendation_results")
+    .select("id,run_id,city_code,explanation_zh,published_at")
     .eq("plan_id", plan.id)
-    .order("started_at", { ascending: false })
+    .eq("is_shared", true)
+    .is("superseded_at", null)
     .limit(1);
-
+  const currentShared = currentSharedResults?.[0] ?? null;
+  const runQuery = supabase
+    .from("recommendation_runs")
+    .select("id, status, trace_id, retry_after, error_summary, started_at");
+  const { data: runs } = currentShared
+    ? await runQuery.eq("id", currentShared.run_id).limit(1)
+    : await runQuery.eq("plan_id", plan.id).eq("kind", "automatic").order("started_at", { ascending: false }).limit(1);
   const latestRun = runs?.[0] ?? null;
   const { count: pendingGroups } = latestRun
     ? await supabase
@@ -49,15 +56,6 @@ export async function GET(
       .eq("run_id", latestRun.id)
       .in("status", ["pending", "running", "retryable_failure"])
     : { count: null };
-  const { data: sharedResults } = latestRun?.status === "completed"
-    ? await supabase
-      .from("recommendation_results")
-      .select("id, city_code, explanation_zh, published_at")
-      .eq("run_id", latestRun.id)
-      .eq("is_shared", true)
-      .limit(1)
-    : { data: null };
-
   return NextResponse.json({
     plan: {
       code: plan.code,
@@ -76,6 +74,13 @@ export async function GET(
           diagnosticCode: latestRun.error_summary,
         }
       : null,
-    latestSharedResult: latestRun?.status === "completed" ? sharedResults?.[0] ?? null : null,
+    latestSharedResult: latestRun?.status === "completed" && currentShared
+      ? {
+          id: currentShared.id,
+          city_code: currentShared.city_code,
+          explanation_zh: currentShared.explanation_zh,
+          published_at: currentShared.published_at,
+        }
+      : null,
   });
 }

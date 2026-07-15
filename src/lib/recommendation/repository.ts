@@ -45,6 +45,9 @@ export type CreateRunMatrixInput = {
   arrivalDate: string;
   candidates: CandidateRecord[];
   tasks: RouteTaskDraft[];
+  kind?: "automatic" | "alternative";
+  requestedCityCode?: string | null;
+  requestedByParticipantId?: string | null;
 };
 
 export type SavedAgentProposal = {
@@ -275,6 +278,9 @@ export class SupabaseRecommendationRepository
         search_date: task.searchDate,
         physical_key: task.physicalKey,
       })),
+      p_kind: input.kind ?? "automatic",
+      p_requested_city_code: input.requestedCityCode ?? null,
+      p_requested_by_participant_id: input.requestedByParticipantId ?? null,
     });
     if (error) throw new Error(`Failed to create recommendation run matrix: ${error.message}`);
     const parsed = runMatrixResultSchema.safeParse(data);

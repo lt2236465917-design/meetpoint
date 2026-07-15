@@ -125,7 +125,7 @@ function state(): StoreState {
 function timestamp() { return new Date().toISOString(); }
 function id(prefix: string) { return `${prefix}_${randomUUID()}`; }
 function latestRun(planId: string) {
-  return state().runs.filter((run) => run.planId === planId)
+  return state().runs.filter((run) => run.planId === planId && run.kind === "automatic")
     .sort((left, right) => right.startedAt.localeCompare(left.startedAt))[0] ?? null;
 }
 function participantsFor(planId: string) { return state().participants.filter((participant) => participant.planId === planId); }
@@ -140,9 +140,8 @@ function currentSharedResult(planId: string) {
   ) ?? null;
 }
 
-function publicSharedResult(planId: string) {
-  const result = currentSharedResult(planId);
-  if (!result || !result.publishedAt) return null;
+function resultPayload(result: ResultRow) {
+  const planId = result.planId;
   const participants = participantsFor(planId);
   const schemes = state().schemes
     .filter((scheme) => scheme.resultId === result.id)
@@ -188,10 +187,17 @@ function publicSharedResult(planId: string) {
     cityCode: result.cityCode,
     cityName: findCityByCode(result.cityCode)?.name ?? result.cityCode,
     explanationZh: result.explanationZh,
-    isShared: true as const,
+    isShared: result.isShared,
     publishedAt: result.publishedAt,
     schemes,
   };
+}
+
+function publicSharedResult(planId: string) {
+  const result = currentSharedResult(planId);
+  if (!result || !result.publishedAt) return null;
+  const payload = resultPayload(result);
+  return payload ? { ...payload, publishedAt: result.publishedAt } : null;
 }
 
 function publicPlan(plan: PlanRow) {
@@ -446,21 +452,48 @@ export async function advanceFallbackRun(input: { runId: string; planId: string 
   return publicProgress(run)!;
 }
 
-export async function readFallbackPrivatePreview(input: { runId: string; participantToken: string }) {
+export async function readFallbackPrivatePreview(input: {
+  code?: string;
+  runId: string;
+  participantToken?: string | null;
+  hostToken?: string | null;
+}) {
   const run = runFor(input.runId);
   if (!run || run.kind !== "alternative" || !run.requestedByParticipantId) return null;
-  const credential = state().participantCredentials.find((entry) => entry.participantId === run.requestedByParticipantId);
-  if (!credential || !await verifyToken(input.participantToken, credential.editTokenHash)) return null;
-  return state().results.find((result) => result.runId === run.id) ?? null;
+  if (input.code && planFor(input.code)?.id !== run.planId) return null;
+  const participantCredential = state().participantCredentials.find((entry) => entry.participantId === run.requestedByParticipantId);
+  const hostCredential = state().planCredentials.find((entry) => entry.planId === run.planId);
+  const participantAllowed = Boolean(
+    participantCredential
+    && input.participantToken
+    && await verifyToken(input.participantToken, participantCredential.editTokenHash),
+  );
+  const hostAllowed = Boolean(
+    hostCredential
+    && input.hostToken
+    && await verifyToken(input.hostToken, hostCredential.hostTokenHash),
+  );
+  if (!participantAllowed && !hostAllowed) return null;
+  const result = state().results.find((entry) => entry.runId === run.id);
+  const payload = result ? resultPayload(result) : null;
+  return {
+    runId: run.id,
+    status: run.status,
+    result: payload,
+    ...(payload ?? {}),
+  };
 }
 
-export async function confirmFallbackAlternative(input: { runId: string; hostToken: string }) {
+export async function confirmFallbackAlternative(input: { code?: string; runId: string; hostToken: string }) {
   const run = runFor(input.runId);
-  if (!run || run.kind !== "alternative" || run.status !== "awaiting_host_confirmation") throw new Error("RUN_NOT_FOUND");
+  if (!run || run.kind !== "alternative") throw new Error("RUN_NOT_FOUND");
+  if (input.code && planFor(input.code)?.id !== run.planId) throw new Error("RUN_NOT_FOUND");
   const credential = state().planCredentials.find((entry) => entry.planId === run.planId);
   if (!credential || !await verifyToken(input.hostToken, credential.hostTokenHash)) throw new Error("INVALID_HOST_TOKEN");
   const result = state().results.find((entry) => entry.runId === run.id);
   if (!result) throw new Error("PUBLICATION_GUARD_REJECTED");
+  if (run.status === "completed" && result.isShared) return result;
+  if (run.status !== "awaiting_host_confirmation") throw new Error("RUN_NOT_FOUND");
   const current = currentSharedResult(run.planId);
   if (!current) throw new Error("PUBLICATION_GUARD_REJECTED");
   current.supersededAt = timestamp();
@@ -475,8 +508,9 @@ export async function confirmFallbackAlternative(input: { runId: string; hostTok
 export function readFallbackPlan(code: string) {
   const plan = planFor(code);
   if (!plan) return null;
-  const run = latestRun(plan.id);
   const shared = publicSharedResult(plan.id);
+  const sharedRow = currentSharedResult(plan.id);
+  const run = sharedRow ? runFor(sharedRow.runId) : latestRun(plan.id);
   return {
     plan: publicPlan(plan),
     participants: participantsFor(plan.id).map((participant) => ({ id: participant.id, name: participant.name, departure_city_name: participant.departureCityName, accepted_modes: participant.acceptedModes })),

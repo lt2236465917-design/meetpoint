@@ -2,7 +2,7 @@
 
 This document is the stable technical map for the running system. Detailed task history lives in git commits and `docs/superpowers/plans/`.
 
-The approved product and Multi-Agent architecture is documented separately in `docs/superpowers/specs/2026-07-15-multi-agent-recommendation-design.md`. Tasks 1–11 are implemented; Tasks 12–14 remain. The shared result now renders one city and the persisted saving/fast schemes, but private alternative confirmation, legacy-path removal, the PostgreSQL/Supabase migration smoke, and real supplier/device acceptance are not complete.
+The approved product and Multi-Agent architecture is documented separately in `docs/superpowers/specs/2026-07-15-multi-agent-recommendation-design.md`. Tasks 1–12 are implemented; Tasks 13–14 remain. The shared result renders one city and persisted saving/fast schemes, and private one-city previews now require requester-or-host reads plus host-only atomic replacement. Legacy-path removal, the PostgreSQL/Supabase migration smoke, and real supplier/device acceptance are not complete.
 
 ## Runtime Shape
 
@@ -23,6 +23,7 @@ The approved product and Multi-Agent architecture is documented separately in `d
 | `/p/[code]/join` | Participant submits name, departure city, and accepted transport modes, then returns to the public plan page automatically. |
 | `/p/[code]/manage` | Legacy route that points users back to the public plan page. |
 | `/p/[code]/result` | Shows one published city and exactly saving/fast schemes from persisted scheme routes after completion; all other run states show progress, retry, or diagnostic guidance without result cards. |
+| `/p/[code]/alternatives` | Lets a participant request one supported city, view private progress/result data, and hand the preview URL to the host for confirmation. |
 
 ## API Routes
 
@@ -35,6 +36,9 @@ The approved product and Multi-Agent architecture is documented separately in `d
 | `/api/plans/[code]/candidates` | `POST` | Currently unavailable for manual edits. | None |
 | `/api/plans/[code]/calculate` | `POST` | Create an automatic run and return HTTP 202 without waiting for supplier work. | `x-participant-token` |
 | `/api/plans/[code]/runs/[runId]/advance` | `POST` | Advance one bounded transition or query batch idempotently. | `x-participant-token` |
+| `/api/plans/[code]/previews` | `POST` | Create a private alternative run restricted to one canonical city. | `x-participant-token` |
+| `/api/plans/[code]/previews/[runId]` | `GET` | Read private progress/result data; unauthorized callers receive 404. | Requesting `x-participant-token` or `x-host-token` |
+| `/api/plans/[code]/previews/[runId]/confirm` | `POST` | Confirm the exact approved proposal and atomically replace the current shared result. | `x-host-token` only |
 | `/api/plans/[code]/explain` | `POST` | Regenerate explanations for the latest recommendation run. | None |
 | `/api/cities/search` | `GET` | Search local city data first, then Amap-backed city-level matches. | None |
 
@@ -44,9 +48,10 @@ The approved product and Multi-Agent architecture is documented separately in `d
 2. Participants submit rows in `participants`; each edit token is returned once and only its hash is stored. The public plan page polls `GET /api/plans/[code]` so filling records appear without a manual browser refresh.
 3. Candidate controls can be read from `candidate_cities`; manual candidate editing is disabled in the current no-management-token flow.
 4. After participant-token authorization, `POST /calculate` creates one `pending` automatic run and its route-task matrix, then returns HTTP 202. A duplicate active run receives `409 CALCULATION_IN_PROGRESS`. `POST /runs/[runId]/advance` owns a persisted lease in the Supabase path and performs at most one transition or bounded query batch. It accepts only verified quotes, requires at least one city with complete participant coverage, validates the deterministic saving/fast proposal, then invokes the guarded publication RPC. An automatic run cannot replace an existing shared result.
-5. The legacy explain API can regenerate explanation fields for legacy recommendation rows without changing their deterministic scores. It is not the target result-publication path.
-6. `GET /api/plans/[code]` exposes progress and exposes `latestSharedResult` only when the latest run is `completed`. The `/result` screen independently loads the shared `recommendation_results` row, its two `recommendation_schemes`, and each persisted `recommendation_scheme_routes` selection joined to the participant and verified quote. It renders those stored selections directly and never reselects a route in the browser.
-7. The browser stores local recent meeting records in `localStorage` when a plan is created, opened, or joined. Participant records keep the participant edit token on the filling device so the public plan page can show direct calculation after the plan is full. The homepage recent-record store refreshes on same-tab updates, `storage`, `pageshow`, and window focus so plans created on another route still appear after returning to `/`. This is a convenience layer only and is not a server-side history.
+5. After a completed shared result, any participant may create an `alternative` run bound to exactly one requested city and their participant identity. The same Manager/Query/Calculation/Supervisor pipeline materializes it privately and stops at `awaiting_host_confirmation`. The requesting participant and host may read it; other participants receive 404. Only `x-host-token` can invoke the confirmation boundary, which passes the exact approved proposal and stored verified credential hash to `confirm_alternative_result`.
+6. The legacy explain API can regenerate explanation fields for legacy recommendation rows without changing their deterministic scores. It is not the target result-publication path.
+7. `GET /api/plans/[code]` and `/result` anchor public state to the current non-superseded shared result, so a pending private preview never hides or replaces the prior city. The result screen loads the shared `recommendation_results` row, its two `recommendation_schemes`, and each persisted `recommendation_scheme_routes` selection joined to the participant and verified quote. It renders those stored selections directly and never reselects a route in the browser.
+8. The browser stores local recent meeting records in `localStorage` when a plan is created, opened, or joined. Participant records keep the participant edit token on the filling device so the public plan page can show direct calculation after the plan is full. The homepage recent-record store refreshes on same-tab updates, `storage`, `pageshow`, and window focus so plans created on another route still appear after returning to `/`. This is a convenience layer only and is not a server-side history.
 
 In fallback mode, the same logical records are kept in process memory instead of Supabase. Tests may inject validated quotes, but the running app does not call suppliers in this mode; missing coverage ends the run as `incomplete` and no estimate or shared result is synthesized.
 
@@ -70,11 +75,13 @@ In fallback mode, the same logical records are kept in process memory instead of
 | `src/components/plan/RecentMeetingRecords.tsx` | Homepage local recent-record list backed by `useSyncExternalStore` and cached snapshots. |
 | `src/components/result/SharedRecommendation.tsx`, `SchemeCard.tsx` | One-city/two-scheme shared result that renders persisted scheme-route rows, team totals, quote fingerprints, and China-time freshness without booking links or client-side route selection. |
 | `src/components/result/RefreshingResultNotice.tsx` | Chinese progress, cooldown, retry, and diagnostic feedback for every run status with bounded refresh backoff. |
+| `src/components/result/AlternativeCityFlow.tsx` | Mobile-first city search, private progress/result display, and host-only confirmation action. |
 | `src/lib/city/candidate-generator.ts` | Deterministic candidate-city generation from participant cities and host controls. |
 | `src/lib/city/amap-client.ts`, `src/lib/city/city-provider.ts` | Local-first city search and Amap validation; city-level remote matches can be selected, while non-city remote places never enter scoring. |
 | `src/lib/fallback/mvp-store.ts` | In-memory local fallback persistence with target run states and publication guards; tests can seed verified quotes, while the running app cannot query suppliers in this mode. |
 | `src/lib/agent/run-orchestrator.ts` | Bounded durable-run state machine, persisted advance lease, quote coverage gate, agent review, and guarded publication; dispatches to the equivalent fallback state machine when Supabase is absent. |
 | `src/lib/recommendation/repository.ts` | Server-side persistence and guarded RPC boundary; it does not make policy decisions. |
+| `src/lib/recommendation/alternative-preview.ts`, `src/lib/security/host-confirmation.ts` | One-city alternative creation, requester/host private reads, exact approved-proposal selection, and host-token confirmation. |
 | `src/lib/recommendation/policy.ts`, `validators.ts` | Deterministic one-city/saving/fast policy replay and evidence/publication validation. |
 | `src/lib/travel/types.ts` | Vendor-neutral travel-provider interface plus main-app gateway request/response types. |
 | `src/lib/travel/estimate-provider.ts`, `src/lib/travel/flyai-provider.ts` | Legacy estimate path retained only until Task 13; it must not feed the guarded shared result. |

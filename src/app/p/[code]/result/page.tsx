@@ -146,12 +146,20 @@ async function loadResultPageData(code: string) {
     .single();
   if (!plan) return null;
 
-  const { data: runs } = await supabase
-    .from("recommendation_runs")
-    .select("id,status,trace_id,retry_after,error_summary,started_at")
+  const { data: sharedResults } = await supabase
+    .from("recommendation_results")
+    .select("run_id")
     .eq("plan_id", plan.id)
-    .order("started_at", { ascending: false })
+    .eq("is_shared", true)
+    .is("superseded_at", null)
     .limit(1);
+  const sharedRunId = sharedResults?.[0]?.run_id;
+  const runQuery = supabase
+    .from("recommendation_runs")
+    .select("id,status,trace_id,retry_after,error_summary,started_at");
+  const { data: runs } = sharedRunId
+    ? await runQuery.eq("id", sharedRunId).limit(1)
+    : await runQuery.eq("plan_id", plan.id).eq("kind", "automatic").order("started_at", { ascending: false }).limit(1);
   const run = runs?.[0] ?? null;
   const parsedStatus = runStatusSchema.safeParse(run?.status);
   if (!run || !parsedStatus.success) {

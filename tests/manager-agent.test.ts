@@ -4,6 +4,7 @@ import { ManagerAgent } from "@/lib/agent/manager-agent";
 import { deterministicRouteTaskId } from "@/lib/recommendation/repository";
 import type {
   CandidateRecord,
+  CreateRunMatrixInput,
   RecommendationRepository,
   StoredRouteTask,
 } from "@/lib/recommendation/repository";
@@ -11,8 +12,10 @@ import type {
 function managerRepository() {
   const candidates: CandidateRecord[] = [];
   const tasks: StoredRouteTask[] = [];
+  const matrices: CreateRunMatrixInput[] = [];
   const repository: RecommendationRepository = {
     async createRunMatrix(input) {
+      matrices.push(input);
       candidates.push(...input.candidates);
       const runId = "11111111-1111-4111-8111-111111111111";
       tasks.push(...input.tasks.map((task) => ({
@@ -31,7 +34,7 @@ function managerRepository() {
     async saveTaskOutcome() { throw new Error("not used"); },
     async updateRunStatus() {},
   };
-  return { repository, candidates, tasks };
+  return { repository, candidates, tasks, matrices };
 }
 
 const validInput = {
@@ -76,5 +79,27 @@ describe("ManagerAgent", () => {
       participants: [validInput.participants[0], { ...validInput.participants[1], id: "p2" }],
     })).rejects.toThrow("participant");
     expect(tasks).toHaveLength(0);
+  });
+
+  it("restricts an alternative run to the one canonical requested city", async () => {
+    const store = managerRepository();
+
+    await new ManagerAgent(store.repository).prepare({
+      ...validInput,
+      alternative: {
+        cityCode: "wuhan",
+        cityName: "武汉",
+        requestedByParticipantId: "p1",
+      },
+    });
+
+    expect(store.matrices).toHaveLength(1);
+    expect(store.matrices[0]).toMatchObject({
+      kind: "alternative",
+      requestedCityCode: "wuhan",
+      requestedByParticipantId: "p1",
+      candidates: [{ cityCode: "wuhan", cityName: "武汉" }],
+    });
+    expect(new Set(store.tasks.map((task) => task.cityCode))).toEqual(new Set(["wuhan"]));
   });
 });

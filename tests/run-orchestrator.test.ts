@@ -215,4 +215,32 @@ describe("RunOrchestrator", () => {
 
     expect(store.current.status).toBe("failed");
   });
+
+  it("materializes an approved alternative privately without calling automatic publication", async () => {
+    const current = { ...run("validating"), kind: "alternative" as const };
+    const store = repository({ current, quotes: [quote("p1", "wuhan"), quote("p2", "wuhan")] });
+    const materialize = vi.fn(async () => undefined);
+    const publish = vi.fn(async () => undefined);
+    store.getLatestApprovedProposal = async () => ({
+      id: "proposal-1",
+      version: 1,
+      output: {
+        status: "proposal",
+        cityCode: "wuhan",
+        schemes: [
+          { kind: "saving", quoteIdsByParticipant: { p1: `flyai:${"a".repeat(64)}`, p2: `flyai:${"a".repeat(64)}` }, totalFareCny: 200 },
+          { kind: "fast", quoteIdsByParticipant: { p1: `flyai:${"a".repeat(64)}`, p2: `flyai:${"a".repeat(64)}` }, totalFareCny: 200 },
+        ],
+        comparisonEvidence: { eligibleCityCodes: ["wuhan"], orderedCityCodes: ["wuhan"] },
+        explanationZh: "已核验。",
+      },
+    });
+    store.materializeApprovedProposal = materialize;
+    store.publishSharedResult = publish;
+
+    await expect(new RunOrchestrator({ repository: store }).advanceRun("run-1"))
+      .resolves.toBe("awaiting_host_confirmation");
+    expect(materialize).toHaveBeenCalledOnce();
+    expect(publish).not.toHaveBeenCalled();
+  });
 });
