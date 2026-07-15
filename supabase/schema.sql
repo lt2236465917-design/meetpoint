@@ -187,6 +187,8 @@ create table if not exists recommendation_runs (
   policy_version text not null default '2026-07-15.v1',
   trace_id uuid not null default gen_random_uuid(),
   retry_after timestamptz,
+  advance_lease_token uuid,
+  advance_lease_expires_at timestamptz,
   started_at timestamptz not null default now(),
   completed_at timestamptz,
   stale_after timestamptz,

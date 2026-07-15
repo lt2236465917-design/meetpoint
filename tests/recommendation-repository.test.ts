@@ -181,4 +181,16 @@ describe("SupabaseRecommendationRepository", () => {
     expect(versionEq).toHaveBeenCalledWith("version", 1);
     expect(statusEq).toHaveBeenCalledWith("status", "pending");
   });
+
+  it("accepts the UUID returned by the atomic publication RPC", async () => {
+    mocks.rpc.mockResolvedValue({
+      data: "11111111-1111-4111-8111-111111111111",
+      error: null,
+    });
+
+    await expect(new SupabaseRecommendationRepository().publishSharedResult(
+      "22222222-2222-4222-8222-222222222222",
+      "33333333-3333-4333-8333-333333333333",
+    )).resolves.toBeUndefined();
+  });
 });

@@ -91,6 +91,15 @@ export interface RunOrchestratorRepository extends RecommendationRepository, Age
     nextStatus: RunStatus,
     options?: { retryAfter?: string | null; errorCode?: string | null },
   ): Promise<boolean>;
+  tryAcquireAdvanceLease(input: {
+    runId: string;
+    expectedStatus: RunStatus;
+    token: string;
+    now: string;
+    expiresAt: string;
+  }): Promise<boolean>;
+  releaseAdvanceLease(runId: string, token: string): Promise<void>;
+  failAdvance(runId: string, token: string, errorCode: string): Promise<boolean>;
   listRunTasks(runId: string): Promise<StoredRouteTask[]>;
   listVerifiedQuotes(runId: string): Promise<VerifiedQuote[]>;
   getLatestApprovedProposal(runId: string): Promise<ApprovedProposal | null>;
@@ -415,6 +424,53 @@ export class SupabaseRecommendationRepository
     return Array.isArray(data) && data.length === 1 && data[0]?.id === runId;
   }
 
+  async tryAcquireAdvanceLease(input: {
+    runId: string;
+    expectedStatus: RunStatus;
+    token: string;
+    now: string;
+    expiresAt: string;
+  }): Promise<boolean> {
+    const { data, error } = await createServiceSupabaseClient()
+      .from("recommendation_runs")
+      .update({
+        advance_lease_token: input.token,
+        advance_lease_expires_at: input.expiresAt,
+      })
+      .eq("id", input.runId)
+      .eq("status", input.expectedStatus)
+      .or(`advance_lease_expires_at.is.null,advance_lease_expires_at.lte.${input.now}`)
+      .select("id");
+    if (error) throw new Error(`Failed to acquire recommendation run lease: ${error.message}`);
+    return Array.isArray(data) && data.length === 1 && data[0]?.id === input.runId;
+  }
+
+  async releaseAdvanceLease(runId: string, token: string): Promise<void> {
+    const { error } = await createServiceSupabaseClient()
+      .from("recommendation_runs")
+      .update({ advance_lease_token: null, advance_lease_expires_at: null })
+      .eq("id", runId)
+      .eq("advance_lease_token", token);
+    if (error) throw new Error(`Failed to release recommendation run lease: ${error.message}`);
+  }
+
+  async failAdvance(runId: string, token: string, errorCode: string): Promise<boolean> {
+    const { data, error } = await createServiceSupabaseClient()
+      .from("recommendation_runs")
+      .update({
+        status: "failed",
+        error_summary: errorCode,
+        completed_at: new Date().toISOString(),
+        advance_lease_token: null,
+        advance_lease_expires_at: null,
+      })
+      .eq("id", runId)
+      .eq("advance_lease_token", token)
+      .select("id");
+    if (error) throw new Error(`Failed to fail recommendation run advance: ${error.message}`);
+    return Array.isArray(data) && data.length === 1 && data[0]?.id === runId;
+  }
+
   async listRunTasks(runId: string): Promise<StoredRouteTask[]> {
     const { data, error } = await createServiceSupabaseClient()
       .from("route_tasks")
@@ -525,7 +581,9 @@ export class SupabaseRecommendationRepository
       p_run_id: runId,
       p_proposal_id: proposalId,
     });
-    if (error || data !== true) throw new Error("Failed to publish guarded shared result");
+    if (error || typeof data !== "string" || !z.uuid().safeParse(data).success) {
+      throw new Error("Failed to publish guarded shared result");
+    }
   }
 
   async saveProposal(input: SavedAgentProposal): Promise<void> {

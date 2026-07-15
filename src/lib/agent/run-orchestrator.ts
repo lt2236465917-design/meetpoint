@@ -1,5 +1,6 @@
 import { createAgentModel } from "@/lib/agent/deepseek-model";
 import { CalculationAgent } from "@/lib/agent/calculation-agent";
+import { FallbackAgent } from "@/lib/agent/fallback-agent";
 import { QueryAgent } from "@/lib/agent/query-agent";
 import { queryConcurrencyFromEnv, runQueryPool } from "@/lib/agent/query-pool";
 import { SupervisorAgent } from "@/lib/agent/supervisor-agent";
@@ -13,6 +14,7 @@ import {
 import { ManagerAgent } from "@/lib/agent/manager-agent";
 import { createServiceSupabaseClient } from "@/lib/supabase/server";
 import { verifyParticipantCanCalculatePlan } from "@/lib/security/participant-calculation";
+import { randomUUID } from "node:crypto";
 
 export type StoredRun = StoredRecommendationRun;
 export type RunOrchestratorRepository = Repository;
@@ -27,6 +29,18 @@ type RunOrchestratorOptions = {
 };
 
 const terminalStatuses = new Set<RunStatus>(["completed", "incomplete", "failed"]);
+const ADVANCE_LEASE_MS = 5 * 60 * 1000;
+const allowedTransitions: Readonly<Record<RunStatus, readonly RunStatus[]>> = {
+  pending: ["collecting", "failed"],
+  collecting: ["cooling_down", "calculating", "incomplete", "failed"],
+  cooling_down: ["collecting", "failed"],
+  calculating: ["validating", "incomplete", "failed"],
+  validating: ["completed", "failed"],
+  awaiting_host_confirmation: ["completed", "failed"],
+  completed: [],
+  incomplete: [],
+  failed: [],
+};
 
 function retryAt(tasks: readonly StoredRouteTask[]): string | null {
   return tasks
@@ -36,20 +50,46 @@ function retryAt(tasks: readonly StoredRouteTask[]): string | null {
     .at(0) ?? null;
 }
 
+function eligibleCityCodes(
+  run: StoredRun,
+  tasks: readonly StoredRouteTask[],
+  quotes: Awaited<ReturnType<RunOrchestratorRepository["listVerifiedQuotes"]>>,
+): string[] {
+  const taskParticipantsByCity = new Map<string, Set<string>>();
+  for (const task of tasks) {
+    const participantIds = taskParticipantsByCity.get(task.cityCode) ?? new Set<string>();
+    participantIds.add(task.participantId);
+    taskParticipantsByCity.set(task.cityCode, participantIds);
+  }
+  const quoteParticipantsByCity = new Map<string, Set<string>>();
+  for (const quote of quotes) {
+    const participantIds = quoteParticipantsByCity.get(quote.cityCode) ?? new Set<string>();
+    participantIds.add(quote.participantId);
+    quoteParticipantsByCity.set(quote.cityCode, participantIds);
+  }
+  return [...taskParticipantsByCity.keys()].filter((cityCode) => {
+    const taskParticipants = taskParticipantsByCity.get(cityCode)!;
+    const quoteParticipants = quoteParticipantsByCity.get(cityCode) ?? new Set<string>();
+    return run.participantIds.every((participantId) =>
+      taskParticipants.has(participantId) && quoteParticipants.has(participantId),
+    );
+  }).sort();
+}
+
 function hasCompleteCoverage(
+  run: StoredRun,
   tasks: readonly StoredRouteTask[],
   quotes: Awaited<ReturnType<RunOrchestratorRepository["listVerifiedQuotes"]>>,
 ): boolean {
-  const covered = new Set(
-    quotes.map((quote) => `${quote.participantId}:${quote.cityCode}`),
-  );
-  const expected = new Set(tasks.map((task) => `${task.participantId}:${task.cityCode}`));
-  return expected.size > 0 && [...expected].every((key) => covered.has(key));
+  return run.participantIds.length > 0 && eligibleCityCodes(run, tasks, quotes).length > 0;
 }
 
-function cityInputs(run: StoredRun, quotes: Awaited<ReturnType<RunOrchestratorRepository["listVerifiedQuotes"]>>) {
-  return [...new Set(quotes.map((quote) => quote.cityCode))]
-    .sort()
+function cityInputs(
+  run: StoredRun,
+  tasks: readonly StoredRouteTask[],
+  quotes: Awaited<ReturnType<RunOrchestratorRepository["listVerifiedQuotes"]>>,
+) {
+  return eligibleCityCodes(run, tasks, quotes)
     .map((cityCode) => ({ cityCode, quotes: quotes.filter((quote) => quote.cityCode === cityCode) }));
 }
 
@@ -72,6 +112,29 @@ export class RunOrchestrator {
     if (expectedPlanId && run.planId !== expectedPlanId) throw new Error("RUN_NOT_FOUND");
     if (terminalStatuses.has(run.status) || run.status === "awaiting_host_confirmation") return run.status;
 
+    const leaseToken = randomUUID();
+    const now = this.now();
+    const acquired = await this.repository.tryAcquireAdvanceLease({
+      runId: run.id,
+      expectedStatus: run.status,
+      token: leaseToken,
+      now: now.toISOString(),
+      expiresAt: new Date(now.getTime() + ADVANCE_LEASE_MS).toISOString(),
+    });
+    if (!acquired) return (await this.repository.getRun(run.id))?.status ?? run.status;
+
+    try {
+      return await this.advanceOwnedRun(run);
+    } catch {
+      const failed = await this.repository.failAdvance(run.id, leaseToken, "RUN_ADVANCE_FAILED");
+      if (failed) return "failed";
+      return (await this.repository.getRun(run.id))?.status ?? run.status;
+    } finally {
+      await this.repository.releaseAdvanceLease(run.id, leaseToken);
+    }
+  }
+
+  private async advanceOwnedRun(run: StoredRun): Promise<RunStatus> {
     if (run.status === "pending") return this.transition(run, "collecting");
     if (run.status === "cooling_down") {
       if (run.retryAfter && new Date(run.retryAfter).getTime() > this.now().getTime()) return "cooling_down";
@@ -88,6 +151,9 @@ export class RunOrchestrator {
     next: RunStatus,
     options: { retryAfter?: string | null; errorCode?: string | null } = {},
   ): Promise<RunStatus> {
+    if (!allowedTransitions[run.status].includes(next)) {
+      throw new Error(`Invalid recommendation run transition: ${run.status} -> ${next}`);
+    }
     const moved = await this.repository.compareAndSetRunStatus(run.id, run.status, next, options);
     if (moved) return next;
     return (await this.repository.getRun(run.id))?.status ?? run.status;
@@ -96,13 +162,23 @@ export class RunOrchestrator {
   private async collect(run: StoredRun): Promise<RunStatus> {
     const tasks = await this.repository.listRunTasks(run.id);
     const quotes = await this.repository.listVerifiedQuotes(run.id);
-    if (hasCompleteCoverage(tasks, quotes)) return this.transition(run, "calculating");
+    if (hasCompleteCoverage(run, tasks, quotes)) return this.transition(run, "calculating");
 
     const now = this.now().getTime();
-    const ready = tasks.filter((task) =>
-      task.status === "pending" ||
-      (task.status === "retryable_failure" && (!task.retryAfter || new Date(task.retryAfter).getTime() <= now)),
-    );
+    const fallback = new FallbackAgent({ now: this.now });
+    const recovery = new Map(tasks
+      .filter((task) => task.status === "retryable_failure")
+      .map((task) => [task.id, fallback.decide({
+        taskId: task.id,
+        errorCode: task.errorCode ?? "ROUTE_TASK_RETRYABLE_FAILURE",
+        retryAfter: task.retryAfter,
+        recoveryAttemptCount: Math.max(0, task.attemptCount - 1),
+        secondaryAdapterConfigured: false,
+      })]));
+    if ([...recovery.values()].some((action) => action.type === "stop_incomplete")) {
+      return this.transition(run, "incomplete", { errorCode: "REAL_QUOTE_COVERAGE_INCOMPLETE" });
+    }
+    const ready = tasks.filter((task) => task.status === "pending" || recovery.get(task.id)?.type === "rerun_task");
     if (ready.length > 0) {
       const batch = ready.slice(0, this.logicalConcurrency);
       await runQueryPool(batch.map((task) => task.id), {
@@ -112,7 +188,11 @@ export class RunOrchestrator {
       return (await this.repository.getRun(run.id))?.status ?? "collecting";
     }
 
-    const waitUntil = retryAt(tasks.filter((task) => task.status === "retryable_failure"));
+    const waitUntil = [...recovery.values()]
+      .filter((action): action is Extract<typeof action, { type: "wait_until" }> => action.type === "wait_until")
+      .map((action) => action.retryAt)
+      .sort()
+      .at(0) ?? retryAt(tasks.filter((task) => task.status === "retryable_failure"));
     if (waitUntil && new Date(waitUntil).getTime() > now) {
       return this.transition(run, "cooling_down", { retryAfter: waitUntil });
     }
@@ -124,7 +204,7 @@ export class RunOrchestrator {
       this.repository.listRunTasks(run.id),
       this.repository.listVerifiedQuotes(run.id),
     ]);
-    if (!hasCompleteCoverage(tasks, quotes)) {
+    if (!hasCompleteCoverage(run, tasks, quotes)) {
       return this.transition(run, "incomplete", { errorCode: "REAL_QUOTE_COVERAGE_INCOMPLETE" });
     }
     const model = createAgentModel();
@@ -136,7 +216,7 @@ export class RunOrchestrator {
       policyVersion: run.policyVersion,
       arrivalDate: run.arrivalDate,
       participantIds: run.participantIds,
-      cityInputs: cityInputs(run, quotes),
+      cityInputs: cityInputs(run, tasks, quotes),
       missingTaskIds: [],
     };
     const calculation = new CalculationAgent(model, this.repository);

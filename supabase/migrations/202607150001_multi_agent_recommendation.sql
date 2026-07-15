@@ -41,6 +41,8 @@ alter table recommendation_runs
   add column policy_version text not null default '2026-07-15.v1',
   add column trace_id uuid not null default gen_random_uuid(),
   add column retry_after timestamptz,
+  add column advance_lease_token uuid,
+  add column advance_lease_expires_at timestamptz,
   add constraint recommendation_runs_status_check check (
     status in (
       'pending',
