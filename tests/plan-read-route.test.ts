@@ -98,7 +98,9 @@ describe("GET /api/plans/[code]", () => {
       participants,
       latestRun,
     });
-    expect(participantLookup.select).toHaveBeenCalledWith("*");
+    expect(participantLookup.select).toHaveBeenCalledWith(
+      "id, name, departure_city_name, accepted_modes",
+    );
     expect(mocks.participantsEq).toHaveBeenCalledWith("plan_id", "plan-1");
     expect(latestRunLookup.order).toHaveBeenCalledWith("started_at", {
       ascending: false,

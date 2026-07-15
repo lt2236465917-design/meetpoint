@@ -4,8 +4,7 @@ create table if not exists plans (
   id uuid primary key default gen_random_uuid(),
   code text unique not null,
   title text not null,
-  meeting_date date not null,
-  target_arrival_time text not null,
+  meeting_date date not null, -- Planned arrival date in Asia/Shanghai.
   participant_limit integer not null check (participant_limit between 2 and 6),
   status text not null default 'collecting',
   created_at timestamptz not null default now(),

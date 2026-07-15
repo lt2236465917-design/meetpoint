@@ -22,7 +22,6 @@ type PlanRow = {
   code: string;
   title: string;
   meeting_date: string;
-  target_arrival_time: string;
   participant_limit: number;
   status: "collecting" | "completed";
   created_at: string;
@@ -37,7 +36,6 @@ type ParticipantRow = {
   departure_city_code: string;
   departure_city_name: string;
   accepted_modes: TransportMode[];
-  edit_token_hash: string;
   created_by_host: boolean;
   created_at: string;
   updated_at: string;
@@ -86,7 +84,12 @@ type CityRecommendationRow = {
 
 type StoreState = {
   plans: PlanRow[];
+  planCredentials: Array<{ plan_id: string; host_token_hash: string }>;
   participants: ParticipantRow[];
+  participantCredentials: Array<{
+    participant_id: string;
+    edit_token_hash: string;
+  }>;
   candidates: CandidateCityRow[];
   runs: RecommendationRunRow[];
   travelOptions: Array<TravelOption & { id: string; run_id: string }>;
@@ -99,15 +102,19 @@ const globalStore = globalThis as typeof globalThis & {
 };
 
 function state(): StoreState {
-  globalStore[globalKey] ??= {
+  const store = globalStore[globalKey] ??= {
     plans: [],
+    planCredentials: [],
     participants: [],
+    participantCredentials: [],
     candidates: [],
     runs: [],
     travelOptions: [],
     recommendations: [],
   };
-  return globalStore[globalKey];
+  store.planCredentials ??= [];
+  store.participantCredentials ??= [];
+  return store;
 }
 
 function now(): string {
@@ -128,7 +135,6 @@ function publicPlan(plan: PlanRow) {
     code: plan.code,
     title: plan.title,
     meeting_date: plan.meeting_date,
-    target_arrival_time: plan.target_arrival_time,
     participant_limit: plan.participant_limit,
     status: plan.status,
     created_at: plan.created_at,
@@ -139,8 +145,7 @@ function publicPlan(plan: PlanRow) {
 
 export async function createFallbackPlan(input: {
   title: string;
-  meetingDate: string;
-  targetArrivalTime: string;
+  arrivalDate: string;
   participantLimit: number;
 }) {
   const store = state();
@@ -150,12 +155,12 @@ export async function createFallbackPlan(input: {
   }
 
   const timestamp = now();
+  const hostToken = generateToken();
   const plan: PlanRow = {
     id: id("plan"),
     code,
     title: input.title,
-    meeting_date: input.meetingDate,
-    target_arrival_time: input.targetArrivalTime,
+    meeting_date: input.arrivalDate,
     participant_limit: input.participantLimit,
     status: "collecting",
     created_at: timestamp,
@@ -163,10 +168,15 @@ export async function createFallbackPlan(input: {
     last_calculated_at: null,
   };
   store.plans.push(plan);
+  store.planCredentials.push({
+    plan_id: plan.id,
+    host_token_hash: await hashToken(hostToken),
+  });
 
   return {
     code,
     shareUrl: `/p/${code}`,
+    hostToken,
   };
 }
 
@@ -290,12 +300,15 @@ export async function createFallbackParticipant(
     departure_city_code: input.departureCityCode,
     departure_city_name: input.departureCityName,
     accepted_modes: input.acceptedModes,
-    edit_token_hash: await hashToken(editToken),
     created_by_host: false,
     created_at: timestamp,
     updated_at: timestamp,
   };
   store.participants.push(participant);
+  store.participantCredentials.push({
+    participant_id: participant.id,
+    edit_token_hash: await hashToken(editToken),
+  });
 
   return {
     ok: true as const,
@@ -323,7 +336,10 @@ export async function verifyFallbackParticipantCanCalculate(
   }
 
   for (const participant of participants) {
-    if (await verifyToken(token, participant.edit_token_hash)) {
+    const credential = state().participantCredentials.find(
+      (item) => item.participant_id === participant.id,
+    );
+    if (credential && await verifyToken(token, credential.edit_token_hash)) {
       return {
         ok: true as const,
         planId: plan.id,
@@ -438,7 +454,7 @@ export async function calculateFallbackRecommendations(code: string) {
     })),
     candidates,
     meetingDate: plan.meeting_date,
-    targetArrivalTime: plan.target_arrival_time,
+    targetArrivalTime: "23:59",
     provider: new FlyAITravelProvider(),
   });
 

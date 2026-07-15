@@ -24,8 +24,7 @@ describe("RecentMeetingRecords", () => {
           {
             code: "ABC123",
             title: "上海周末见面",
-            meetingDate: "2026-08-15",
-            targetArrivalTime: "18:00",
+            arrivalDate: "2026-08-15",
             role: "host",
             lastVisitedAt: "2026-07-10T08:00:00.000Z",
           },
@@ -38,7 +37,7 @@ describe("RecentMeetingRecords", () => {
     expect(html).toContain("发起的计划");
     expect(html).toContain("创建于 07-10 16:00");
     expect(html).toContain("/p/ABC123");
-    expect(html).not.toContain("2026-08-15 到达 18:00");
+    expect(html).toContain("2026-08-15 到达");
   });
 
   it("shows an explicit view action for each local meeting record", () => {
@@ -48,8 +47,7 @@ describe("RecentMeetingRecords", () => {
           {
             code: "ABC123",
             title: "上海周末见面",
-            meetingDate: "2026-08-15",
-            targetArrivalTime: "18:00",
+            arrivalDate: "2026-08-15",
             role: "host",
             lastVisitedAt: "2026-07-10T08:00:00.000Z",
           },
@@ -68,8 +66,7 @@ describe("RecentMeetingRecords", () => {
           {
             code: "ABC123",
             title: "上海周末见面",
-            meetingDate: "2026-08-15",
-            targetArrivalTime: "18:00",
+            arrivalDate: "2026-08-15",
             role: "host",
             latestRun: true,
             lastVisitedAt: "2026-07-10T08:00:00.000Z",
@@ -89,8 +86,7 @@ describe("RecentMeetingRecords", () => {
         records: Array.from({ length: 5 }, (_, index) => ({
           code: `ABC12${index}`,
           title: `见面计划 ${index + 1}`,
-          meetingDate: "2026-08-15",
-          targetArrivalTime: "18:00",
+          arrivalDate: "2026-08-15",
           role: "participant" as const,
           lastVisitedAt: `2026-07-10T0${index}:00:00.000Z`,
         })),

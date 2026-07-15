@@ -16,8 +16,7 @@ describe("fallback MVP flow without Supabase environment variables", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           title: "上海周末见面",
-          meetingDate: "2026-08-15",
-          targetArrivalTime: "18:00",
+          arrivalDate: "2026-08-15",
           participantLimit: 2,
         }),
       }),
@@ -26,6 +25,7 @@ describe("fallback MVP flow without Supabase environment variables", () => {
 
     expect(createResponse.status).toBe(200);
     expect(created.code).toMatch(/^[A-Z0-9]{6}$/);
+    expect(created.hostToken).toMatch(/^[A-Za-z0-9_-]{32,}$/);
     expect(created.manageToken).toBeUndefined();
 
     const { POST: joinPlan } = await import(
@@ -140,8 +140,7 @@ describe("fallback MVP flow without Supabase environment variables", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           title: "候选城市测试",
-          meetingDate: "2026-08-15",
-          targetArrivalTime: "18:00",
+          arrivalDate: "2026-08-15",
           participantLimit: 4,
         }),
       }),

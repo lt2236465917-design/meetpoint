@@ -23,7 +23,7 @@ async function getPlan(code: string) {
 
   const { data: participants } = await supabase
     .from("participants")
-    .select("*")
+    .select("id, name, departure_city_name, accepted_modes")
     .eq("plan_id", plan.id);
   const { data: runs } = await supabase
     .from("recommendation_runs")
@@ -62,7 +62,7 @@ export default async function PublicPlanPage({
   return (
     <ResponsiveShell
       title={data.plan.title}
-      description={`${data.plan.meeting_date} 到达 ${data.plan.target_arrival_time}`}
+      description={`${data.plan.meeting_date} 到达`}
       backHref="/"
       backLabel="返回首页"
     >

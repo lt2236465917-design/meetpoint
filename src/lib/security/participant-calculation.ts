@@ -44,7 +44,7 @@ export async function verifyParticipantCanCalculatePlan({
 
   const { data: participants } = await supabase
     .from("participants")
-    .select("id, edit_token_hash")
+    .select("id")
     .eq("plan_id", plan.id);
 
   const participantRows = participants ?? [];
@@ -56,12 +56,18 @@ export async function verifyParticipantCanCalculatePlan({
     };
   }
 
-  for (const participant of participantRows) {
-    if (await verifyToken(normalizedToken, participant.edit_token_hash)) {
+  const participantIds = participantRows.map((participant) => participant.id);
+  const { data: credentials } = await supabase
+    .from("participant_credentials")
+    .select("participant_id, edit_token_hash")
+    .in("participant_id", participantIds);
+
+  for (const credential of credentials ?? []) {
+    if (await verifyToken(normalizedToken, credential.edit_token_hash)) {
       return {
         ok: true,
         planId: plan.id,
-        participantId: participant.id,
+        participantId: credential.participant_id,
       };
     }
   }

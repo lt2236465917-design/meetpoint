@@ -66,7 +66,6 @@ export async function POST(
       departure_city_code: parsed.data.departureCityCode,
       departure_city_name: parsed.data.departureCityName,
       accepted_modes: parsed.data.acceptedModes,
-      edit_token_hash: editTokenHash,
       created_by_host: false,
     })
     .select("id")
@@ -74,6 +73,21 @@ export async function POST(
 
   if (error || !data) {
     console.error("create participant error", error);
+    return NextResponse.json(
+      { error: "CREATE_PARTICIPANT_FAILED" },
+      { status: 500 },
+    );
+  }
+
+  const { error: credentialError } = await supabase
+    .from("participant_credentials")
+    .insert({
+      participant_id: data.id,
+      edit_token_hash: editTokenHash,
+    });
+
+  if (credentialError) {
+    await supabase.from("participants").delete().eq("id", data.id);
     return NextResponse.json(
       { error: "CREATE_PARTICIPANT_FAILED" },
       { status: 500 },

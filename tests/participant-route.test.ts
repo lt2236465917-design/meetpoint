@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   countEq: vi.fn(),
   insert: vi.fn(),
   insertSingle: vi.fn(),
+  credentialInsert: vi.fn(),
 }));
 
 vi.mock("@/lib/supabase/server", () => ({
@@ -59,6 +60,7 @@ describe("POST /api/plans/[code]/participants", () => {
     mocks.countEq.mockReset();
     mocks.insert.mockReset();
     mocks.insertSingle.mockReset();
+    mocks.credentialInsert.mockReset();
   });
 
   it("rejects invalid participant input", async () => {
@@ -119,7 +121,9 @@ describe("POST /api/plans/[code]/participants", () => {
     mocks.from
       .mockReturnValueOnce({ select: planLookup.select })
       .mockReturnValueOnce({ select: countLookup.select })
-      .mockReturnValueOnce({ insert: participantInsert.insert });
+      .mockReturnValueOnce({ insert: participantInsert.insert })
+      .mockReturnValueOnce({ insert: mocks.credentialInsert });
+    mocks.credentialInsert.mockResolvedValue({ error: null });
 
     const { POST } = await import("@/app/api/plans/[code]/participants/route");
     const response = await POST(createValidRequest(), {
@@ -140,7 +144,11 @@ describe("POST /api/plans/[code]/participants", () => {
       accepted_modes: ["high_speed_rail", "flight"],
       created_by_host: false,
     });
-    await expect(verifyToken(json.editToken, inserted.edit_token_hash)).resolves.toBe(
+    expect(inserted.edit_token_hash).toBeUndefined();
+    expect(mocks.from).toHaveBeenNthCalledWith(4, "participant_credentials");
+    const credential = mocks.credentialInsert.mock.calls[0]?.[0];
+    expect(credential).toMatchObject({ participant_id: "participant-1" });
+    await expect(verifyToken(json.editToken, credential.edit_token_hash)).resolves.toBe(
       true,
     );
   });

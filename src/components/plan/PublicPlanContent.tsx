@@ -15,7 +15,6 @@ type PublicPlanData = {
   plan: {
     title: string;
     meeting_date: string;
-    target_arrival_time: string;
     participant_limit: number;
   };
   participants: Array<{
@@ -58,8 +57,7 @@ export function PublicPlanContent({
     rememberMeetingHistoryItem({
       code,
       title: initialData.plan.title,
-      meetingDate: initialData.plan.meeting_date,
-      targetArrivalTime: initialData.plan.target_arrival_time,
+      arrivalDate: initialData.plan.meeting_date,
       role: "viewer",
       latestRun: initialData.latestRun?.status === "completed",
       lastVisitedAt: new Date().toISOString(),

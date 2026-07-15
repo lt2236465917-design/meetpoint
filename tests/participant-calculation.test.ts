@@ -25,11 +25,19 @@ function mockPlanLookup(
 }
 
 function mockParticipants(
-  participants: Array<{ id: string; edit_token_hash: string }>,
+  participants: Array<{ id: string }>,
 ) {
   mocks.participantsEq.mockResolvedValue({ data: participants });
   const select = vi.fn(() => ({ eq: mocks.participantsEq }));
   return { select };
+}
+
+function mockCredentials(
+  credentials: Array<{ participant_id: string; edit_token_hash: string }>,
+) {
+  const inFilter = vi.fn().mockResolvedValue({ data: credentials });
+  const select = vi.fn(() => ({ in: inFilter }));
+  return { select, inFilter };
 }
 
 describe("verifyParticipantCanCalculatePlan", () => {
@@ -60,12 +68,7 @@ describe("verifyParticipantCanCalculatePlan", () => {
 
   it("rejects calculation before the plan reaches its participant limit", async () => {
     const planLookup = mockPlanLookup({ id: "plan-1", participant_limit: 2 });
-    const participantLookup = mockParticipants([
-      {
-        id: "participant-1",
-        edit_token_hash: await hashToken("edit-token"),
-      },
-    ]);
+    const participantLookup = mockParticipants([{ id: "participant-1" }]);
     mocks.from
       .mockReturnValueOnce({ select: planLookup.select })
       .mockReturnValueOnce({ select: participantLookup.select });
@@ -89,18 +92,17 @@ describe("verifyParticipantCanCalculatePlan", () => {
   it("allows a filled participant to calculate after the plan is full", async () => {
     const planLookup = mockPlanLookup({ id: "plan-1", participant_limit: 2 });
     const participantLookup = mockParticipants([
-      {
-        id: "participant-1",
-        edit_token_hash: await hashToken("edit-token"),
-      },
-      {
-        id: "participant-2",
-        edit_token_hash: await hashToken("other-token"),
-      },
+      { id: "participant-1" },
+      { id: "participant-2" },
+    ]);
+    const credentialLookup = mockCredentials([
+      { participant_id: "participant-1", edit_token_hash: await hashToken("edit-token") },
+      { participant_id: "participant-2", edit_token_hash: await hashToken("other-token") },
     ]);
     mocks.from
       .mockReturnValueOnce({ select: planLookup.select })
-      .mockReturnValueOnce({ select: participantLookup.select });
+      .mockReturnValueOnce({ select: participantLookup.select })
+      .mockReturnValueOnce({ select: credentialLookup.select });
 
     const { verifyParticipantCanCalculatePlan } = await import(
       "@/lib/security/participant-calculation"
@@ -120,15 +122,14 @@ describe("verifyParticipantCanCalculatePlan", () => {
 
   it("rejects tokens that do not belong to filled participants", async () => {
     const planLookup = mockPlanLookup({ id: "plan-1", participant_limit: 1 });
-    const participantLookup = mockParticipants([
-      {
-        id: "participant-1",
-        edit_token_hash: await hashToken("edit-token"),
-      },
+    const participantLookup = mockParticipants([{ id: "participant-1" }]);
+    const credentialLookup = mockCredentials([
+      { participant_id: "participant-1", edit_token_hash: await hashToken("edit-token") },
     ]);
     mocks.from
       .mockReturnValueOnce({ select: planLookup.select })
-      .mockReturnValueOnce({ select: participantLookup.select });
+      .mockReturnValueOnce({ select: participantLookup.select })
+      .mockReturnValueOnce({ select: credentialLookup.select });
 
     const { verifyParticipantCanCalculatePlan } = await import(
       "@/lib/security/participant-calculation"

@@ -1,7 +1,6 @@
 export type CreatePlanFormData = {
   title: string;
-  meetingDate: string;
-  targetArrivalTime: string;
+  arrivalDate: string;
   participantLimit: number;
 };
 
@@ -18,18 +17,14 @@ export function parseCreatePlanForm(
   formData: FormData,
 ): ParseCreatePlanFormResult {
   const title = formValue(formData, "title");
-  const meetingDate = formValue(formData, "meetingDate");
-  const targetArrivalTime = formValue(formData, "targetArrivalTime");
+  const arrivalDate = formValue(formData, "arrivalDate");
   const participantLimit = Number(formValue(formData, "participantLimit"));
 
   if (!title) {
     return { ok: false, error: "请输入计划名称" };
   }
-  if (!meetingDate) {
-    return { ok: false, error: "请选择见面日期" };
-  }
-  if (!targetArrivalTime) {
-    return { ok: false, error: "请选择目标到达时间" };
+  if (!arrivalDate) {
+    return { ok: false, error: "请选择计划到达日期" };
   }
   if (
     !Number.isInteger(participantLimit) ||
@@ -43,8 +38,7 @@ export function parseCreatePlanForm(
     ok: true,
     data: {
       title,
-      meetingDate,
-      targetArrivalTime,
+      arrivalDate,
       participantLimit,
     },
   };

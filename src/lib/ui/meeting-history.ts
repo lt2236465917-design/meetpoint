@@ -8,9 +8,9 @@ export type MeetingHistoryRole = "host" | "participant" | "viewer";
 export type MeetingHistoryItem = {
   code: string;
   title: string;
-  meetingDate: string;
-  targetArrivalTime: string;
+  arrivalDate: string;
   role: MeetingHistoryRole;
+  hostToken?: string;
   participantEditToken?: string;
   latestRun?: boolean;
   lastVisitedAt: string;
@@ -27,9 +27,9 @@ export function createMeetingHistoryItem(
   return {
     code: item.code,
     title: item.title,
-    meetingDate: item.meetingDate,
-    targetArrivalTime: item.targetArrivalTime,
+    arrivalDate: item.arrivalDate,
     role: item.role,
+    hostToken: item.role === "host" ? item.hostToken : undefined,
     participantEditToken: item.participantEditToken,
     latestRun: item.latestRun,
     lastVisitedAt: item.lastVisitedAt,
@@ -65,7 +65,10 @@ export function parseMeetingHistory(
     const parsed = JSON.parse(value) as unknown;
     if (!Array.isArray(parsed)) return [];
 
-    return parsed.filter(isMeetingHistoryItem).slice(0, meetingHistoryLimit);
+    return parsed
+      .map(parseMeetingHistoryItem)
+      .filter((item): item is MeetingHistoryItem => item !== null)
+      .slice(0, meetingHistoryLimit);
   } catch {
     return [];
   }
@@ -116,21 +119,38 @@ export function rememberMeetingHistoryItem(item: MeetingHistoryItem) {
   saveMeetingHistory(upsertMeetingHistoryItem(readMeetingHistory(), item));
 }
 
-function isMeetingHistoryItem(value: unknown): value is MeetingHistoryItem {
-  if (!value || typeof value !== "object") return false;
+function parseMeetingHistoryItem(value: unknown): MeetingHistoryItem | null {
+  if (!value || typeof value !== "object") return null;
   const record = value as Record<string, unknown>;
+  const arrivalDate =
+    typeof record.arrivalDate === "string"
+      ? record.arrivalDate
+      : typeof record.meetingDate === "string"
+        ? record.meetingDate
+        : null;
 
-  return (
+  if (!(
     typeof record.code === "string" &&
     typeof record.title === "string" &&
-    typeof record.meetingDate === "string" &&
-    typeof record.targetArrivalTime === "string" &&
+    arrivalDate !== null &&
     isMeetingHistoryRole(record.role) &&
+    (record.hostToken === undefined || typeof record.hostToken === "string") &&
     (record.participantEditToken === undefined ||
       typeof record.participantEditToken === "string") &&
     (record.latestRun === undefined || typeof record.latestRun === "boolean") &&
     typeof record.lastVisitedAt === "string"
-  );
+  )) return null;
+
+  return createMeetingHistoryItem({
+    code: record.code,
+    title: record.title,
+    arrivalDate,
+    role: record.role,
+    hostToken: record.hostToken,
+    participantEditToken: record.participantEditToken,
+    latestRun: record.latestRun,
+    lastVisitedAt: record.lastVisitedAt,
+  });
 }
 
 function isMeetingHistoryRole(value: unknown): value is MeetingHistoryRole {
@@ -144,6 +164,9 @@ function mergeMeetingHistoryItem(
   return {
     ...incoming,
     role: strongerMeetingHistoryRole(existing.role, incoming.role),
+    hostToken:
+      existing.hostToken ??
+      (incoming.role === "host" ? incoming.hostToken : undefined),
     participantEditToken:
       incoming.participantEditToken ?? existing.participantEditToken,
     latestRun: incoming.latestRun ?? existing.latestRun,

@@ -9,7 +9,6 @@ const planData = {
   plan: {
     title: "周末跨城见面测试",
     meeting_date: "2026-08-15",
-    target_arrival_time: "18:30",
     participant_limit: 2,
   },
   participants: [
@@ -46,6 +45,8 @@ describe("PublicPlanContent", () => {
 
     expect(componentSource).toContain("rememberMeetingHistoryItem");
     expect(componentSource).toContain('role: "viewer"');
+    expect(componentSource).toContain("arrivalDate: initialData.plan.meeting_date");
+    expect(componentSource).not.toContain("target_arrival_time");
   });
 
   it("waits for the participant limit before showing calculation", () => {

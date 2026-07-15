@@ -87,7 +87,7 @@ export function RecentMeetingRecordsView({
                     {formatVisitedAt(record.lastVisitedAt)}
                   </p>
                   <p className="mt-1 text-xs text-gray-500">
-                    {roleLabels[record.role]}
+                    {record.arrivalDate} 到达 · {roleLabels[record.role]}
                   </p>
                 </div>
                 <div className="flex shrink-0 gap-2">

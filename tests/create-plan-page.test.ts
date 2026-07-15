@@ -9,10 +9,14 @@ describe("CreatePlanPage native input controls", () => {
       "utf8",
     );
 
-    expect(pageSource).toContain("ref={meetingDateInputRef}");
-    expect(pageSource).toContain("ref={targetArrivalTimeInputRef}");
+    expect(pageSource).toContain("ref={arrivalDateInputRef}");
     expect(pageSource).toContain('type="date"');
-    expect(pageSource).toContain('type="time"');
+    expect(pageSource).not.toContain('type="time"');
+    expect(pageSource).not.toContain("targetArrivalTime");
+    expect(pageSource).not.toContain("ClockIcon");
+    expect(pageSource).not.toContain("目标到达时间");
+    expect(pageSource).toContain("计划到达日期");
+    expect(pageSource).not.toContain("grid-cols-2");
     expect(pageSource).toContain('className="native-picker-hit-area w-full rounded-lg border px-4 py-3 pr-12 font-normal text-gray-950"');
     expect(pageSource).not.toContain("openNativePicker");
     expect(pageSource).toContain("participantLimitOpen");

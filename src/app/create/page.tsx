@@ -10,16 +10,15 @@ import { rememberMeetingHistoryItem } from "@/lib/ui/meeting-history";
 type CreatePlanResult = {
   code: string;
   shareUrl: string;
+  hostToken: string;
 };
 
 export default function CreatePlanPage() {
   const [title, setTitle] = useState("");
-  const [meetingDate, setMeetingDate] = useState("");
-  const [targetArrivalTime, setTargetArrivalTime] = useState("18:00");
+  const [arrivalDate, setArrivalDate] = useState("");
   const [participantLimit, setParticipantLimit] = useState(4);
   const [participantLimitOpen, setParticipantLimitOpen] = useState(false);
-  const meetingDateInputRef = useRef<HTMLInputElement>(null);
-  const targetArrivalTimeInputRef = useRef<HTMLInputElement>(null);
+  const arrivalDateInputRef = useRef<HTMLInputElement>(null);
   const [result, setResult] = useState<CreatePlanResult | null>(null);
   const [error, setError] = useState("");
   const [copyMessage, setCopyMessage] = useState("");
@@ -55,16 +54,15 @@ export default function CreatePlanPage() {
         throw new Error(getApiErrorMessage(json.error, "创建失败，请稍后重试"));
       }
       setTitle(form.title);
-      setMeetingDate(form.meetingDate);
-      setTargetArrivalTime(form.targetArrivalTime);
+      setArrivalDate(form.arrivalDate);
       setParticipantLimit(form.participantLimit);
       setResult(json);
       rememberMeetingHistoryItem({
         code: json.code,
         title: form.title,
-        meetingDate: form.meetingDate,
-        targetArrivalTime: form.targetArrivalTime,
+        arrivalDate: form.arrivalDate,
         role: "host",
+        hostToken: json.hostToken,
         latestRun: false,
         lastVisitedAt: new Date().toISOString(),
       });
@@ -119,16 +117,16 @@ export default function CreatePlanPage() {
           <div
             className="block space-y-1.5 text-sm font-medium text-gray-700"
           >
-            <span id="meeting-date-label">见面日期</span>
+            <span id="arrival-date-label">计划到达日期</span>
             <div className="relative">
               <input
-                aria-labelledby="meeting-date-label"
+                aria-labelledby="arrival-date-label"
                 className="native-picker-hit-area w-full rounded-lg border px-4 py-3 pr-12 font-normal text-gray-950"
-                name="meetingDate"
-                ref={meetingDateInputRef}
+                name="arrivalDate"
+                ref={arrivalDateInputRef}
                 type="date"
-                value={meetingDate}
-                onChange={(event) => setMeetingDate(event.target.value)}
+                value={arrivalDate}
+                onChange={(event) => setArrivalDate(event.target.value)}
               />
               <span
                 aria-hidden="true"
@@ -138,30 +136,7 @@ export default function CreatePlanPage() {
               </span>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div
-              className="block space-y-1.5 text-sm font-medium text-gray-700"
-            >
-              <span id="target-arrival-time-label">目标到达时间</span>
-              <div className="relative">
-                <input
-                  aria-labelledby="target-arrival-time-label"
-                  className="native-picker-hit-area w-full rounded-lg border px-4 py-3 pr-12 font-normal text-gray-950"
-                  name="targetArrivalTime"
-                  ref={targetArrivalTimeInputRef}
-                  type="time"
-                  value={targetArrivalTime}
-                  onChange={(event) => setTargetArrivalTime(event.target.value)}
-                />
-                <span
-                  aria-hidden="true"
-                  className="pointer-events-none absolute inset-y-0 right-0 flex w-12 items-center justify-center"
-                >
-                  <ClockIcon />
-                </span>
-              </div>
-            </div>
-            <div className="relative block space-y-1.5 text-sm font-medium text-gray-700">
+          <div className="relative block space-y-1.5 text-sm font-medium text-gray-700">
               <span id="participant-limit-label">参与人数上限</span>
               <input name="participantLimit" type="hidden" value={participantLimit} />
               <button
@@ -200,7 +175,6 @@ export default function CreatePlanPage() {
                   ))}
                 </div>
               )}
-            </div>
           </div>
           {error && (
             <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">
@@ -220,7 +194,7 @@ export default function CreatePlanPage() {
           <section className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
             <p className="text-sm font-medium text-gray-950">{title}</p>
             <p className="mt-1 text-xs leading-5 text-gray-500">
-              {meetingDate} 到达 {targetArrivalTime} · {participantLimit} 人
+              {arrivalDate} 到达 · {participantLimit} 人
             </p>
           </section>
 
@@ -253,15 +227,6 @@ function CalendarIcon() {
     <svg aria-hidden="true" className="h-5 w-5" fill="none" viewBox="0 0 24 24">
       <rect height="16" rx="2" stroke="currentColor" strokeWidth="2" width="16" x="4" y="5" />
       <path d="M8 3v4M16 3v4M4 10h16" stroke="currentColor" strokeWidth="2" />
-    </svg>
-  );
-}
-
-function ClockIcon() {
-  return (
-    <svg aria-hidden="true" className="h-5 w-5" fill="none" viewBox="0 0 24 24">
-      <circle cx="12" cy="12" r="8" stroke="currentColor" strokeWidth="2" />
-      <path d="M12 7v5l3 2" stroke="currentColor" strokeWidth="2" />
     </svg>
   );
 }

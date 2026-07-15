@@ -6,6 +6,7 @@ import {
   hasSupabaseEnvironment,
 } from "@/lib/supabase/server";
 import { createPlanSchema } from "@/lib/validation/schemas";
+import { generateToken, hashToken } from "@/lib/security/tokens";
 
 function generateCode(): string {
   return Math.random().toString(36).slice(2, 8).toUpperCase();
@@ -29,18 +30,37 @@ export async function POST(req: Request) {
 
   const supabase = createServiceSupabaseClient();
   const code = generateCode();
+  const hostToken = generateToken();
 
-  const { error } = await supabase.from("plans").insert({
-    code,
-    title: parsed.data.title,
-    meeting_date: parsed.data.meetingDate,
-    target_arrival_time: parsed.data.targetArrivalTime,
-    participant_limit: parsed.data.participantLimit,
-    status: "collecting",
-  });
+  const { data: plan, error } = await supabase
+    .from("plans")
+    .insert({
+      code,
+      title: parsed.data.title,
+      meeting_date: parsed.data.arrivalDate,
+      participant_limit: parsed.data.participantLimit,
+      status: "collecting",
+    })
+    .select("id")
+    .single();
 
-  if (error) {
+  if (error || !plan) {
     console.error("create plan error", error);
+    return NextResponse.json(
+      { error: "CREATE_PLAN_FAILED" },
+      { status: 500 },
+    );
+  }
+
+  const { error: credentialError } = await supabase
+    .from("plan_credentials")
+    .insert({
+      plan_id: plan.id,
+      host_token_hash: await hashToken(hostToken),
+    });
+
+  if (credentialError) {
+    await supabase.from("plans").delete().eq("id", plan.id);
     return NextResponse.json(
       { error: "CREATE_PLAN_FAILED" },
       { status: 500 },
@@ -50,6 +70,7 @@ export async function POST(req: Request) {
   return NextResponse.json({
     code,
     shareUrl: createShareUrl(req, code),
+    hostToken,
   });
 }
 

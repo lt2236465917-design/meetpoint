@@ -15,7 +15,6 @@ type JoinPlanPageProps = {
 type PlanSummary = {
   title: string;
   meeting_date: string;
-  target_arrival_time: string;
 };
 
 export default function JoinPlanPage({ params }: JoinPlanPageProps) {
@@ -83,8 +82,7 @@ export default function JoinPlanPage({ params }: JoinPlanPageProps) {
         rememberMeetingHistoryItem({
           code,
           title: planSummary?.title ?? `见面计划 ${code}`,
-          meetingDate: planSummary?.meeting_date ?? "",
-          targetArrivalTime: planSummary?.target_arrival_time ?? "",
+          arrivalDate: planSummary?.meeting_date ?? "",
           role: "participant",
           participantEditToken: json.editToken,
           latestRun: false,

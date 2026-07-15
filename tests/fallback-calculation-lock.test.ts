@@ -40,8 +40,7 @@ describe("fallback calculation lock", () => {
     } = await import("@/lib/fallback/mvp-store");
     const created = await createFallbackPlan({
       title: "运行互斥测试",
-      meetingDate: "2026-08-15",
-      targetArrivalTime: "18:00",
+      arrivalDate: "2026-08-15",
       participantLimit: 2,
     });
     await createFallbackParticipant(created.code, {

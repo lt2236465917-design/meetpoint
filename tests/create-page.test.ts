@@ -10,8 +10,8 @@ describe("CreatePlanPage", () => {
     const html = renderToStaticMarkup(createElement(CreatePlanPage));
 
     expect(html).toContain("计划名称");
-    expect(html).toContain("见面日期");
-    expect(html).toContain("目标到达时间");
+    expect(html).toContain("计划到达日期");
+    expect(html).not.toContain("目标到达时间");
     expect(html).toContain("参与人数上限");
   });
 

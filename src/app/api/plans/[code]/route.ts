@@ -32,7 +32,7 @@ export async function GET(
 
   const { data: participants } = await supabase
     .from("participants")
-    .select("*")
+    .select("id, name, departure_city_name, accepted_modes")
     .eq("plan_id", plan.id);
   const { data: runs } = await supabase
     .from("recommendation_runs")

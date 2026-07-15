@@ -6,12 +6,13 @@ export const transportModeSchema = z.enum([
   "normal_train",
 ]);
 
+export const calendarDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+
 export const createPlanSchema = z.object({
   title: z.string().trim().min(1).max(60),
-  meetingDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  targetArrivalTime: z.string().regex(/^\d{2}:\d{2}$/),
+  arrivalDate: calendarDateSchema,
   participantLimit: z.number().int().min(2).max(6),
-});
+}).strict();
 
 export const participantInputSchema = z.object({
   name: z.string().trim().min(1).max(20),
