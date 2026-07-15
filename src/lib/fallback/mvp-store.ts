@@ -1,587 +1,386 @@
+import { randomUUID } from "node:crypto";
+
+import {
+  POLICY_VERSION,
+  calculationOutputSchema,
+  verifiedQuoteSchema,
+  type RecommendationProposal,
+  type RunStatus,
+  type VerifiedQuote,
+} from "@/lib/agent/contracts";
 import { generateCandidateCities } from "@/lib/city/candidate-generator";
-import { explainRecommendation } from "@/lib/ai/recommendation-explainer";
-import {
-  pickPrimaryRecommendations,
-  scoreCandidateCity,
-} from "@/lib/recommendation/scoring";
-import { collectTravelOptions } from "@/lib/recommendation/travel-search";
-import {
-  generateToken,
-  hashToken,
-  verifyToken,
-} from "@/lib/security/tokens";
-import { FlyAITravelProvider } from "@/lib/travel/flyai-provider";
-import type {
-  CityRecommendation,
-  TravelOption,
-  TransportMode,
-} from "@/types/domain";
+import { findCityByCode } from "@/data/cities";
+import { buildRouteTasks } from "@/lib/recommendation/query-matrix";
+import { rankEligibleCities } from "@/lib/recommendation/policy";
+import type { StoredRouteTask } from "@/lib/recommendation/repository";
+import { validateRecommendationPolicy } from "@/lib/recommendation/validators";
+import { generateToken, hashToken, verifyToken } from "@/lib/security/tokens";
+import type { TransportMode } from "@/types/domain";
 
 type PlanRow = {
   id: string;
   code: string;
   title: string;
-  meeting_date: string;
-  participant_limit: number;
+  meetingDate: string;
+  participantLimit: number;
   status: "collecting" | "completed";
-  created_at: string;
-  updated_at: string;
-  last_calculated_at: string | null;
 };
 
 type ParticipantRow = {
   id: string;
-  plan_id: string;
+  planId: string;
   name: string;
-  departure_city_code: string;
-  departure_city_name: string;
-  accepted_modes: TransportMode[];
-  created_by_host: boolean;
-  created_at: string;
-  updated_at: string;
+  departureCityCode: string;
+  departureCityName: string;
+  acceptedModes: TransportMode[];
 };
 
-type CandidateCityRow = {
+type RunRow = {
   id: string;
-  plan_id: string;
-  city_code: string;
-  city_name: string;
-  source: "manual_add" | "manual_exclude";
-  enabled: boolean;
-  created_at: string;
+  planId: string;
+  status: RunStatus;
+  traceId: string;
+  retryAfter: string | null;
+  errorCode: string | null;
+  policyVersion: string;
+  kind: "automatic" | "alternative";
+  requestedCityCode: string | null;
+  requestedByParticipantId: string | null;
+  startedAt: string;
+  completedAt: string | null;
 };
 
-type RecommendationRunRow = {
+type ProposalRow = {
   id: string;
-  plan_id: string;
-  status: "running" | "completed";
-  started_at: string;
-  completed_at: string | null;
-  stale_after: string | null;
-  error_summary: string | null;
+  runId: string;
+  version: number;
+  status: "approved" | "rejected";
+  output: unknown;
+  validation: { ok: true } | { ok: false; codes: string[] };
 };
 
-type CityRecommendationRow = {
+type ResultRow = {
   id: string;
-  run_id: string;
-  city_code: string;
-  city_name: string;
-  total_price_cny: number;
-  avg_price_cny: number;
-  total_duration_minutes: number;
-  fairness_gap: number;
-  waiting_penalty: number;
-  transfer_penalty: number;
-  estimate_penalty: number;
-  missing_penalty: number;
-  score_cheapest: number;
-  score_balanced: number;
-  score_fastest: number;
-  labels: CityRecommendation["labels"];
-  explanation: string;
-  risk_summary: string;
+  planId: string;
+  runId: string;
+  proposalId: string;
+  cityCode: string;
+  explanationZh: string;
+  isShared: boolean;
+  publishedAt: string | null;
+  supersededAt: string | null;
 };
+
+type SchemeRow = {
+  id: string;
+  resultId: string;
+  kind: "saving" | "fast";
+  totalFareCny: number;
+  totalDurationMinutes: number;
+  latestArrivalAt: string;
+  teamTransferCount: number;
+};
+
+type SchemeRouteRow = { schemeId: string; participantId: string; verifiedQuoteId: string };
 
 type StoreState = {
+  version: 2;
   plans: PlanRow[];
-  planCredentials: Array<{ plan_id: string; host_token_hash: string }>;
+  planCredentials: Array<{ planId: string; hostTokenHash: string }>;
   participants: ParticipantRow[];
-  participantCredentials: Array<{
-    participant_id: string;
-    edit_token_hash: string;
-  }>;
-  candidates: CandidateCityRow[];
-  runs: RecommendationRunRow[];
-  travelOptions: Array<TravelOption & { id: string; run_id: string }>;
-  recommendations: CityRecommendationRow[];
+  participantCredentials: Array<{ participantId: string; editTokenHash: string }>;
+  runs: RunRow[];
+  tasks: StoredRouteTask[];
+  quotes: Array<VerifiedQuote & { runId: string }>;
+  proposals: ProposalRow[];
+  results: ResultRow[];
+  schemes: SchemeRow[];
+  schemeRoutes: SchemeRouteRow[];
+  events: Array<{ runId: string; traceId: string; event: string }>;
 };
 
 const globalKey = "__crossCityMeetpointFallbackStore";
-const globalStore = globalThis as typeof globalThis & {
-  [globalKey]?: StoreState;
-};
+const globalStore = globalThis as typeof globalThis & { [globalKey]?: StoreState };
+const activeStatuses = new Set<RunStatus>([
+  "pending", "collecting", "cooling_down", "calculating", "validating", "awaiting_host_confirmation",
+]);
 
 function state(): StoreState {
-  const store = globalStore[globalKey] ??= {
-    plans: [],
-    planCredentials: [],
-    participants: [],
-    participantCredentials: [],
-    candidates: [],
-    runs: [],
-    travelOptions: [],
-    recommendations: [],
+  const existing = globalStore[globalKey];
+  if (existing?.version === 2) return existing;
+  const next: StoreState = {
+    version: 2, plans: [], planCredentials: [], participants: [], participantCredentials: [],
+    runs: [], tasks: [], quotes: [], proposals: [], results: [], schemes: [], schemeRoutes: [], events: [],
   };
-  store.planCredentials ??= [];
-  store.participantCredentials ??= [];
-  return store;
+  globalStore[globalKey] = next;
+  return next;
 }
 
-function now(): string {
-  return new Date().toISOString();
+function timestamp() { return new Date().toISOString(); }
+function id(prefix: string) { return `${prefix}_${randomUUID()}`; }
+function latestRun(planId: string) {
+  return state().runs.filter((run) => run.planId === planId)
+    .sort((left, right) => right.startedAt.localeCompare(left.startedAt))[0] ?? null;
 }
-
-function id(prefix: string): string {
-  return `${prefix}_${crypto.randomUUID()}`;
-}
-
-function generateCode(): string {
-  return Math.random().toString(36).slice(2, 8).toUpperCase();
-}
+function participantsFor(planId: string) { return state().participants.filter((participant) => participant.planId === planId); }
+function planFor(code: string) { return state().plans.find((plan) => plan.code === code) ?? null; }
+function runFor(runId: string) { return state().runs.find((run) => run.id === runId) ?? null; }
 
 function publicPlan(plan: PlanRow) {
+  return { code: plan.code, title: plan.title, meeting_date: plan.meetingDate, participant_limit: plan.participantLimit, status: plan.status };
+}
+
+function publicProgress(run: RunRow | null) {
+  if (!run) return null;
   return {
-    code: plan.code,
-    title: plan.title,
-    meeting_date: plan.meeting_date,
-    participant_limit: plan.participant_limit,
-    status: plan.status,
+    status: run.status,
+    traceId: run.traceId,
+    pendingGroups: state().tasks.filter((task) => task.runId === run.id && ["pending", "running", "retryable_failure"].includes(task.status)).length,
+    retryAt: run.retryAfter,
+    diagnosticCode: run.errorCode,
   };
 }
 
-function publicParticipant(participant: ParticipantRow) {
-  return {
-    id: participant.id,
-    name: participant.name,
-    departure_city_name: participant.departure_city_name,
-    accepted_modes: participant.accepted_modes,
-  };
+export function resetFallbackStoreForTests() {
+  globalStore[globalKey] = undefined;
 }
 
-export async function createFallbackPlan(input: {
-  title: string;
-  arrivalDate: string;
-  participantLimit: number;
-}) {
+export async function createFallbackPlan(input: { title: string; arrivalDate: string; participantLimit: number }) {
   const store = state();
-  let code = generateCode();
-  while (store.plans.some((plan) => plan.code === code)) {
-    code = generateCode();
-  }
-
-  const timestamp = now();
+  let code = Math.random().toString(36).slice(2, 8).toUpperCase();
+  while (store.plans.some((plan) => plan.code === code)) code = Math.random().toString(36).slice(2, 8).toUpperCase();
   const hostToken = generateToken();
-  const plan: PlanRow = {
-    id: id("plan"),
-    code,
-    title: input.title,
-    meeting_date: input.arrivalDate,
-    participant_limit: input.participantLimit,
-    status: "collecting",
-    created_at: timestamp,
-    updated_at: timestamp,
-    last_calculated_at: null,
-  };
+  const plan: PlanRow = { id: id("plan"), code, title: input.title, meetingDate: input.arrivalDate, participantLimit: input.participantLimit, status: "collecting" };
   store.plans.push(plan);
-  store.planCredentials.push({
-    plan_id: plan.id,
-    host_token_hash: await hashToken(hostToken),
-  });
+  store.planCredentials.push({ planId: plan.id, hostTokenHash: await hashToken(hostToken) });
+  return { code, shareUrl: `/p/${code}`, hostToken };
+}
 
-  return {
-    code,
-    shareUrl: `/p/${code}`,
-    hostToken,
+export async function createFallbackParticipant(code: string, input: {
+  name: string; departureCityCode: string; departureCityName: string; acceptedModes: TransportMode[];
+}) {
+  const plan = planFor(code);
+  if (!plan) return { ok: false as const, status: 404, error: "PLAN_NOT_FOUND" };
+  if (participantsFor(plan.id).length >= plan.participantLimit) return { ok: false as const, status: 409, error: "PARTICIPANT_LIMIT_REACHED" };
+  const editToken = generateToken();
+  const participant: ParticipantRow = { id: id("participant"), planId: plan.id, ...input };
+  state().participants.push(participant);
+  state().participantCredentials.push({ participantId: participant.id, editTokenHash: await hashToken(editToken) });
+  return { ok: true as const, participantId: participant.id, editToken };
+}
+
+export async function verifyFallbackParticipantCanCalculate(code: string, token: string) {
+  const plan = planFor(code);
+  if (!plan) return { ok: false as const, status: 404, error: "PLAN_NOT_FOUND" };
+  if (participantsFor(plan.id).length < plan.participantLimit) return { ok: false as const, status: 409, error: "PARTICIPANT_LIMIT_NOT_REACHED" };
+  for (const participant of participantsFor(plan.id)) {
+    const credential = state().participantCredentials.find((entry) => entry.participantId === participant.id);
+    if (credential && await verifyToken(token, credential.editTokenHash)) return { ok: true as const, planId: plan.id, participantId: participant.id };
+  }
+  return { ok: false as const, status: 403, error: "INVALID_PARTICIPANT_TOKEN" };
+}
+
+function createMatrix(plan: PlanRow, kind: RunRow["kind"], requestedCityCode: string | null, requestedByParticipantId: string | null) {
+  const participants = participantsFor(plan.id);
+  const candidates = requestedCityCode
+    ? [findCityByCode(requestedCityCode)].filter((city): city is NonNullable<typeof city> => Boolean(city))
+    : generateCandidateCities({ departureCityCodes: participants.map((participant) => participant.departureCityCode) });
+  if (candidates.length === 0) throw new Error("RUN_CREATE_FAILED");
+  const run: RunRow = {
+    id: id("run"), planId: plan.id, status: "pending", traceId: randomUUID(), retryAfter: null,
+    errorCode: null, policyVersion: POLICY_VERSION, kind, requestedCityCode, requestedByParticipantId,
+    startedAt: timestamp(), completedAt: null,
   };
+  state().runs.push(run);
+  for (const draft of buildRouteTasks({
+    participants: participants.map((participant) => ({ id: participant.id, departureCityCode: participant.departureCityCode, departureCityName: participant.departureCityName, acceptedModes: participant.acceptedModes })),
+    candidates, arrivalDate: plan.meetingDate,
+  })) {
+    state().tasks.push({ id: id("task"), runId: run.id, participantId: draft.participantId, cityCode: draft.cityCode, originCityCode: draft.originCityCode, mode: draft.mode, searchDate: draft.searchDate, arrivalDate: draft.arrivalDate, physicalKey: draft.physicalKey, status: "pending", attemptCount: 0, retryAfter: null, errorCode: null });
+  }
+  return run;
+}
+
+export async function calculateFallbackRecommendations(code: string) {
+  const plan = planFor(code);
+  if (!plan) throw new Error("PLAN_NOT_FOUND");
+  if (participantsFor(plan.id).length < 2) throw new Error("NOT_ENOUGH_PARTICIPANTS");
+  if (state().runs.some((run) => run.planId === plan.id && activeStatuses.has(run.status))) throw new Error("CALCULATION_IN_PROGRESS");
+  const run = createMatrix(plan, "automatic", null, null);
+  return { runId: run.id, status: "pending" as const };
+}
+
+export async function createFallbackAlternativePreview(input: { code: string; participantToken: string; cityCode: string }) {
+  const verified = await verifyFallbackParticipantCanCalculate(input.code, input.participantToken);
+  if (!verified.ok) throw new Error(verified.error);
+  const plan = planFor(input.code)!;
+  if (!findCityByCode(input.cityCode)) throw new Error("UNSUPPORTED_CITY");
+  const run = createMatrix(plan, "alternative", input.cityCode, verified.participantId);
+  return { runId: run.id, status: "pending" as const };
+}
+
+export function seedFallbackVerifiedQuotes(runId: string, quotes: readonly VerifiedQuote[]) {
+  const run = runFor(runId);
+  if (!run) throw new Error("RUN_NOT_FOUND");
+  for (const source of quotes) {
+    const quote = verifiedQuoteSchema.parse(source);
+    const task = state().tasks.find((entry) => entry.runId === runId && entry.participantId === quote.participantId && entry.cityCode === quote.cityCode && entry.mode === quote.mode && entry.searchDate === quote.searchDate);
+    if (!task) throw new Error("QUOTE_TASK_MISMATCH");
+    if (!state().quotes.some((entry) => entry.runId === runId && entry.participantId === quote.participantId && entry.quoteId === quote.quoteId)) state().quotes.push({ ...quote, runId });
+    task.status = "succeeded";
+    task.attemptCount += 1;
+  }
+}
+
+function cityInputs(run: RunRow) {
+  const participantIds = participantsFor(run.planId).map((participant) => participant.id).sort();
+  const quotes = state().quotes.filter((quote) => quote.runId === run.id);
+  return [...new Set(quotes.map((quote) => quote.cityCode))].sort().map((cityCode) => ({ cityCode, quotes: quotes.filter((quote) => quote.cityCode === cityCode), participantIds, arrivalDate: planById(run.planId)!.meetingDate }));
+}
+function planById(planId: string) { return state().plans.find((plan) => plan.id === planId) ?? null; }
+
+function deterministicProposal(run: RunRow): RecommendationProposal | null {
+  const ranked = rankEligibleCities(cityInputs(run));
+  const selected = ranked[0];
+  if (!selected) return null;
+  return {
+    status: "proposal", cityCode: selected.cityCode,
+    schemes: [selected.savingScheme, selected.fastScheme],
+    comparisonEvidence: { eligibleCityCodes: ranked.map((item) => item.cityCode).sort(), orderedCityCodes: ranked.map((item) => item.cityCode) },
+    explanationZh: "已按已验证票价生成方案。",
+  };
+}
+
+function saveProposal(run: RunRow, output: unknown) {
+  const parsed = calculationOutputSchema.safeParse(output);
+  const proposal = parsed.success && parsed.data.status === "proposal" ? parsed.data : null;
+  const input = { participantIds: participantsFor(run.planId).map((participant) => participant.id), arrivalDate: planById(run.planId)!.meetingDate, cityInputs: cityInputs(run).map(({ cityCode, quotes }) => ({ cityCode, quotes })), proposal: output };
+  const validation = proposal ? validateRecommendationPolicy(input) : { ok: false as const, codes: ["INVALID_PROPOSAL"] };
+  const row: ProposalRow = {
+    id: id("proposal"), runId: run.id, version: 1,
+    status: proposal && validation.ok ? "approved" : "rejected", output, validation,
+  };
+  state().proposals.push(row);
+  if (!proposal || !validation.ok) {
+    run.status = "failed";
+    run.errorCode = "AGENT_PROPOSAL_INVALID";
+    run.completedAt = timestamp();
+    return null;
+  }
+  return row;
+}
+
+function materializeResult(run: RunRow, proposal: ProposalRow) {
+  const parsed = calculationOutputSchema.safeParse(proposal.output);
+  if (!parsed.success || parsed.data.status !== "proposal" || proposal.status !== "approved" || !proposal.validation.ok) {
+    throw new Error("PUBLICATION_GUARD_REJECTED");
+  }
+  const output = parsed.data;
+  const existing = state().results.find((result) => result.runId === run.id && result.proposalId === proposal.id);
+  if (existing) return existing;
+  const quoteById = new Map(state().quotes.filter((quote) => quote.runId === run.id).map((quote) => [quote.quoteId, quote]));
+  const result: ResultRow = { id: id("result"), planId: run.planId, runId: run.id, proposalId: proposal.id, cityCode: output.cityCode, explanationZh: output.explanationZh, isShared: false, publishedAt: null, supersededAt: null };
+  const staged: Array<{ scheme: SchemeRow; routes: SchemeRouteRow[] }> = [];
+  for (const scheme of output.schemes) {
+    const selected = participantsFor(run.planId).map((participant) => quoteById.get(scheme.quoteIdsByParticipant[participant.id] ?? ""));
+    if (selected.some((quote) => !quote || quote.cityCode !== result.cityCode)) throw new Error("PUBLICATION_GUARD_REJECTED");
+    const verified = selected as VerifiedQuote[];
+    const schemeRow: SchemeRow = { id: id("scheme"), resultId: result.id, kind: scheme.kind, totalFareCny: scheme.totalFareCny, totalDurationMinutes: verified.reduce((sum, quote) => sum + quote.durationMinutes, 0), latestArrivalAt: verified.map((quote) => quote.arriveAt).sort().at(-1)!, teamTransferCount: verified.reduce((sum, quote) => sum + quote.transferCount, 0) };
+    staged.push({ scheme: schemeRow, routes: verified.map((quote) => ({ schemeId: schemeRow.id, participantId: quote.participantId, verifiedQuoteId: quote.id })) });
+  }
+  state().results.push(result);
+  state().schemes.push(...staged.map((entry) => entry.scheme));
+  state().schemeRoutes.push(...staged.flatMap((entry) => entry.routes));
+  return result;
+}
+
+function publishAutomatic(run: RunRow, proposal: ProposalRow) {
+  if (state().results.some((result) => result.planId === run.planId && result.isShared && !result.supersededAt)) throw new Error("PUBLICATION_GUARD_REJECTED");
+  const result = materializeResult(run, proposal);
+  result.isShared = true;
+  result.publishedAt = timestamp();
+  run.status = "completed";
+  run.completedAt = timestamp();
+  planById(run.planId)!.status = "completed";
+}
+
+export function submitFallbackProposal(runId: string, output: unknown) {
+  const run = runFor(runId);
+  if (!run) throw new Error("RUN_NOT_FOUND");
+  if (run.status !== "calculating") throw new Error("INVALID_RUN_STATUS");
+  return saveProposal(run, output);
+}
+
+export async function advanceFallbackRun(input: { runId: string; planId: string }) {
+  const run = runFor(input.runId);
+  if (!run || run.planId !== input.planId) throw new Error("RUN_NOT_FOUND");
+  if (["completed", "incomplete", "failed", "awaiting_host_confirmation"].includes(run.status)) return publicProgress(run)!;
+  if (run.status === "pending") run.status = "collecting";
+  else if (run.status === "collecting") {
+    if (rankEligibleCities(cityInputs(run)).length === 0) {
+      run.status = "incomplete";
+      run.errorCode = "REAL_QUOTE_COVERAGE_INCOMPLETE";
+      run.completedAt = timestamp();
+    } else run.status = "calculating";
+  } else if (run.status === "calculating") {
+    const proposal = saveProposal(run, deterministicProposal(run));
+    if (proposal) run.status = "validating";
+  } else if (run.status === "validating") {
+    const proposal = state().proposals.find((entry) => entry.runId === run.id && entry.status === "approved");
+    if (!proposal) { run.status = "failed"; run.errorCode = "AGENT_PROPOSAL_INVALID"; }
+    else if (run.kind === "alternative") { materializeResult(run, proposal); run.status = "awaiting_host_confirmation"; }
+    else {
+      try { publishAutomatic(run, proposal); } catch { run.status = "failed"; run.errorCode = "PUBLICATION_GUARD_REJECTED"; run.completedAt = timestamp(); }
+    }
+  }
+  return publicProgress(run)!;
+}
+
+export async function readFallbackPrivatePreview(input: { runId: string; participantToken: string }) {
+  const run = runFor(input.runId);
+  if (!run || run.kind !== "alternative" || !run.requestedByParticipantId) return null;
+  const credential = state().participantCredentials.find((entry) => entry.participantId === run.requestedByParticipantId);
+  if (!credential || !await verifyToken(input.participantToken, credential.editTokenHash)) return null;
+  return state().results.find((result) => result.runId === run.id) ?? null;
+}
+
+export async function confirmFallbackAlternative(input: { runId: string; hostToken: string }) {
+  const run = runFor(input.runId);
+  if (!run || run.kind !== "alternative" || run.status !== "awaiting_host_confirmation") throw new Error("RUN_NOT_FOUND");
+  const credential = state().planCredentials.find((entry) => entry.planId === run.planId);
+  if (!credential || !await verifyToken(input.hostToken, credential.hostTokenHash)) throw new Error("INVALID_HOST_TOKEN");
+  const result = state().results.find((entry) => entry.runId === run.id);
+  if (!result) throw new Error("PUBLICATION_GUARD_REJECTED");
+  const current = state().results.find((entry) => entry.planId === run.planId && entry.isShared && !entry.supersededAt);
+  if (current) current.supersededAt = timestamp();
+  result.isShared = true;
+  result.publishedAt = timestamp();
+  run.status = "completed";
+  run.completedAt = timestamp();
+  return result;
 }
 
 export function readFallbackPlan(code: string) {
-  const store = state();
-  const plan = store.plans.find((item) => item.code === code);
+  const plan = planFor(code);
   if (!plan) return null;
-
-  const runs = store.runs
-    .filter((run) => run.plan_id === plan.id)
-    .sort((a, b) => b.started_at.localeCompare(a.started_at));
-
+  const run = latestRun(plan.id);
+  const shared = run?.status === "completed" ? state().results.find((result) => result.runId === run.id && result.isShared) ?? null : null;
   return {
     plan: publicPlan(plan),
-    participants: store.participants
-      .filter((participant) => participant.plan_id === plan.id)
-      .map(publicParticipant),
-    latestRun: runs[0] ? { status: runs[0].status } : null,
+    participants: participantsFor(plan.id).map((participant) => ({ id: participant.id, name: participant.name, departure_city_name: participant.departureCityName, accepted_modes: participant.acceptedModes })),
+    latestRun: publicProgress(run),
+    latestSharedResult: shared,
   };
 }
 
 export function readFallbackResult(code: string) {
   const data = readFallbackPlan(code);
   if (!data) return null;
-  const store = state();
-  const plan = store.plans.find((item) => item.code === code);
-  const latestRun = plan
-    ? store.runs
-        .filter((run) => run.plan_id === plan.id)
-        .sort((a, b) => b.started_at.localeCompare(a.started_at))[0]
-    : undefined;
-  const recommendations = latestRun
-    ? store.recommendations
-        .filter(
-          (recommendation) => recommendation.run_id === latestRun.id,
-        )
-        .sort((a, b) => a.score_balanced - b.score_balanced)
-    : [];
-  const participantById = new Map(
-    store.participants.map((participant) => [participant.id, participant]),
-  );
-  const recommendationsWithOptions = recommendations.map((recommendation) => ({
-    ...recommendation,
-    participant_options: selectFallbackParticipantOptions(
-      store.travelOptions.filter(
-        (option) =>
-          option.run_id === recommendation.run_id &&
-          option.candidateCityCode === recommendation.city_code,
-      ),
-      participantById,
-    ),
-  }));
-
-  return {
-    ...data,
-    latestRun: latestRun
-      ? { status: latestRun.status, stale_after: latestRun.stale_after }
-      : null,
-    recommendations: recommendationsWithOptions,
-  };
+  return { ...data, recommendations: [], latestRun: data.latestRun ? { status: data.latestRun.status, stale_after: null } : null };
 }
 
-function selectFallbackParticipantOptions(
-  options: Array<TravelOption & { id: string; run_id: string }>,
-  participantById: Map<string, ParticipantRow>,
-) {
-  const selected = new Map<string, TravelOption & { id: string; run_id: string }>();
-
-  for (const option of options) {
-    const existing = selected.get(option.participantId);
-    if (!existing || fallbackOptionScore(option) < fallbackOptionScore(existing)) {
-      selected.set(option.participantId, option);
-    }
-  }
-
-  return Array.from(selected.values()).map((option) => {
-    const participant = participantById.get(option.participantId);
-    return {
-      participant_name: participant?.name ?? "参与者",
-      departure_city_name: participant?.departure_city_name ?? "出发城市",
-      mode: option.mode,
-      price_cny: option.priceCny,
-      duration_minutes: option.durationMinutes,
-      depart_at: option.departAt,
-      arrive_at: option.arriveAt,
-      booking_url: option.bookingUrl,
-      service_name: option.serviceName,
-      departure_station_name: option.departureStationName,
-      arrival_station_name: option.arrivalStationName,
-      source: option.source,
-      provider: option.provider,
-      queried_at: option.queriedAt,
-      failure_reason: option.failureReason,
-    };
-  });
-}
-
-function fallbackOptionScore(option: TravelOption) {
-  if (option.source === "unavailable") return 999_999;
-  return (option.priceCny ?? 0) + (option.durationMinutes ?? 0);
-}
-
-export async function createFallbackParticipant(
-  code: string,
-  input: {
-    name: string;
-    departureCityCode: string;
-    departureCityName: string;
-    acceptedModes: TransportMode[];
-  },
-) {
-  const store = state();
-  const plan = store.plans.find((item) => item.code === code);
-  if (!plan) return { ok: false as const, status: 404, error: "PLAN_NOT_FOUND" };
-
-  const currentCount = store.participants.filter(
-    (participant) => participant.plan_id === plan.id,
-  ).length;
-  if (currentCount >= plan.participant_limit) {
-    return {
-      ok: false as const,
-      status: 409,
-      error: "PARTICIPANT_LIMIT_REACHED",
-    };
-  }
-
-  const editToken = generateToken();
-  const timestamp = now();
-  const participant: ParticipantRow = {
-    id: id("participant"),
-    plan_id: plan.id,
-    name: input.name,
-    departure_city_code: input.departureCityCode,
-    departure_city_name: input.departureCityName,
-    accepted_modes: input.acceptedModes,
-    created_by_host: false,
-    created_at: timestamp,
-    updated_at: timestamp,
-  };
-  store.participants.push(participant);
-  store.participantCredentials.push({
-    participant_id: participant.id,
-    edit_token_hash: await hashToken(editToken),
-  });
-
-  return {
-    ok: true as const,
-    participantId: participant.id,
-    editToken,
-  };
-}
-
-export async function verifyFallbackParticipantCanCalculate(
-  code: string,
-  token: string,
-) {
-  const plan = state().plans.find((item) => item.code === code);
-  if (!plan) return { ok: false as const, status: 404, error: "PLAN_NOT_FOUND" };
-
-  const participants = state().participants.filter(
-    (participant) => participant.plan_id === plan.id,
-  );
-  if (participants.length < plan.participant_limit) {
-    return {
-      ok: false as const,
-      status: 409,
-      error: "PARTICIPANT_LIMIT_NOT_REACHED",
-    };
-  }
-
-  for (const participant of participants) {
-    const credential = state().participantCredentials.find(
-      (item) => item.participant_id === participant.id,
-    );
-    if (credential && await verifyToken(token, credential.edit_token_hash)) {
-      return {
-        ok: true as const,
-        planId: plan.id,
-        participantId: participant.id,
-      };
-    }
-  }
-
-  return {
-    ok: false as const,
-    status: 403,
-    error: "INVALID_PARTICIPANT_TOKEN",
-  };
-}
-
-export function readFallbackCandidates(code: string) {
-  const plan = state().plans.find((item) => item.code === code);
-  if (!plan) return null;
-  return state().candidates.filter((candidate) => candidate.plan_id === plan.id);
-}
-
-export function saveFallbackCandidate(input: {
-  planId: string;
-  cityCode: string;
-  cityName: string;
-  enabled: boolean;
-}) {
-  const store = state();
-  const source = input.enabled ? "manual_add" : "manual_exclude";
-  const oppositeSource = input.enabled ? "manual_exclude" : "manual_add";
-  store.candidates = store.candidates.filter(
-    (candidate) =>
-      !(
-        candidate.plan_id === input.planId &&
-        candidate.city_code === input.cityCode &&
-        candidate.source === oppositeSource
-      ),
-  );
-
-  const existing = store.candidates.find(
-    (candidate) =>
-      candidate.plan_id === input.planId &&
-      candidate.city_code === input.cityCode &&
-      candidate.source === source,
-  );
-
-  if (existing) {
-    existing.city_name = input.cityName;
-    existing.enabled = input.enabled;
-    return;
-  }
-
-  store.candidates.push({
-    id: id("candidate"),
-    plan_id: input.planId,
-    city_code: input.cityCode,
-    city_name: input.cityName,
-    source,
-    enabled: input.enabled,
-    created_at: now(),
-  });
-}
-
-export async function calculateFallbackRecommendations(code: string) {
-  const store = state();
-  const plan = store.plans.find((item) => item.code === code);
-  if (!plan) throw new Error("PLAN_NOT_FOUND");
-
-  const participants = store.participants.filter(
-    (participant) => participant.plan_id === plan.id,
-  );
-  if (participants.length < 2) throw new Error("NOT_ENOUGH_PARTICIPANTS");
-
-  const runningRun = store.runs.find(
-    (run) => run.plan_id === plan.id && run.status === "running",
-  );
-  if (runningRun) throw new Error("CALCULATION_IN_PROGRESS");
-
-  const candidateRows = store.candidates.filter(
-    (candidate) => candidate.plan_id === plan.id,
-  );
-  const candidates = generateCandidateCities({
-    departureCityCodes: participants.map(
-      (participant) => participant.departure_city_code,
-    ),
-    manualAddCityCodes: candidateRows
-      .filter((item) => item.source === "manual_add" && item.enabled)
-      .map((item) => item.city_code),
-    manualExcludeCityCodes: candidateRows
-      .filter((item) => item.source === "manual_exclude")
-      .map((item) => item.city_code),
-    limit: 12,
-  });
-
-  const run: RecommendationRunRow = {
-    id: id("run"),
-    plan_id: plan.id,
-    status: "running",
-    started_at: now(),
-    completed_at: null,
-    stale_after: null,
-    error_summary: null,
-  };
-  store.runs.push(run);
-
-  const { options: allOptions, usedFallback } = await collectTravelOptions({
-    participants: participants.map((participant) => ({
-      id: participant.id,
-      departureCityCode: participant.departure_city_code,
-      departureCityName: participant.departure_city_name,
-      acceptedModes: participant.accepted_modes,
-    })),
-    candidates,
-    meetingDate: plan.meeting_date,
-    provider: new FlyAITravelProvider(),
-  });
-
-  store.travelOptions.push(
-    ...allOptions.map((option) => ({
-      ...option,
-      id: id("travel"),
-      run_id: run.id,
-    })),
-  );
-
-  const scoredRecommendations = candidates.map((candidate) =>
-    scoreCandidateCity({
-      cityCode: candidate.code,
-      cityName: candidate.name,
-      options: allOptions.filter(
-        (option) => option.candidateCityCode === candidate.code,
-      ),
-    }),
-  );
-  const primaryByCityCode = new Map(
-    pickPrimaryRecommendations(scoredRecommendations).map((item) => [
-      item.cityCode,
-      item,
-    ]),
-  );
-  const labeledRecommendations = scoredRecommendations.map(
-    (recommendation) =>
-      primaryByCityCode.get(recommendation.cityCode) ?? recommendation,
-  );
-
-  const recommendations = await Promise.all(
-    labeledRecommendations.map(async (scored) => {
-      const explanation = await explainRecommendation(scored);
-
-      return {
-        id: id("recommendation"),
-        run_id: run.id,
-        city_code: scored.cityCode,
-        city_name: scored.cityName,
-        total_price_cny: scored.totalPriceCny,
-        avg_price_cny: scored.avgPriceCny,
-        total_duration_minutes: scored.totalDurationMinutes,
-        fairness_gap: scored.fairnessGap,
-        waiting_penalty: scored.waitingPenalty,
-        transfer_penalty: scored.transferPenalty,
-        estimate_penalty: scored.estimatePenalty,
-        missing_penalty: scored.missingPenalty,
-        score_cheapest: scored.scoreCheapest,
-        score_balanced: scored.scoreBalanced,
-        score_fastest: scored.scoreFastest,
-        labels: scored.labels,
-        explanation: explanation.short_reason,
-        risk_summary: explanation.risk_badges.join("、"),
-      };
-    }),
-  );
-  store.recommendations.push(...recommendations);
-
-  const timestamp = now();
-  run.status = "completed";
-  run.completed_at = timestamp;
-  run.stale_after = new Date(Date.now() + 30 * 60 * 1000).toISOString();
-  run.error_summary = usedFallback ? "PARTIAL_ESTIMATE_FALLBACK" : null;
-  plan.status = "completed";
-  plan.last_calculated_at = timestamp;
-  plan.updated_at = timestamp;
-
-  return { runId: run.id, candidateCount: candidates.length };
-}
-
-function toCityRecommendation(row: CityRecommendationRow): CityRecommendation {
-  return {
-    cityCode: row.city_code,
-    cityName: row.city_name,
-    totalPriceCny: row.total_price_cny,
-    avgPriceCny: row.avg_price_cny,
-    totalDurationMinutes: row.total_duration_minutes,
-    fairnessGap: row.fairness_gap,
-    waitingPenalty: row.waiting_penalty,
-    transferPenalty: row.transfer_penalty,
-    estimatePenalty: row.estimate_penalty,
-    missingPenalty: row.missing_penalty,
-    scoreCheapest: row.score_cheapest,
-    scoreBalanced: row.score_balanced,
-    scoreFastest: row.score_fastest,
-    labels: row.labels,
-  };
-}
-
+export function readFallbackCandidates(code: string) { return planFor(code) ? [] : null; }
+export function saveFallbackCandidate() { /* Candidate editing remains disabled by the public route. */ }
 export async function explainFallbackLatestRun(code: string) {
-  const store = state();
-  const plan = store.plans.find((item) => item.code === code);
-  if (!plan) return { ok: false as const, status: 404, error: "PLAN_NOT_FOUND" };
-
-  const run = store.runs
-    .filter((item) => item.plan_id === plan.id)
-    .sort((a, b) => b.started_at.localeCompare(a.started_at))[0];
-  if (!run) return { ok: false as const, status: 404, error: "RUN_NOT_FOUND" };
-
-  const recommendations = store.recommendations.filter(
-    (recommendation) => recommendation.run_id === run.id,
-  );
-
-  for (const recommendation of recommendations) {
-    const explanation = await explainRecommendation(
-      toCityRecommendation(recommendation),
-    );
-    recommendation.explanation = explanation.short_reason;
-    recommendation.risk_summary = explanation.risk_badges.join("、");
-  }
-
-  return { ok: true as const, count: recommendations.length };
+  return planFor(code) ? { ok: true as const, count: 0 } : { ok: false as const, status: 404, error: "PLAN_NOT_FOUND" };
 }

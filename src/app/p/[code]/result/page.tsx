@@ -129,7 +129,11 @@ export default async function ResultPage({
         </ResponsiveShell>
       );
     }
-    const runStatus = data.latestRun?.status ?? null;
+    const runStatus = data.latestRun?.status === "completed"
+      ? "completed"
+      : data.latestRun?.status
+        ? "running"
+        : null;
     const staleAfter = data.latestRun?.stale_after;
     const isStale =
       runStatus === "completed" &&

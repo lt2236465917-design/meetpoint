@@ -12,7 +12,8 @@ import {
   type StoredRouteTask,
 } from "@/lib/recommendation/repository";
 import { ManagerAgent } from "@/lib/agent/manager-agent";
-import { createServiceSupabaseClient } from "@/lib/supabase/server";
+import { advanceFallbackRun } from "@/lib/fallback/mvp-store";
+import { createServiceSupabaseClient, hasSupabaseEnvironment } from "@/lib/supabase/server";
 import { verifyParticipantCanCalculatePlan } from "@/lib/security/participant-calculation";
 import { randomUUID } from "node:crypto";
 
@@ -306,6 +307,7 @@ export async function startAutomaticRun(input: StartAutomaticRunInput): Promise<
 }
 
 export async function advanceRun(input: { runId: string; planId: string }) {
+  if (!hasSupabaseEnvironment()) return advanceFallbackRun(input);
   const status = await new RunOrchestrator().advanceRun(input.runId, input.planId);
   const run = await new SupabaseRecommendationRepository().getRun(input.runId);
   if (!run || run.planId !== input.planId) throw new Error("RUN_NOT_FOUND");
