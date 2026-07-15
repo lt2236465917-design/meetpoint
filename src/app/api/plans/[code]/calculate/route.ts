@@ -20,8 +20,13 @@ export async function POST(
   }
 
   try {
-    const result = await calculatePlanRecommendations({ code });
-    return NextResponse.json(result);
+    const result = await calculatePlanRecommendations({
+      code,
+      participantToken: req.headers.get("x-participant-token") ?? "",
+    });
+    return NextResponse.json(result, {
+      status: "status" in result && result.status === "pending" ? 202 : 200,
+    });
   } catch (error) {
     const code = error instanceof Error ? error.message : "CALCULATION_FAILED";
     return NextResponse.json(

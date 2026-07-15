@@ -3,10 +3,13 @@ import { z } from "zod";
 
 import type {
   QueryOutcome,
+  RecommendationProposal,
   RouteTask,
   RunStatus,
   ValidationDecision,
+  VerifiedQuote,
 } from "@/lib/agent/contracts";
+import { calculationOutputSchema } from "@/lib/agent/contracts";
 import { createServiceSupabaseClient } from "@/lib/supabase/server";
 import type { RouteTaskDraft } from "./query-matrix";
 
@@ -17,6 +20,25 @@ export type CandidateRecord = {
 };
 
 export type StoredRouteTask = RouteTask & { arrivalDate: string };
+
+export type StoredRecommendationRun = {
+  id: string;
+  planId: string;
+  status: RunStatus;
+  traceId: string;
+  retryAfter: string | null;
+  errorCode: string | null;
+  policyVersion: string;
+  kind: "automatic" | "alternative";
+  arrivalDate: string;
+  participantIds: string[];
+};
+
+export type ApprovedProposal = {
+  id: string;
+  version: number;
+  output: RecommendationProposal;
+};
 
 export type CreateRunMatrixInput = {
   planId: string;
@@ -59,6 +81,25 @@ export interface RecommendationRepository {
     retryAfter?: string | null,
     expectedStatus?: RunStatus,
   ): Promise<void>;
+}
+
+export interface RunOrchestratorRepository extends RecommendationRepository, AgentProposalRepository {
+  getRun(runId: string): Promise<StoredRecommendationRun | null>;
+  compareAndSetRunStatus(
+    runId: string,
+    expectedStatus: RunStatus,
+    nextStatus: RunStatus,
+    options?: { retryAfter?: string | null; errorCode?: string | null },
+  ): Promise<boolean>;
+  listRunTasks(runId: string): Promise<StoredRouteTask[]>;
+  listVerifiedQuotes(runId: string): Promise<VerifiedQuote[]>;
+  getLatestApprovedProposal(runId: string): Promise<ApprovedProposal | null>;
+  materializeApprovedProposal(input: {
+    run: StoredRecommendationRun;
+    proposal: ApprovedProposal;
+    quotes: readonly VerifiedQuote[];
+  }): Promise<void>;
+  publishSharedResult(runId: string, proposalId: string): Promise<void>;
 }
 
 function uuidFromSeed(seed: string): string {
@@ -108,6 +149,7 @@ type RouteTaskRow = {
 };
 
 const ROUTE_TASK_SELECT = "id,run_id,participant_id,city_code,origin_city_code,mode,search_date,physical_key,status,attempt_count,retry_after,error_code,recommendation_runs!inner(plans!inner(meeting_date))";
+const RUN_SELECT = "id,plan_id,status,trace_id,retry_after,error_summary,policy_version,kind,plans!inner(meeting_date)";
 
 function firstRelation(value: unknown): Record<string, unknown> | null {
   const relation = Array.isArray(value) ? value[0] : value;
@@ -143,13 +185,65 @@ function toStoredTask(row: RouteTaskRow): StoredRouteTask {
   };
 }
 
+function toStoredRun(row: Record<string, unknown>): StoredRecommendationRun {
+  const plan = firstRelation(row.plans);
+  const status = typeof row.status === "string" ? row.status : "";
+  const kind = row.kind;
+  if (
+    typeof row.id !== "string" ||
+    typeof row.plan_id !== "string" ||
+    typeof row.trace_id !== "string" ||
+    typeof row.policy_version !== "string" ||
+    typeof plan?.meeting_date !== "string" ||
+    !["pending", "collecting", "cooling_down", "calculating", "validating", "awaiting_host_confirmation", "completed", "incomplete", "failed"].includes(status) ||
+    (kind !== "automatic" && kind !== "alternative")
+  ) {
+    throw new Error("Invalid recommendation run record");
+  }
+  return {
+    id: row.id,
+    planId: row.plan_id,
+    status: status as RunStatus,
+    traceId: row.trace_id,
+    retryAfter: typeof row.retry_after === "string" ? row.retry_after : null,
+    errorCode: typeof row.error_summary === "string" ? row.error_summary : null,
+    policyVersion: row.policy_version,
+    kind,
+    arrivalDate: plan.meeting_date,
+    participantIds: [],
+  };
+}
+
+function toVerifiedQuote(row: Record<string, unknown>): VerifiedQuote {
+  const requiredString = (key: string) => {
+    const value = row[key];
+    if (typeof value !== "string" || value.length === 0) throw new Error(`Invalid verified quote ${key}`);
+    return value;
+  };
+  const requiredNumber = (key: string) => {
+    const value = row[key];
+    if (typeof value !== "number" || !Number.isInteger(value)) throw new Error(`Invalid verified quote ${key}`);
+    return value;
+  };
+  return {
+    id: requiredString("id"), quoteId: requiredString("quote_id"),
+    providerQuoteId: typeof row.provider_quote_id === "string" ? row.provider_quote_id : null,
+    participantId: requiredString("participant_id"), cityCode: requiredString("city_code"),
+    mode: requiredString("mode") as VerifiedQuote["mode"], searchDate: requiredString("search_date"),
+    queriedAt: requiredString("queried_at"), priceCny: requiredNumber("price_cny"),
+    departAt: requiredString("depart_at"), arriveAt: requiredString("arrive_at"),
+    durationMinutes: requiredNumber("duration_minutes"), transferCount: requiredNumber("transfer_count"),
+    isDirect: row.is_direct === true, serviceName: requiredString("service_name"),
+  };
+}
+
 const runMatrixResultSchema = z.object({
   runId: z.uuid(),
   taskIds: z.array(z.uuid()),
 }).strict();
 
 export class SupabaseRecommendationRepository
-  implements RecommendationRepository, AgentProposalRepository {
+  implements RunOrchestratorRepository {
   async createRunMatrix(input: CreateRunMatrixInput) {
     const supabase = createServiceSupabaseClient();
     const runId = randomUUID();
@@ -273,6 +367,165 @@ export class SupabaseRecommendationRepository
     if (!Array.isArray(data) || data.length !== 1 || data[0]?.id !== runId) {
       throw new Error("Failed to update recommendation run: expected exactly one row");
     }
+  }
+
+  async getRun(runId: string): Promise<StoredRecommendationRun | null> {
+    const { data, error } = await createServiceSupabaseClient()
+      .from("recommendation_runs")
+      .select(RUN_SELECT)
+      .eq("id", runId)
+      .maybeSingle();
+    if (error) throw new Error(`Failed to load recommendation run: ${error.message}`);
+    if (!data) return null;
+    const stored = toStoredRun(data as Record<string, unknown>);
+    const { data: participants, error: participantsError } = await createServiceSupabaseClient()
+      .from("participants")
+      .select("id")
+      .eq("plan_id", stored.planId)
+      .order("id", { ascending: true });
+    if (participantsError) throw new Error(`Failed to load run participants: ${participantsError.message}`);
+    return {
+      ...stored,
+      participantIds: (participants ?? []).flatMap((participant) =>
+        typeof participant.id === "string" ? [participant.id] : [],
+      ),
+    };
+  }
+
+  async compareAndSetRunStatus(
+    runId: string,
+    expectedStatus: RunStatus,
+    nextStatus: RunStatus,
+    options: { retryAfter?: string | null; errorCode?: string | null } = {},
+  ): Promise<boolean> {
+    const { data, error } = await createServiceSupabaseClient()
+      .from("recommendation_runs")
+      .update({
+        status: nextStatus,
+        retry_after: options.retryAfter ?? null,
+        error_summary: options.errorCode ?? null,
+        ...(nextStatus === "completed" || nextStatus === "incomplete" || nextStatus === "failed"
+          ? { completed_at: new Date().toISOString() }
+          : {}),
+      })
+      .eq("id", runId)
+      .eq("status", expectedStatus)
+      .select("id");
+    if (error) throw new Error(`Failed to transition recommendation run: ${error.message}`);
+    return Array.isArray(data) && data.length === 1 && data[0]?.id === runId;
+  }
+
+  async listRunTasks(runId: string): Promise<StoredRouteTask[]> {
+    const { data, error } = await createServiceSupabaseClient()
+      .from("route_tasks")
+      .select(ROUTE_TASK_SELECT)
+      .eq("run_id", runId)
+      .order("id", { ascending: true });
+    if (error) throw new Error(`Failed to load route tasks: ${error.message}`);
+    return (data ?? []).map((row) => toStoredTask(row as RouteTaskRow));
+  }
+
+  async listVerifiedQuotes(runId: string): Promise<VerifiedQuote[]> {
+    const { data, error } = await createServiceSupabaseClient()
+      .from("verified_quotes")
+      .select("id,quote_id,provider_quote_id,participant_id,city_code,mode,search_date,queried_at,price_cny,depart_at,arrive_at,duration_minutes,transfer_count,is_direct,service_name")
+      .eq("run_id", runId)
+      .order("quote_id", { ascending: true });
+    if (error) throw new Error(`Failed to load verified quotes: ${error.message}`);
+    return (data ?? []).map((row) => toVerifiedQuote(row as Record<string, unknown>));
+  }
+
+  async getLatestApprovedProposal(runId: string): Promise<ApprovedProposal | null> {
+    const { data, error } = await createServiceSupabaseClient()
+      .from("recommendation_proposals")
+      .select("id,version,output_json")
+      .eq("run_id", runId)
+      .eq("status", "approved")
+      .order("version", { ascending: false })
+      .limit(1);
+    if (error) throw new Error(`Failed to load approved proposal: ${error.message}`);
+    const row = data?.[0] as Record<string, unknown> | undefined;
+    if (!row) return null;
+    const parsed = z.object({ id: z.uuid(), version: z.number().int().positive(), output_json: z.unknown() })
+      .safeParse(row);
+    if (!parsed.success) throw new Error("Invalid approved proposal record");
+    const output = calculationOutputSchema.safeParse(parsed.data.output_json);
+    if (!output.success || output.data.status !== "proposal") {
+      throw new Error("Invalid approved proposal output");
+    }
+    return { id: parsed.data.id, version: parsed.data.version, output: output.data };
+  }
+
+  async materializeApprovedProposal(input: {
+    run: StoredRecommendationRun;
+    proposal: ApprovedProposal;
+    quotes: readonly VerifiedQuote[];
+  }): Promise<void> {
+    const { data: existing, error: existingError } = await createServiceSupabaseClient()
+      .from("recommendation_results")
+      .select("id")
+      .eq("run_id", input.run.id)
+      .eq("proposal_id", input.proposal.id)
+      .maybeSingle();
+    if (existingError) throw new Error(`Failed to load draft recommendation result: ${existingError.message}`);
+    if (existing) return;
+
+    const quoteById = new Map(input.quotes.map((quote) => [quote.quoteId, quote]));
+    const schemeRows = input.proposal.output.schemes.map((scheme) => {
+      const selected = input.run.participantIds.map((participantId) => {
+        const quote = quoteById.get(scheme.quoteIdsByParticipant[participantId] ?? "");
+        if (!quote || quote.participantId !== participantId || quote.cityCode !== input.proposal.output.cityCode) {
+          throw new Error("Approved proposal references invalid verified quote");
+        }
+        return quote;
+      });
+      return {
+        id: randomUUID(),
+        result_id: "",
+        kind: scheme.kind,
+        total_fare_cny: scheme.totalFareCny,
+        total_duration_minutes: selected.reduce((sum, quote) => sum + quote.durationMinutes, 0),
+        latest_arrival_at: selected.map((quote) => quote.arriveAt).sort().at(-1),
+        team_transfer_count: selected.reduce((sum, quote) => sum + quote.transferCount, 0),
+        selected,
+      };
+    });
+    if (schemeRows.some((scheme) => !scheme.latest_arrival_at)) {
+      throw new Error("Approved proposal has empty scheme");
+    }
+    const resultId = randomUUID();
+    const supabase = createServiceSupabaseClient();
+    const { error: resultError } = await supabase.from("recommendation_results").insert({
+      id: resultId, plan_id: input.run.planId, run_id: input.run.id, proposal_id: input.proposal.id,
+      city_code: input.proposal.output.cityCode, explanation_zh: input.proposal.output.explanationZh, is_shared: false,
+    });
+    if (resultError) throw new Error("Failed to materialize approved recommendation result");
+    const { error: schemesError } = await supabase.from("recommendation_schemes").insert(
+      schemeRows.map((scheme) => ({
+        id: scheme.id,
+        result_id: resultId,
+        kind: scheme.kind,
+        total_fare_cny: scheme.total_fare_cny,
+        total_duration_minutes: scheme.total_duration_minutes,
+        latest_arrival_at: scheme.latest_arrival_at,
+        team_transfer_count: scheme.team_transfer_count,
+      })),
+    );
+    if (schemesError) throw new Error("Failed to materialize approved recommendation schemes");
+    const { error: routesError } = await supabase.from("recommendation_scheme_routes").insert(
+      schemeRows.flatMap((scheme) => scheme.selected.map((quote) => ({
+        scheme_id: scheme.id, participant_id: quote.participantId, verified_quote_id: quote.id,
+      }))),
+    );
+    if (routesError) throw new Error("Failed to materialize approved recommendation routes");
+  }
+
+  async publishSharedResult(runId: string, proposalId: string): Promise<void> {
+    const { data, error } = await createServiceSupabaseClient().rpc("publish_shared_result", {
+      p_run_id: runId,
+      p_proposal_id: proposalId,
+    });
+    if (error || data !== true) throw new Error("Failed to publish guarded shared result");
   }
 
   async saveProposal(input: SavedAgentProposal): Promise<void> {

@@ -36,6 +36,13 @@ function mockLatestRunLookup(run: unknown | null) {
   return { select, eq, order, limit: mocks.runsLimit };
 }
 
+function mockPendingGroups(count: number) {
+  const inStatus = vi.fn().mockResolvedValue({ count });
+  const eq = vi.fn(() => ({ in: inStatus }));
+  const select = vi.fn(() => ({ eq }));
+  return { select, eq, inStatus };
+}
+
 describe("GET /api/plans/[code]", () => {
   beforeEach(() => {
     vi.resetModules();
@@ -79,16 +86,20 @@ describe("GET /api/plans/[code]", () => {
     const latestRun = {
       id: "run-1",
       plan_id: "plan-1",
-      status: "completed",
-      started_at: "2026-08-01T10:00:00.000Z",
+      status: "collecting",
+      trace_id: "11111111-1111-4111-8111-111111111111",
+      retry_after: null,
+      error_summary: null,
     };
     const planLookup = mockPlanLookup(plan);
     const participantLookup = mockParticipantsLookup(participants);
     const latestRunLookup = mockLatestRunLookup(latestRun);
+    const pendingGroups = mockPendingGroups(3);
     mocks.from
       .mockReturnValueOnce({ select: planLookup.select })
       .mockReturnValueOnce({ select: participantLookup.select })
-      .mockReturnValueOnce({ select: latestRunLookup.select });
+      .mockReturnValueOnce({ select: latestRunLookup.select })
+      .mockReturnValueOnce({ select: pendingGroups.select });
 
     const { GET } = await import("@/app/api/plans/[code]/route");
     const response = await GET(new Request("http://localhost/api/plans/ABC123"), {
@@ -105,7 +116,14 @@ describe("GET /api/plans/[code]", () => {
         status: "collecting",
       },
       participants,
-      latestRun: { status: "completed" },
+      latestRun: {
+        status: "collecting",
+        traceId: "11111111-1111-4111-8111-111111111111",
+        pendingGroups: 3,
+        retryAt: null,
+        diagnosticCode: null,
+      },
+      latestSharedResult: null,
     });
     expect(planLookup.select).toHaveBeenCalledWith(
       "id, code, title, meeting_date, participant_limit, status",
@@ -118,6 +136,7 @@ describe("GET /api/plans/[code]", () => {
       ascending: false,
     });
     expect(latestRunLookup.limit).toHaveBeenCalledWith(1);
-    expect(latestRunLookup.select).toHaveBeenCalledWith("status, started_at");
+    expect(latestRunLookup.select).toHaveBeenCalledWith("id, status, trace_id, retry_after, error_summary, started_at");
+    expect(pendingGroups.inStatus).toHaveBeenCalledWith("status", ["pending", "running", "retryable_failure"]);
   });
 });
