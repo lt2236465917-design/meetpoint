@@ -131,15 +131,20 @@ function generateCode(): string {
 
 function publicPlan(plan: PlanRow) {
   return {
-    id: plan.id,
     code: plan.code,
     title: plan.title,
     meeting_date: plan.meeting_date,
     participant_limit: plan.participant_limit,
     status: plan.status,
-    created_at: plan.created_at,
-    updated_at: plan.updated_at,
-    last_calculated_at: plan.last_calculated_at,
+  };
+}
+
+function publicParticipant(participant: ParticipantRow) {
+  return {
+    id: participant.id,
+    name: participant.name,
+    departure_city_name: participant.departure_city_name,
+    accepted_modes: participant.accepted_modes,
   };
 }
 
@@ -191,10 +196,10 @@ export function readFallbackPlan(code: string) {
 
   return {
     plan: publicPlan(plan),
-    participants: store.participants.filter(
-      (participant) => participant.plan_id === plan.id,
-    ),
-    latestRun: runs[0] ?? null,
+    participants: store.participants
+      .filter((participant) => participant.plan_id === plan.id)
+      .map(publicParticipant),
+    latestRun: runs[0] ? { status: runs[0].status } : null,
   };
 }
 
@@ -202,10 +207,16 @@ export function readFallbackResult(code: string) {
   const data = readFallbackPlan(code);
   if (!data) return null;
   const store = state();
-  const recommendations = data.latestRun
+  const plan = store.plans.find((item) => item.code === code);
+  const latestRun = plan
+    ? store.runs
+        .filter((run) => run.plan_id === plan.id)
+        .sort((a, b) => b.started_at.localeCompare(a.started_at))[0]
+    : undefined;
+  const recommendations = latestRun
     ? store.recommendations
         .filter(
-          (recommendation) => recommendation.run_id === data.latestRun?.id,
+          (recommendation) => recommendation.run_id === latestRun.id,
         )
         .sort((a, b) => a.score_balanced - b.score_balanced)
     : [];
@@ -224,7 +235,13 @@ export function readFallbackResult(code: string) {
     ),
   }));
 
-  return { ...data, recommendations: recommendationsWithOptions };
+  return {
+    ...data,
+    latestRun: latestRun
+      ? { status: latestRun.status, stale_after: latestRun.stale_after }
+      : null,
+    recommendations: recommendationsWithOptions,
+  };
 }
 
 function selectFallbackParticipantOptions(
@@ -454,7 +471,6 @@ export async function calculateFallbackRecommendations(code: string) {
     })),
     candidates,
     meetingDate: plan.meeting_date,
-    targetArrivalTime: "23:59",
     provider: new FlyAITravelProvider(),
   });
 

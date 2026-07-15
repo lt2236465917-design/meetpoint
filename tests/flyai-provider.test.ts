@@ -17,7 +17,6 @@ const input = {
   destinationCityCode: "wuhan",
   destinationCityName: "武汉",
   meetingDate: "2026-08-20",
-  targetArrivalTime: "12:00",
   acceptedModes: ["flight"] as const,
 };
 

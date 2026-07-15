@@ -15,7 +15,7 @@ async function getPlan(code: string) {
   const supabase = createServiceSupabaseClient();
   const { data: plan } = await supabase
     .from("plans")
-    .select("*")
+    .select("id, code, title, meeting_date, participant_limit, status")
     .eq("code", code)
     .single();
 
@@ -27,15 +27,21 @@ async function getPlan(code: string) {
     .eq("plan_id", plan.id);
   const { data: runs } = await supabase
     .from("recommendation_runs")
-    .select("*")
+    .select("status, started_at")
     .eq("plan_id", plan.id)
     .order("started_at", { ascending: false })
     .limit(1);
 
   return {
-    plan,
+    plan: {
+      code: plan.code,
+      title: plan.title,
+      meeting_date: plan.meeting_date,
+      participant_limit: plan.participant_limit,
+      status: plan.status,
+    },
     participants: participants ?? [],
-    latestRun: runs?.[0] ?? null,
+    latestRun: runs?.[0] ? { status: runs[0].status } : null,
   };
 }
 

@@ -14,7 +14,7 @@ vi.mock("@/lib/supabase/server", () => ({
   }),
 }));
 
-function mockPlanLookup(plan: { id: string; code: string; title: string } | null) {
+function mockPlanLookup(plan: Record<string, unknown> | null) {
   mocks.planSingle.mockResolvedValue({ data: plan });
   const single = vi.fn(() => mocks.planSingle());
   const eq = vi.fn(() => ({ single }));
@@ -64,6 +64,9 @@ describe("GET /api/plans/[code]", () => {
       id: "plan-1",
       code: "ABC123",
       title: "上海周末见面",
+      meeting_date: "2026-08-15",
+      participant_limit: 2,
+      status: "collecting",
     };
     const participants = [
       {
@@ -94,10 +97,19 @@ describe("GET /api/plans/[code]", () => {
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({
-      plan,
+      plan: {
+        code: "ABC123",
+        title: "上海周末见面",
+        meeting_date: "2026-08-15",
+        participant_limit: 2,
+        status: "collecting",
+      },
       participants,
-      latestRun,
+      latestRun: { status: "completed" },
     });
+    expect(planLookup.select).toHaveBeenCalledWith(
+      "id, code, title, meeting_date, participant_limit, status",
+    );
     expect(participantLookup.select).toHaveBeenCalledWith(
       "id, name, departure_city_name, accepted_modes",
     );
@@ -106,5 +118,6 @@ describe("GET /api/plans/[code]", () => {
       ascending: false,
     });
     expect(latestRunLookup.limit).toHaveBeenCalledWith(1);
+    expect(latestRunLookup.select).toHaveBeenCalledWith("status, started_at");
   });
 });

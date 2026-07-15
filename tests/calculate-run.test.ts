@@ -77,7 +77,6 @@ describe("calculatePlanRecommendations", () => {
       id: "plan-1",
       code: "ABC123",
       meeting_date: "2026-08-01",
-      target_arrival_time: "12:00",
     });
     const runningRunLookup = selectRunningRun(null);
     const participantsLookup = selectEq([
@@ -173,7 +172,6 @@ describe("calculatePlanRecommendations", () => {
         originCityCode: "beijing",
         destinationCityCode: "beijing",
         meetingDate: "2026-08-01",
-        targetArrivalTime: "12:00",
         acceptedModes: ["flight"],
       }),
     );
@@ -219,7 +217,6 @@ describe("calculatePlanRecommendations", () => {
       id: "plan-1",
       code: "ABC123",
       meeting_date: "2026-08-01",
-      target_arrival_time: "12:00",
     });
     const runningRunLookup = selectRunningRun(null);
     const participantsLookup = selectEq([
@@ -251,7 +248,6 @@ describe("calculatePlanRecommendations", () => {
       id: "plan-1",
       code: "ABC123",
       meeting_date: "2026-08-01",
-      target_arrival_time: "12:00",
     });
     const runningRunLookup = selectRunningRun({ id: "run-active" });
     mocks.from
@@ -274,7 +270,6 @@ describe("calculatePlanRecommendations", () => {
       id: "plan-1",
       code: "ABC123",
       meeting_date: "2026-08-01",
-      target_arrival_time: "12:00",
     });
     const runningRunLookup = selectRunningRun(null);
     const participantsLookup = selectEq([

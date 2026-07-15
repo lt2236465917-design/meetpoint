@@ -52,7 +52,6 @@ const travelSearchInput: TravelSearchInput = {
   destinationCityCode: "wuhan",
   destinationCityName: "武汉",
   meetingDate: "2026-08-01",
-  targetArrivalTime: "12:00",
   acceptedModes: ["flight"],
 };
 
@@ -356,7 +355,6 @@ describe("FlyAITravelProvider", () => {
         destinationCityCode: "wuhan",
         destinationCityName: "武汉",
         meetingDate: "2026-08-01",
-        targetArrivalTime: "12:00",
         acceptedModes: ["flight"],
       },
       "flight",

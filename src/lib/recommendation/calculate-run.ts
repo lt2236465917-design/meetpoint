@@ -16,7 +16,6 @@ import type { TravelOption } from "@/types/domain";
 type PlanRow = {
   id: string;
   meeting_date: string;
-  target_arrival_time: string;
 };
 
 type ParticipantRow = {
@@ -69,7 +68,7 @@ export async function calculatePlanRecommendations({
   const supabase = createServiceSupabaseClient();
   const { data: plan } = await supabase
     .from("plans")
-    .select("*")
+    .select("id, meeting_date")
     .eq("code", code)
     .single<PlanRow>();
 
@@ -90,7 +89,7 @@ export async function calculatePlanRecommendations({
 
   const { data: participants } = await supabase
     .from("participants")
-    .select("*")
+    .select("id, departure_city_code, departure_city_name, accepted_modes")
     .eq("plan_id", plan.id);
   const participantRows = (participants ?? []) as ParticipantRow[];
 
@@ -100,7 +99,7 @@ export async function calculatePlanRecommendations({
 
   const { data: manualCandidates } = await supabase
     .from("candidate_cities")
-    .select("*")
+    .select("city_code, source, enabled")
     .eq("plan_id", plan.id);
   const candidateRows = (manualCandidates ?? []) as CandidateCityRow[];
   const manualAddCityCodes = candidateRows
@@ -144,7 +143,6 @@ export async function calculatePlanRecommendations({
     })),
     candidates,
     meetingDate: plan.meeting_date,
-    targetArrivalTime: plan.target_arrival_time,
     provider: new FlyAITravelProvider(),
   });
 

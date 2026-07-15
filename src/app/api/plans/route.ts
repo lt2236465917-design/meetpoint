@@ -32,35 +32,18 @@ export async function POST(req: Request) {
   const code = generateCode();
   const hostToken = generateToken();
 
-  const { data: plan, error } = await supabase
-    .from("plans")
-    .insert({
-      code,
-      title: parsed.data.title,
-      meeting_date: parsed.data.arrivalDate,
-      participant_limit: parsed.data.participantLimit,
-      status: "collecting",
-    })
-    .select("id")
-    .single();
+  const { data: planId, error } = await supabase.rpc(
+    "create_plan_with_host_credential",
+    {
+      p_code: code,
+      p_title: parsed.data.title,
+      p_meeting_date: parsed.data.arrivalDate,
+      p_participant_limit: parsed.data.participantLimit,
+      p_host_token_hash: await hashToken(hostToken),
+    },
+  );
 
-  if (error || !plan) {
-    console.error("create plan error", error);
-    return NextResponse.json(
-      { error: "CREATE_PLAN_FAILED" },
-      { status: 500 },
-    );
-  }
-
-  const { error: credentialError } = await supabase
-    .from("plan_credentials")
-    .insert({
-      plan_id: plan.id,
-      host_token_hash: await hashToken(hostToken),
-    });
-
-  if (credentialError) {
-    await supabase.from("plans").delete().eq("id", plan.id);
+  if (error || !planId) {
     return NextResponse.json(
       { error: "CREATE_PLAN_FAILED" },
       { status: 500 },

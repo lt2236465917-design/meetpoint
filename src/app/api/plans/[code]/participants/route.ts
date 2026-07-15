@@ -34,65 +34,41 @@ export async function POST(
   }
 
   const supabase = createServiceSupabaseClient();
-  const { data: plan } = await supabase
-    .from("plans")
-    .select("id, participant_limit")
-    .eq("code", code)
-    .single();
-
-  if (!plan) {
-    return NextResponse.json({ error: "PLAN_NOT_FOUND" }, { status: 404 });
-  }
-
-  const { count } = await supabase
-    .from("participants")
-    .select("id", { count: "exact", head: true })
-    .eq("plan_id", plan.id);
-
-  if ((count ?? 0) >= plan.participant_limit) {
-    return NextResponse.json(
-      { error: "PARTICIPANT_LIMIT_REACHED" },
-      { status: 409 },
-    );
-  }
-
   const editToken = generateToken();
   const editTokenHash = await hashToken(editToken);
-  const { data, error } = await supabase
-    .from("participants")
-    .insert({
-      plan_id: plan.id,
-      name: parsed.data.name,
-      departure_city_code: parsed.data.departureCityCode,
-      departure_city_name: parsed.data.departureCityName,
-      accepted_modes: parsed.data.acceptedModes,
-      created_by_host: false,
-    })
-    .select("id")
-    .single();
+  const { data: participantId, error } = await supabase.rpc(
+    "create_participant_with_credential",
+    {
+      p_code: code,
+      p_name: parsed.data.name,
+      p_departure_city_code: parsed.data.departureCityCode,
+      p_departure_city_name: parsed.data.departureCityName,
+      p_accepted_modes: parsed.data.acceptedModes,
+      p_edit_token_hash: editTokenHash,
+    },
+  );
 
-  if (error || !data) {
-    console.error("create participant error", error);
+  if (error || !participantId) {
+    const stableError = participantRpcError(error);
     return NextResponse.json(
-      { error: "CREATE_PARTICIPANT_FAILED" },
-      { status: 500 },
+      { error: stableError.error },
+      { status: stableError.status },
     );
   }
 
-  const { error: credentialError } = await supabase
-    .from("participant_credentials")
-    .insert({
-      participant_id: data.id,
-      edit_token_hash: editTokenHash,
-    });
+  return NextResponse.json({ participantId, editToken });
+}
 
-  if (credentialError) {
-    await supabase.from("participants").delete().eq("id", data.id);
-    return NextResponse.json(
-      { error: "CREATE_PARTICIPANT_FAILED" },
-      { status: 500 },
-    );
+function participantRpcError(error: unknown) {
+  const message =
+    error && typeof error === "object" && "message" in error
+      ? String(error.message)
+      : "";
+  if (message.includes("PLAN_NOT_FOUND")) {
+    return { error: "PLAN_NOT_FOUND", status: 404 } as const;
   }
-
-  return NextResponse.json({ participantId: data.id, editToken });
+  if (message.includes("PARTICIPANT_LIMIT_REACHED")) {
+    return { error: "PARTICIPANT_LIMIT_REACHED", status: 409 } as const;
+  }
+  return { error: "CREATE_PARTICIPANT_FAILED", status: 500 } as const;
 }

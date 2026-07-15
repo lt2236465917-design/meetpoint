@@ -75,7 +75,6 @@ describe("collectTravelOptions", () => {
       participants,
       candidates,
       meetingDate: "2026-08-01",
-      targetArrivalTime: "12:00",
       provider,
       timeoutMs: 100,
     });
@@ -87,28 +86,21 @@ describe("collectTravelOptions", () => {
         acceptedModes: ["flight"],
       }),
     );
+    expect(provider.search.mock.calls[0]?.[0]).not.toHaveProperty(
+      "targetArrivalTime",
+    );
     expect(result.options).toHaveLength(2);
     expect(result.options.map((item) => item.participantId)).toEqual(["p1", "p2"]);
     expect(result.options.map((item) => item.serviceName)).toEqual(["MU5101", "MU5101"]);
     expect(result.usedFallback).toBe(false);
   });
 
-  it("keeps only Shanghai meeting-day departures that arrive by the target time", async () => {
+  it("accepts a previous-day overnight route when its Shanghai arrival date matches", async () => {
     const provider = providerFrom(async () => [
       option({
-        serviceName: "wrong-day",
-        departAt: "2026-08-01T16:30:00.000Z",
-        arriveAt: "2026-08-01T18:00:00.000Z",
-      }),
-      option({
-        serviceName: "late",
-        departAt: "2026-08-01T00:30:00.000Z",
-        arriveAt: "2026-08-01T04:30:00.000Z",
-      }),
-      option({
-        serviceName: "on-time",
-        departAt: "2026-08-01T00:30:00.000Z",
-        arriveAt: "2026-08-01T04:00:00.000Z",
+        serviceName: "overnight",
+        departAt: "2026-07-31T15:30:00.000Z",
+        arriveAt: "2026-07-31T18:00:00.000Z",
       }),
     ]);
 
@@ -116,13 +108,37 @@ describe("collectTravelOptions", () => {
       participants: [participants[0]],
       candidates,
       meetingDate: "2026-08-01",
-      targetArrivalTime: "12:00",
       provider,
       timeoutMs: 100,
     });
 
     expect(result.options).toHaveLength(1);
-    expect(result.options[0]?.serviceName).toBe("on-time");
+    expect(result.options[0]?.serviceName).toBe("overnight");
+  });
+
+  it("rejects a real route whose Shanghai arrival date does not match", async () => {
+    const provider = providerFrom(async () => [
+      option({
+        serviceName: "wrong-arrival-day",
+        departAt: "2026-08-01T15:30:00.000Z",
+        arriveAt: "2026-08-01T18:00:00.000Z",
+      }),
+    ]);
+
+    const result = await collectTravelOptions({
+      participants: [participants[0]],
+      candidates,
+      meetingDate: "2026-08-01",
+      provider,
+      timeoutMs: 100,
+    });
+
+    expect(result.options).toEqual([
+      expect.objectContaining({
+        source: "unavailable",
+        failureReason: "NO_FEASIBLE_SAME_DAY_ROUTE",
+      }),
+    ]);
   });
 
   it("uses the total deadline to estimate only unfinished groups", async () => {
@@ -132,7 +148,6 @@ describe("collectTravelOptions", () => {
       participants: [participants[0]],
       candidates,
       meetingDate: "2026-08-01",
-      targetArrivalTime: "12:00",
       provider,
       timeoutMs: 1,
     });
@@ -159,7 +174,6 @@ describe("collectTravelOptions", () => {
       participants: [participants[0]],
       candidates,
       meetingDate: "2026-08-01",
-      targetArrivalTime: "12:00",
       provider,
       timeoutMs: 1200,
     });
@@ -197,7 +211,6 @@ describe("collectTravelOptions", () => {
         { code: "xian", name: "西安" },
       ],
       meetingDate: "2026-08-01",
-      targetArrivalTime: "12:00",
       provider,
       timeoutMs: 200,
     });
@@ -226,7 +239,6 @@ describe("collectTravelOptions", () => {
       participants: [participants[0]],
       candidates,
       meetingDate: "2026-08-01",
-      targetArrivalTime: "12:00",
       provider,
       timeoutMs: 1,
     });
@@ -254,7 +266,6 @@ describe("collectTravelOptions", () => {
       participants: [participants[0]],
       candidates,
       meetingDate: "2026-08-01",
-      targetArrivalTime: "12:00",
       provider,
       timeoutMs: 50,
     });
@@ -278,7 +289,6 @@ describe("collectTravelOptions", () => {
       participants: [participants[0]],
       candidates,
       meetingDate: "2026-08-01",
-      targetArrivalTime: "12:00",
       provider: providerFrom(async () => routes),
       timeoutMs: 100,
     });
@@ -286,7 +296,6 @@ describe("collectTravelOptions", () => {
       participants: [participants[0]],
       candidates,
       meetingDate: "2026-08-01",
-      targetArrivalTime: "12:00",
       provider: providerFrom(async () => [...routes].reverse()),
       timeoutMs: 100,
     });

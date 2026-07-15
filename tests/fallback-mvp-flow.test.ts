@@ -114,15 +114,38 @@ describe("fallback MVP flow without Supabase environment variables", () => {
       title: "上海周末见面",
       status: "completed",
     });
+    expect(Object.keys(read.plan).sort()).toEqual([
+      "code",
+      "meeting_date",
+      "participant_limit",
+      "status",
+      "title",
+    ]);
     expect(read.participants).toHaveLength(2);
+    for (const participant of read.participants) {
+      expect(Object.keys(participant).sort()).toEqual([
+        "accepted_modes",
+        "departure_city_name",
+        "id",
+        "name",
+      ]);
+      expect(participant).not.toHaveProperty("plan_id");
+      expect(participant).not.toHaveProperty("created_by_host");
+      expect(participant).not.toHaveProperty("created_at");
+      expect(participant).not.toHaveProperty("updated_at");
+      expect(participant).not.toHaveProperty("edit_token_hash");
+    }
     expect(read.latestRun).toMatchObject({
-      id: calculated.runId,
       status: "completed",
-      error_summary: "PARTIAL_ESTIMATE_FALLBACK",
     });
+    expect(read.latestRun).toEqual({ status: "completed" });
 
     const { readFallbackResult } = await import("@/lib/fallback/mvp-store");
     const result = readFallbackResult(created.code);
+    expect(result?.latestRun).toEqual({
+      status: "completed",
+      stale_after: expect.any(String),
+    });
     expect(result?.recommendations.slice(0, 3)).toEqual(
       expect.arrayContaining([
         expect.objectContaining({

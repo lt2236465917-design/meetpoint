@@ -36,7 +36,6 @@ export type CollectTravelOptionsInput = {
   participants: readonly SearchParticipant[];
   candidates: readonly SearchCandidate[];
   meetingDate: string;
-  targetArrivalTime: string;
   provider: TravelProvider;
   timeoutMs?: number;
 };
@@ -115,7 +114,6 @@ function createGroups(input: CollectTravelOptionsInput): SearchGroup[] {
             destinationCityCode: candidate.code,
             destinationCityName: candidate.name,
             meetingDate: input.meetingDate,
-            targetArrivalTime: input.targetArrivalTime,
             acceptedModes: [mode],
           },
         });
@@ -159,15 +157,6 @@ function shanghaiDateTime(value: string | null) {
   return { date: [year, month, day] as [number, number, number], minutes: hour * 60 + minute };
 }
 
-function minutesFromTime(value: string) {
-  const match = /^(\d{2}):(\d{2})$/.exec(value);
-  if (!match) return null;
-  const hour = Number(match[1]);
-  const minute = Number(match[2]);
-  if (hour > 23 || minute > 59) return null;
-  return hour * 60 + minute;
-}
-
 function sameDate(
   left: [number, number, number],
   right: [number, number, number],
@@ -175,24 +164,17 @@ function sameDate(
   return left[0] === right[0] && left[1] === right[1] && left[2] === right[2];
 }
 
-function isFeasibleSameDayRoute(
+function isFeasibleArrivalDateRoute(
   option: TravelOption,
   meetingDate: string,
-  targetArrivalTime: string,
 ) {
   if (option.source !== "real") return true;
   const targetDate = parseDate(meetingDate);
-  const targetMinutes = minutesFromTime(targetArrivalTime);
-  const departure = shanghaiDateTime(option.departAt);
   const arrival = shanghaiDateTime(option.arriveAt);
   return Boolean(
     targetDate &&
-      targetMinutes !== null &&
-      departure &&
       arrival &&
-      sameDate(departure.date, targetDate) &&
-      sameDate(arrival.date, targetDate) &&
-      arrival.minutes <= targetMinutes,
+      sameDate(arrival.date, targetDate),
   );
 }
 
@@ -225,11 +207,7 @@ function cloneForParticipants(group: SearchGroup, options: TravelOption[]) {
   const feasibleFacts = options
     .filter((option) => option.mode === group.mode)
     .filter((option) =>
-      isFeasibleSameDayRoute(
-        option,
-        group.input.meetingDate,
-        group.input.targetArrivalTime,
-      ),
+      isFeasibleArrivalDateRoute(option, group.input.meetingDate),
     )
     .sort((left, right) => optionFactKey(left).localeCompare(optionFactKey(right)));
   const facts = feasibleFacts.length

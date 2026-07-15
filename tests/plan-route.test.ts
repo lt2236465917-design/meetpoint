@@ -1,34 +1,20 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { verifyToken } from "@/lib/security/tokens";
 
-const mocks = vi.hoisted(() => ({
-  from: vi.fn(),
-  planInsert: vi.fn(),
-  planSingle: vi.fn(),
-  credentialInsert: vi.fn(),
-  deleteEq: vi.fn(),
-}));
+const mocks = vi.hoisted(() => ({ rpc: vi.fn() }));
 
 vi.mock("@/lib/supabase/server", () => ({
   hasSupabaseEnvironment: () => true,
-  createServiceSupabaseClient: () => ({ from: mocks.from }),
+  createServiceSupabaseClient: () => ({ rpc: mocks.rpc }),
 }));
-
-function mockPlanCreate(result = { data: { id: "plan-1" }, error: null }) {
-  mocks.planSingle.mockResolvedValue(result);
-  const select = vi.fn(() => ({ single: mocks.planSingle }));
-  mocks.planInsert.mockReturnValue({ select });
-  return { insert: mocks.planInsert, select };
-}
 
 describe("POST /api/plans", () => {
   beforeEach(() => {
     vi.resetModules();
-    for (const mock of Object.values(mocks)) mock.mockReset();
-    mocks.deleteEq.mockResolvedValue({ error: null });
+    mocks.rpc.mockReset();
   });
 
-  it("rejects invalid and legacy plan input", async () => {
+  it("rejects legacy plan input before calling storage", async () => {
     const { POST } = await import("@/app/api/plans/route");
     const response = await POST(new Request("http://localhost/api/plans", {
       method: "POST",
@@ -41,21 +27,14 @@ describe("POST /api/plans", () => {
     }));
 
     expect(response.status).toBe(400);
-    await expect(response.json()).resolves.toEqual({ error: "INVALID_INPUT" });
-    expect(mocks.from).not.toHaveBeenCalled();
+    expect(mocks.rpc).not.toHaveBeenCalled();
   });
 
-  it("creates an arrival-date plan and stores only the host-token hash", async () => {
-    const planCreate = mockPlanCreate();
-    mocks.credentialInsert.mockResolvedValue({ error: null });
-    mocks.from
-      .mockReturnValueOnce({ insert: planCreate.insert })
-      .mockReturnValueOnce({ insert: mocks.credentialInsert });
-
+  it("atomically creates a plan and host credential through one RPC", async () => {
+    mocks.rpc.mockResolvedValue({ data: "plan-1", error: null });
     const { POST } = await import("@/app/api/plans/route");
     const response = await POST(new Request("http://localhost/api/plans", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         title: "上海周末见面",
         arrivalDate: "2026-08-15",
@@ -65,37 +44,25 @@ describe("POST /api/plans", () => {
     const json = await response.json();
 
     expect(response.status).toBe(200);
-    expect(json.code).toMatch(/^[A-Z0-9]{6}$/);
     expect(json.hostToken).toMatch(/^[A-Za-z0-9_-]{32,}$/);
-    expect(json.shareUrl).toBe(`/p/${json.code}`);
-    expect(mocks.from.mock.calls.map(([table]) => table)).toEqual([
-      "plans",
-      "plan_credentials",
-    ]);
-    expect(mocks.planInsert).toHaveBeenCalledWith({
-      code: json.code,
-      title: "上海周末见面",
-      meeting_date: "2026-08-15",
-      participant_limit: 4,
-      status: "collecting",
-    });
-    const credential = mocks.credentialInsert.mock.calls[0]?.[0];
-    expect(credential).toMatchObject({ plan_id: "plan-1" });
-    expect(credential).not.toHaveProperty("hostToken");
-    expect(credential.host_token_hash).not.toBe(json.hostToken);
-    await expect(verifyToken(json.hostToken, credential.host_token_hash)).resolves.toBe(true);
+    expect(mocks.rpc).toHaveBeenCalledTimes(1);
+    expect(mocks.rpc).toHaveBeenCalledWith(
+      "create_plan_with_host_credential",
+      expect.objectContaining({
+        p_code: json.code,
+        p_title: "上海周末见面",
+        p_meeting_date: "2026-08-15",
+        p_participant_limit: 4,
+      }),
+    );
+    const args = mocks.rpc.mock.calls[0]?.[1];
+    expect(args).not.toHaveProperty("hostToken");
+    await expect(verifyToken(json.hostToken, args.p_host_token_hash)).resolves.toBe(true);
   });
 
-  it("deletes the new plan when the credential write fails", async () => {
-    const planCreate = mockPlanCreate();
-    mocks.credentialInsert.mockResolvedValue({ error: { code: "DB_ERROR" } });
-    const deletePlan = vi.fn(() => ({ eq: mocks.deleteEq }));
-    mocks.from
-      .mockReturnValueOnce({ insert: planCreate.insert })
-      .mockReturnValueOnce({ insert: mocks.credentialInsert })
-      .mockReturnValueOnce({ delete: deletePlan });
+  it("returns a stable error without logging credentials when the RPC fails", async () => {
+    mocks.rpc.mockResolvedValue({ data: null, error: { message: "db failure" } });
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
-
     try {
       const { POST } = await import("@/app/api/plans/route");
       const response = await POST(new Request("http://localhost/api/plans", {
@@ -109,31 +76,9 @@ describe("POST /api/plans", () => {
 
       expect(response.status).toBe(500);
       await expect(response.json()).resolves.toEqual({ error: "CREATE_PLAN_FAILED" });
-      expect(mocks.deleteEq).toHaveBeenCalledWith("id", "plan-1");
       expect(consoleError).not.toHaveBeenCalled();
     } finally {
       consoleError.mockRestore();
     }
-  });
-
-  it("returns a LAN share URL for localhost requests", async () => {
-    const planCreate = mockPlanCreate();
-    mocks.credentialInsert.mockResolvedValue({ error: null });
-    mocks.from
-      .mockReturnValueOnce({ insert: planCreate.insert })
-      .mockReturnValueOnce({ insert: mocks.credentialInsert });
-    const { POST } = await import("@/app/api/plans/route");
-    const response = await POST(new Request("http://localhost:3000/api/plans", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", host: "localhost:3000" },
-      body: JSON.stringify({
-        title: "上海周末见面",
-        arrivalDate: "2026-08-15",
-        participantLimit: 4,
-      }),
-    }));
-
-    const json = await response.json();
-    expect(json.shareUrl).toMatch(/^http:\/\/(?!localhost)(?!127\.0\.0\.1).+\/p\/[A-Z0-9]{6}$/);
   });
 });

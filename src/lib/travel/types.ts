@@ -7,7 +7,6 @@ export type TravelSearchInput = {
   destinationCityCode: string;
   destinationCityName: string;
   meetingDate: string;
-  targetArrivalTime: string;
   acceptedModes: TransportMode[];
 };
 
