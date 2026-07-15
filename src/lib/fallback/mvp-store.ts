@@ -133,6 +133,7 @@ function publicPlan(plan: PlanRow) {
 function publicProgress(run: RunRow | null) {
   if (!run) return null;
   return {
+    runId: run.id,
     status: run.status,
     traceId: run.traceId,
     pendingGroups: state().tasks.filter((task) => task.runId === run.id && ["pending", "running", "retryable_failure"].includes(task.status)).length,

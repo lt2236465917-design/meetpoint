@@ -15,16 +15,16 @@ For local browser testing, open `http://127.0.0.1:<port>`; for real-phone testin
 
 ## Local Fallback Mode
 
-If `NEXT_PUBLIC_SUPABASE_URL` or `SUPABASE_SERVICE_ROLE_KEY` is missing, create, participant, candidate, calculate, and result routes use the server-side in-memory fallback store.
+If `NEXT_PUBLIC_SUPABASE_URL` or `SUPABASE_SERVICE_ROLE_KEY` is missing, create, participant, candidate, calculate, and result routes use the server-side in-memory fallback store. It is non-persistent and never calls a supplier or creates an estimated result.
 
-Use this mode to test the product flow before provisioning Supabase:
+Use this mode to test creation, participation, authorization, and run-progress handling before provisioning Supabase:
 
 1. Open `/create` and create a plan.
 2. Return to `/` and confirm the plan appears in recent meeting records on the same device.
 3. Use the public link to submit participants until the plan reaches its participant limit.
 4. Keep `/p/[code]` open and confirm the filling records refresh without manually reloading the browser.
 5. On a device that filled the plan, use `/p/[code]` to calculate after the plan is full.
-6. Open `/p/[code]/result`.
+6. Advance the pending run through its progress endpoint. Without test-injected verified quotes, it must end as `incomplete`; do not treat this mode as an end-to-end ticket or published-result smoke test.
 
 Fallback data is cleared when the dev server restarts. Use Supabase variables for persistent handoff or deployment testing.
 
@@ -87,7 +87,7 @@ Returns:
 }
 ```
 
-`latestRun` exposes `{ status, traceId, pendingGroups, retryAt, diagnosticCode }`. Any non-`"completed"` status is in progress, incomplete, or failed—not a result. `latestSharedResult` is present only when the latest run is `"completed"`.
+`latestRun` exposes `{ runId, status, traceId, pendingGroups, retryAt, diagnosticCode }`. Any non-`"completed"` status is in progress, incomplete, or failed—not a result. `latestSharedResult` is present only when the latest run is `"completed"`.
 
 ### Search Cities
 
@@ -141,13 +141,13 @@ Returns:
 }
 ```
 
-The Supabase path returns HTTP 202 and does not wait for supplier work. The orchestrator uses only verified quotes, complete coverage, deterministic policy replay, Supervisor approval, and the guarded publication RPC. Legacy fallback behavior remains separate until Task 10.
+Both paths return HTTP 202 and do not wait for supplier work. The durable orchestrator uses only verified quotes, complete coverage, deterministic policy replay, Supervisor approval, a persisted advance lease, and the guarded publication RPC. The local fallback has the same state and publication rules but no supplier adapter, so it becomes `incomplete` unless tests inject verified quotes.
 
 ### Advance a Run
 
 `POST /api/plans/[code]/runs/[runId]/advance`
 
-Requires `x-participant-token`. Each request performs at most one state transition or one bounded query batch, then returns `{ runId, status, traceId, retryAt, diagnosticCode }`. Repeated or concurrent requests return the already-current state rather than duplicate supplier work.
+Requires `x-participant-token`. Each request performs at most one state transition or one bounded query batch, then returns `{ runId, status, traceId, retryAt, diagnosticCode }`. The durable path persists an advance lease so repeated or concurrent requests return the current state rather than duplicate supplier work.
 
 ### Regenerate Recommendation Explanations
 
@@ -188,8 +188,8 @@ Returns:
 3. Open `/p/[code]/join`, submit participants until the plan reaches its participant limit.
 4. After each participant submit, confirm the browser returns to `/p/[code]` and the filling records update without a manual refresh.
 5. When the participant limit is reached on a device that filled the plan, use the public plan page's direct "开始计算" action.
-6. Open `/p/[code]/result`, confirm recommendation cards render explanations, team total fare, total duration, fairness gap, source labels, query freshness where available, per-participant travel details, and stale-result warnings when applicable.
-7. Optionally call `POST /api/plans/[code]/explain` and confirm the response count matches the latest run's recommendation rows.
+6. Confirm the calculate request returns HTTP 202 and the advance endpoint reports a run ID and progress.
+7. Without Supabase and supplier-backed verified quotes, confirm the fallback run ends `incomplete` and exposes no shared result. One-city/two-scheme UI, PostgreSQL migration, real supplier coverage, and device acceptance remain unfinished work.
 
 ## Responsive UI Checks
 

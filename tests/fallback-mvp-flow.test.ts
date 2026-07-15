@@ -61,7 +61,7 @@ describe("fallback real-evidence flow", () => {
     const pending = readFallbackPlan(created.code);
     expect(pending?.latestSharedResult).toBeNull();
     const progress = await advanceFallbackRun({ runId: started.runId, planId });
-    expect(progress.status).toBe("collecting");
+    expect(progress).toMatchObject({ runId: started.runId, status: "collecting" });
     seedFallbackVerifiedQuotes(started.runId, [quote(first.participantId, "beijing", "1"), quote(second.participantId, "beijing", "2")]);
     await expect(advanceFallbackRun({ runId: started.runId, planId })).resolves.toMatchObject({ status: "calculating" });
     await expect(advanceFallbackRun({ runId: started.runId, planId })).resolves.toMatchObject({ status: "validating" });

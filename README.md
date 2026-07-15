@@ -1,12 +1,12 @@
 # Cross-City MeetPoint
 
-Mobile-first H5 MVP for choosing a fair cross-city meeting city for 2-6 people in China. The same routes render as a centered phone-sized H5 canvas on desktop, and the app has a development fallback mode that can run the create-to-result flow without Supabase credentials.
+Mobile-first H5 MVP for choosing a fair cross-city meeting city for 2-6 people in China. The same routes render as a centered phone-sized H5 canvas on desktop. Without Supabase credentials, development uses a non-persistent fallback for local creation, participation, and run-progress smoke tests.
 
 ## Multi-Agent Migration Status
 
-The approved [2026-07-15 Multi-Agent design](docs/superpowers/specs/2026-07-15-multi-agent-recommendation-design.md) is in progress. Tasks 1–9 are implemented in code: plans use an arrival date and host credential, verified quote evidence and route tasks are persisted, deterministic saving/fast/unique-city policy and agent review exist, and the Supabase path advances bounded runs before atomic publication. Task 9 still awaits independent review; Tasks 10–14 are not complete. Do not describe the target experience as released.
+The approved [2026-07-15 Multi-Agent design](docs/superpowers/specs/2026-07-15-multi-agent-recommendation-design.md) is in progress. Tasks 1–10 are implemented in code: plans use an arrival date and host credential, verified quote evidence and route tasks are persisted, deterministic saving/fast/unique-city policy and agent review exist, and bounded runs publish through an atomic guard. Task 10 still needs its independent review; Tasks 11–14 are not complete. The PostgreSQL/Supabase migration has not received its live smoke test. Do not describe the target experience as released.
 
-The legacy MVP details below apply only to paths not yet migrated, especially the local fallback store and current result UI. They are not the target publication contract.
+The legacy MVP details below apply only to paths not yet migrated, especially the result UI and estimate-based travel presentation. They are not the target publication contract.
 
 ## Scripts
 
@@ -37,21 +37,21 @@ The legacy MVP details below apply only to paths not yet migrated, especially th
 
 - `src/lib/city/candidate-generator.ts`: deterministic candidate-city generation from participant cities and host controls.
 - `src/lib/city/amap-client.ts` and `src/lib/city/city-provider.ts`: local-first city search with a 3-second server-side Amap validation fallback for city-level results.
-- `src/lib/fallback/mvp-store.ts`: server-side in-memory fallback store for local create-to-result smoke testing when Supabase variables are missing.
+- `src/lib/fallback/mvp-store.ts`: server-side in-memory fallback store that preserves the target run states and publication guards for local tests; it never synthesizes estimates or calls suppliers.
 - `src/lib/travel/types.ts`: normalized travel-provider boundary, including gateway request/response types and query timestamps for real prices.
 - `src/lib/travel/estimate-provider.ts`: deterministic estimated travel option fallback using city distance and transport mode, with the upstream fallback reason preserved when available.
 - `src/lib/travel/gateway-client.ts` and `src/lib/travel/flyai-provider.ts`: server-side authenticated gateway client and per-mode provider fallback; real route facts are deterministically ordered before scoring, and stable gateway error codes are retained on estimated fallback rows.
 - `services/travel-provider-gateway/`: independently runnable FlyAI gateway with strict contracts, safe CLI execution, cache, concurrency limit, retry, authenticated HTTP API, and container configuration.
 - `src/lib/recommendation/policy.ts` and `validators.ts`: deterministic direct-first saving/fast schemes, unique-city ranking, evidence replay, and bounded policy evaluation.
 - `src/lib/agent/`: provider-neutral model boundary plus Manager, Query, Calculation, Supervisor, Fallback, tracing, and bounded orchestration modules.
-- `src/lib/agent/run-orchestrator.ts`: creates and incrementally advances Supabase-backed runs; it replaces the old synchronous calculation path.
+- `src/lib/agent/run-orchestrator.ts`: creates and incrementally advances durable runs with a persisted lease; it dispatches to the guarded in-memory fallback when Supabase is absent.
 - `src/lib/ui/meeting-history.ts`: browser-only local recent-record storage; it caches `useSyncExternalStore` snapshots so the homepage does not trigger React update loops.
 
 ## Environment
 
 Copy `.env.example` to `.env.local` and fill server-side keys locally for persistent Supabase-backed runs.
 
-If `NEXT_PUBLIC_SUPABASE_URL` or `SUPABASE_SERVICE_ROLE_KEY` is missing, the app uses the in-memory fallback store. This is only for local smoke testing: data is kept in the dev server process and is cleared when the server restarts.
+If `NEXT_PUBLIC_SUPABASE_URL` or `SUPABASE_SERVICE_ROLE_KEY` is missing, the app uses the in-memory fallback store. It is only for local smoke testing, is cleared when the server restarts, and cannot obtain supplier quotes; an unseeded fallback run therefore ends as `incomplete` rather than publishing estimates.
 
 For local browser testing, use `http://127.0.0.1:<port>`; for mobile-device testing, use the Network URL printed by `npm run dev`, such as `http://192.168.31.69:3000`. `next.config.ts` allows both development origins so Next.js client resources and interactive forms load correctly.
 
@@ -78,7 +78,7 @@ For local real-ticket smoke tests, run the gateway separately and set `TRAVEL_GA
 
 Tasks 1-10 of the [Amap and FlyAI implementation plan](docs/superpowers/plans/2026-07-12-amap-flyai-integration.md) are complete: Amap city validation, travel query freshness persistence, the isolated gateway, main-app authenticated client, deterministic travel-search orchestration, and source/freshness result UI are fixture-verified. The app uses real normalized route facts when the gateway succeeds; per-mode failures fall back to deterministic estimates, while successful empty results remain unavailable rather than pretending to be estimates.
 
-The legacy fallback result cards show real FlyAI rows as `飞猪参考价` with the China-time query timestamp, train or flight number, stations where available, time range, duration, and fare. Estimates are marked `估算` and include the stable fallback reason when one is available, such as `PROVIDER_RATE_LIMITED` or `GATEWAY_UNAVAILABLE`; mixed cards show `部分数据为估算`. This legacy presentation is scheduled for replacement in Tasks 10–13 and is not a valid target-architecture publication result.
+The legacy result cards can still render historical real and estimated `travel_options`, but they are not a target-architecture publication result. The fallback store no longer creates estimate rows or a legacy three-city result; Task 11 will replace the shared-result UI with the one-city/two-scheme contract.
 
 The gateway has its own environment file at `services/travel-provider-gateway/.env.example` and commands:
 
@@ -131,7 +131,7 @@ npm run test
 npm run build
 ```
 
-Manual H5 acceptance:
+Manual browser smoke before Tasks 11–14:
 
 1. Create a plan.
 2. Return to `/` and confirm the created plan appears in recent meeting records on the same device.
@@ -139,5 +139,5 @@ Manual H5 acceptance:
 4. Submit two participants from different cities.
 5. Confirm the public plan page updates filling records without a manual browser refresh.
 6. After the participant limit is reached, start calculation from the public plan page on a device that has filled the plan.
-7. Open result page and verify all participants see the same top city recommendations, with per-participant travel details inside each card.
-8. Confirm estimates are visually marked and stale results show a warning after `stale_after`.
+7. Confirm the calculate request returns a pending run and the progress route is reachable with the participant token.
+8. Do not use local fallback to claim a published target result: it has no supplier adapter and will finish as `incomplete` without injected verified quotes. Full PostgreSQL, supplier, and device acceptance remains Task 14.

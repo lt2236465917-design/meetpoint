@@ -2,13 +2,13 @@
 
 This document is the stable technical map for the running system. Detailed task history lives in git commits and `docs/superpowers/plans/`.
 
-The approved next product and Multi-Agent architecture is documented separately in `docs/superpowers/specs/2026-07-15-multi-agent-recommendation-design.md`. Tasks 1–9 are implemented but Task 9 is awaiting independent review, and Tasks 10–14 remain. The Supabase path below is the target-in-progress; the local fallback and result UI still contain legacy MVP behavior and cannot validate target-architecture publication.
+The approved next product and Multi-Agent architecture is documented separately in `docs/superpowers/specs/2026-07-15-multi-agent-recommendation-design.md`. Tasks 1–10 are implemented; Task 10 still needs independent review, while Tasks 11–14 remain. The PostgreSQL/Supabase migration and real supplier/device acceptance have not run. The result UI is still legacy and cannot validate the target publication contract.
 
 ## Runtime Shape
 
 - Next.js App Router renders the responsive H5 pages under `src/app/`; desktop viewports show the same H5 workflow in a centered phone-sized canvas.
 - Route handlers under `src/app/api/` use the server-side Supabase service-role client.
-- When Supabase server variables are missing, route handlers use the server-side in-memory fallback store in `src/lib/fallback/mvp-store.ts` so the local create-to-result MVP can be smoke-tested without external credentials.
+- When Supabase server variables are missing, route handlers use the server-side in-memory fallback store in `src/lib/fallback/mvp-store.ts`. It preserves run states and publication guards for local smoke tests but has no supplier adapter and never publishes estimates.
 - Browser-side Supabase access must use only the anon client from `src/lib/supabase/client.ts`.
 - Deterministic business logic lives in `src/lib/`; route handlers orchestrate validation, persistence, and service calls.
 - Amap is called only from the Next.js server-side city provider after a local city miss. The main application calls the isolated Node travel gateway at `services/travel-provider-gateway/` only from server-side calculation code.
@@ -43,16 +43,12 @@ The approved next product and Multi-Agent architecture is documented separately 
 1. Host creates a row in `plans`; the public share URL is returned and the creating browser stores the plan in local recent records.
 2. Participants submit rows in `participants`; each edit token is returned once and only its hash is stored. The public plan page polls `GET /api/plans/[code]` so filling records appear without a manual browser refresh.
 3. Candidate controls can be read from `candidate_cities`; manual candidate editing is disabled in the current no-management-token flow.
-4. Manual calculation generates candidate cities, queries the travel provider boundary, scores each candidate city from one selected route per participant, and writes:
-   - `recommendation_runs`
-   - `travel_options`
-   - `city_recommendations`, including DeepSeek/fallback explanation fields
-   After participant-token authorization, only one `running` run may exist for a plan. A duplicate request receives `409 CALCULATION_IN_PROGRESS` and does not start another ticket lookup.
-5. The explain API can regenerate explanation and risk-summary fields for the latest run without changing deterministic scores.
-6. Result pages read the latest run, city recommendations, and matching `travel_options`. A `running` run is an in-progress state: the public page withholds the result entry and the result page reports progress with bounded local refresh plus a manual refresh action. Only a `completed` run renders recommendation cards. Every viewer then sees the same shared city ranking for the plan; each card expands the decision with selected per-participant routes. Results become stale after 30 minutes.
+4. After participant-token authorization, `POST /calculate` creates one `pending` automatic run and its route-task matrix, then returns HTTP 202. A duplicate active run receives `409 CALCULATION_IN_PROGRESS`. `POST /runs/[runId]/advance` owns a persisted lease in the Supabase path and performs at most one transition or bounded query batch. It accepts only verified quotes, requires at least one city with complete participant coverage, validates the deterministic saving/fast proposal, then invokes the guarded publication RPC. An automatic run cannot replace an existing shared result.
+5. The legacy explain API can regenerate explanation fields for legacy recommendation rows without changing their deterministic scores. It is not the target result-publication path.
+6. `GET /api/plans/[code]` exposes progress and exposes `latestSharedResult` only when the latest run is `completed`. The current `/result` screen still reads legacy recommendation tables, so Task 11 must replace it with the one-city/two-scheme result view before the target experience can be accepted.
 7. The browser stores local recent meeting records in `localStorage` when a plan is created, opened, or joined. Participant records keep the participant edit token on the filling device so the public plan page can show direct calculation after the plan is full. The homepage recent-record store refreshes on same-tab updates, `storage`, `pageshow`, and window focus so plans created on another route still appear after returning to `/`. This is a convenience layer only and is not a server-side history.
 
-In fallback mode, the same logical records are kept in process memory instead of Supabase. Fallback mode is non-persistent and exists only for local smoke testing.
+In fallback mode, the same logical records are kept in process memory instead of Supabase. Tests may inject validated quotes, but the running app does not call suppliers in this mode; missing coverage ends the run as `incomplete` and no estimate or shared result is synthesized.
 
 ## External Provider Boundary
 
@@ -74,7 +70,10 @@ In fallback mode, the same logical records are kept in process memory instead of
 | `src/components/plan/RecentMeetingRecords.tsx` | Homepage local recent-record list backed by `useSyncExternalStore` and cached snapshots. |
 | `src/lib/city/candidate-generator.ts` | Deterministic candidate-city generation from participant cities and host controls. |
 | `src/lib/city/amap-client.ts`, `src/lib/city/city-provider.ts` | Local-first city search and Amap validation; city-level remote matches can be selected, while non-city remote places never enter scoring. |
-| `src/lib/fallback/mvp-store.ts` | In-memory local fallback persistence for create-to-result smoke testing without Supabase credentials. |
+| `src/lib/fallback/mvp-store.ts` | In-memory local fallback persistence with target run states and publication guards; tests can seed verified quotes, while the running app cannot query suppliers in this mode. |
+| `src/lib/agent/run-orchestrator.ts` | Bounded durable-run state machine, persisted advance lease, quote coverage gate, agent review, and guarded publication; dispatches to the equivalent fallback state machine when Supabase is absent. |
+| `src/lib/recommendation/repository.ts` | Server-side persistence and guarded RPC boundary; it does not make policy decisions. |
+| `src/lib/recommendation/policy.ts`, `validators.ts` | Deterministic one-city/saving/fast policy replay and evidence/publication validation. |
 | `src/lib/travel/types.ts` | Vendor-neutral travel-provider interface plus main-app gateway request/response types. |
 | `src/lib/travel/estimate-provider.ts` | Deterministic estimated option fallback. |
 | `src/lib/travel/gateway-client.ts`, `src/lib/travel/flyai-provider.ts` | Server-only authenticated gateway client and per-mode fallback provider; no participant identity crosses this boundary. |
@@ -104,7 +103,7 @@ In fallback mode, the same logical records are kept in process memory instead of
 - Participant edit tokens are stored as hashes only.
 - Calculation requires a participant edit token from a participant in the plan, and the server checks that the participant limit has been reached before calculating.
 - Local participant permissions are a same-device convenience and not an auth boundary; server-side calculation still verifies the participant edit token hash.
-- Core ranking, ticket lookup normalization, and scoring must remain deterministic; DeepSeek may explain computed results but must not decide rankings.
+- Ticket normalization, coverage checks, policy replay, evidence validation, and publication guards remain deterministic. In the target in-progress pipeline, an agent may propose from verified quote IDs, but it cannot invent or mutate supplier facts and publication replays the policy deterministically.
 - Result recommendations are plan-level shared decisions, not personalized rankings. The UI should surface team total fare and per-person route choices instead of average fare.
 - Fallback mode is local-only and must not be treated as durable storage.
 - Gateway logs and errors must exclude credentials, authorization headers, participant names, raw provider payloads, and complete booking URLs. Booking URLs are accepted only when HTTPS and on the approved `fliggy.com`, `alitrip.com`, or `feizhu.com` hosts (including subdomains).
