@@ -528,7 +528,7 @@ Build participant states keyed by accumulated integer fare. For the same fare re
 
 Rank only cities where both deterministic schemes exist and all quotes are real/date-valid. Compute fairness as `max(participantFare) - min(participantFare)`. The validator recomputes schemes/ranking from stored quotes and compares every selected quote ID and total; it does not trust model evidence or proposal totals.
 
-- [ ] **Step 6: Run tests and commit**
+- [x] **Step 6: Run tests and commit**
 
 Run: `npm run test -- tests/recommendation-policy.test.ts tests/recommendation-validators.test.ts`
 
