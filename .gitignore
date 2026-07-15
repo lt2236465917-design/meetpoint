@@ -46,3 +46,6 @@ next-env.d.ts
 /services/travel-provider-gateway/coverage/
 /services/travel-provider-gateway/probe-output/
 /services/travel-provider-gateway/.cache/
+
+# local brainstorming previews
+/.superpowers/

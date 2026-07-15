@@ -1,5 +1,7 @@
 # Amap And FlyAI Integration Implementation Plan
 
+**Execution status (2026-07-15):** Tasks 1–10 are implemented and fixture-verified, and the stable architecture and integration documents describe the resulting gateway. Production supplier authorization, quota behavior, route coverage, and the complete live acceptance flow remain unverified. The original unchecked steps remain as the authored implementation record, not as the next product backlog.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (- [ ]) syntax for tracking.
 
 **Goal:** Add local-first Amap city validation and an isolated FlyAI travel gateway that supplies honestly labeled real fare snapshots without changing deterministic candidate generation, route selection, scoring, or ranking.

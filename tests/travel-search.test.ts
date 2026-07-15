@@ -4,6 +4,7 @@ import type { TravelOption } from "@/types/domain";
 import type { TravelProvider, TravelSearchInput } from "@/lib/travel/types";
 import {
   collectTravelOptions,
+  resolveTravelCollectionTimeoutMs,
   travelSearchKey,
 } from "@/lib/recommendation/travel-search";
 
@@ -202,9 +203,14 @@ describe("collectTravelOptions", () => {
     });
 
     expect(provider.search).toHaveBeenCalledTimes(6);
-    expect(maxActive).toBeLessThanOrEqual(4);
+    expect(maxActive).toBe(1);
     expect(result.options).toHaveLength(6);
     expect(result.usedFallback).toBe(false);
+  });
+
+  it("keeps the default collection budget long enough for a serial gateway", async () => {
+    expect(resolveTravelCollectionTimeoutMs({ groupCount: 12 })).toBeGreaterThan(84_000);
+    expect(resolveTravelCollectionTimeoutMs({ groupCount: 12, explicitTimeoutMs: 100 })).toBe(100);
   });
 
   it("starts the total deadline when collection begins", async () => {

@@ -1,5 +1,7 @@
 # DeepSeek Integration Implementation Plan
 
+**Execution status (2026-07-15):** The configuration, strict structured output, deterministic fallback, documentation, and automated coverage described here are present in the current codebase. A credentialed live-model smoke check was not rerun during the 2026-07-15 knowledge cleanup. The original unchecked steps remain as the authored implementation record, not as the next product backlog.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Complete the real DeepSeek explanation path with configurable model selection, strict JSON validation, deterministic fallback, and a credential-safe live smoke check.

@@ -4,8 +4,9 @@ import type { TravelProvider, TravelSearchInput } from "@/lib/travel/types";
 import type { TransportMode, TravelOption } from "@/types/domain";
 
 const DEFAULT_TIMEOUT_MS = 45_000;
+const DEFAULT_TIMEOUT_PER_GROUP_MS = 25_000;
 const DEFAULT_SECONDARY_TIMEOUT_MS = 15_000;
-const PROVIDER_SEARCH_CONCURRENCY = 4;
+const PROVIDER_SEARCH_CONCURRENCY = 1;
 const SHANGHAI_TIME_ZONE = "Asia/Shanghai";
 
 type SearchParticipant = {
@@ -60,9 +61,16 @@ export function travelSearchKey(input: {
   ].join(":");
 }
 
-function calculationTimeoutMs(value?: number) {
-  const parsed = value ?? Number(process.env.TRAVEL_CALCULATION_TIMEOUT_MS);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_TIMEOUT_MS;
+export function resolveTravelCollectionTimeoutMs({
+  explicitTimeoutMs,
+  groupCount,
+}: {
+  explicitTimeoutMs?: number;
+  groupCount: number;
+}) {
+  const parsed = explicitTimeoutMs ?? Number(process.env.TRAVEL_CALCULATION_TIMEOUT_MS);
+  if (Number.isFinite(parsed) && parsed > 0) return parsed;
+  return Math.max(DEFAULT_TIMEOUT_MS, Math.max(0, groupCount) * DEFAULT_TIMEOUT_PER_GROUP_MS);
 }
 
 function secondaryTimeoutMs(primaryTimeoutMs: number) {
@@ -249,7 +257,10 @@ export async function collectTravelOptions(
 ): Promise<CollectTravelOptionsResult> {
   const groups = createGroups(input);
   const outcomes = new Map<string, SearchOutcome>();
-  const deadline = calculationTimeoutMs(input.timeoutMs);
+  const deadline = resolveTravelCollectionTimeoutMs({
+    explicitTimeoutMs: input.timeoutMs,
+    groupCount: groups.length,
+  });
   const searchGroup = async (group: SearchGroup, deadlineAt: number) => {
     try {
       const options = await input.provider.search(group.input);

@@ -2,6 +2,10 @@
 
 Mobile-first H5 MVP for choosing a fair cross-city meeting city for 2-6 people in China. The same routes render as a centered phone-sized H5 canvas on desktop, and the app has a development fallback mode that can run the create-to-result flow without Supabase credentials.
 
+## Approved Next Version
+
+The approved but not yet implemented product and Multi-Agent architecture is defined in [the 2026-07-15 design specification](docs/superpowers/specs/2026-07-15-multi-agent-recommendation-design.md). It replaces target arrival time with an arrival date, forbids estimated published recommendations, and targets one city with saving and fast schemes. The current flow below remains the source of truth for the running code until that specification is implemented and accepted.
+
 ## Scripts
 
 - `npm run dev`
@@ -60,7 +64,7 @@ Supabase variables:
 - `TRAVEL_GATEWAY_URL`: server-side internal gateway URL used by the main-app travel provider.
 - `TRAVEL_GATEWAY_TOKEN`: server-side bearer token for the internal gateway.
 - `TRAVEL_GATEWAY_TIMEOUT_MS`: optional main-app gateway request timeout; defaults to `30000` ms.
-- `TRAVEL_CALCULATION_TIMEOUT_MS`: optional total travel-query budget; defaults to `45000` ms.
+- `TRAVEL_CALCULATION_TIMEOUT_MS`: optional total travel-query budget override. Without an override, the main app budgets `25000` ms per distinct route/mode group, with a `45000` ms minimum, so the budget matches the serial supplier gateway instead of discarding queued real results.
 - `TRAVEL_SECONDARY_QUERY_TIMEOUT_MS`: optional second-pass travel-query budget for unfinished searches; defaults to `15000` ms.
 
 DeepSeek requests use a 15-second timeout and at most one SDK retry. Provider failures never fail recommendation calculation or change deterministic rankings; they return local fallback explanations instead.
@@ -87,7 +91,7 @@ The gateway exposes `GET /healthz` and authenticated `POST /v1/search`. It accep
 
 For operations, the default FlyAI path writes a server-only `flyai_diagnostic` log event. It contains only a hashed `routeFingerprint`, `mode`, `outcome`, top-level/data/item field-name arrays, item/normalized/dropped counts, dropped validation categories, and `cliErrorCode`; it is not an HTTP contract, cache entry, or database record, and contains no provider text, ticket facts, city names, personal data, or secrets. Live `data.itemList` entries are validated independently, so one malformed entry does not discard adjacent real routes; only a non-empty list with no valid route returns `PROVIDER_INVALID_RESPONSE`.
 
-Run `npm run probe:providers` only with operator-managed keys. It prints a single redacted JSON summary (status, latency, count, and field names), never provider payload values. The main app performs its deterministic second pass for unfinished route groups, except that a `PROVIDER_RATE_LIMITED` mode becomes an estimate retaining that stable reason and is never immediately retried. The gateway serializes supplier calls to reduce rate-limit amplification. Supplier coverage remains an operational acceptance question: use a new full plan and route-fingerprint diagnostics after cooldown, and do not treat `/healthz` or a single successful fare row as proof of supplier-wide authorization, quota recovery, or production readiness.
+Run `npm run probe:providers` only with operator-managed keys. It prints a single redacted JSON summary (status, latency, count, and field names), never provider payload values. The main app submits distinct route/mode groups serially and derives its default total budget from the group count, matching the gateway's single-supplier queue so queued successes are not replaced by estimates. It performs a deterministic second pass for genuinely unfinished groups, except that a `PROVIDER_RATE_LIMITED` mode becomes an estimate retaining that stable reason and is never immediately retried. Supplier coverage remains an operational acceptance question: use a new full plan and route-fingerprint diagnostics after cooldown, and do not treat `/healthz` or a single successful fare row as proof of supplier-wide authorization, quota recovery, or production readiness.
 
 Future Fliggy/FlyAI MCP or skill integrations should be treated as gateway-side provider adapters, not main-app dependencies. Compare them against the same fixed route/mode probe set before replacing FlyAI or changing fallback behavior.
 
