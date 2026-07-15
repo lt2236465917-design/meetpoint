@@ -527,6 +527,3 @@ export function readFallbackResult(code: string) {
 
 export function readFallbackCandidates(code: string) { return planFor(code) ? [] : null; }
 export function saveFallbackCandidate() { /* Candidate editing remains disabled by the public route. */ }
-export async function explainFallbackLatestRun(code: string) {
-  return planFor(code) ? { ok: true as const, count: 0 } : { ok: false as const, status: 404, error: "PLAN_NOT_FOUND" };
-}
