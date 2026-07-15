@@ -1,8 +1,8 @@
 # Cross-City MeetPoint Architecture
 
-This document is the stable technical map for the MVP. Detailed task history lives in git commits and `docs/superpowers/plans/`.
+This document is the stable technical map for the running system. Detailed task history lives in git commits and `docs/superpowers/plans/`.
 
-The approved next product and Multi-Agent architecture is documented separately in `docs/superpowers/specs/2026-07-15-multi-agent-recommendation-design.md`. It is not implemented yet; the runtime map below deliberately describes the current system.
+The approved next product and Multi-Agent architecture is documented separately in `docs/superpowers/specs/2026-07-15-multi-agent-recommendation-design.md`. Tasks 1–9 are implemented but Task 9 is awaiting independent review, and Tasks 10–14 remain. The Supabase path below is the target-in-progress; the local fallback and result UI still contain legacy MVP behavior and cannot validate target-architecture publication.
 
 ## Runtime Shape
 
@@ -28,12 +28,13 @@ The approved next product and Multi-Agent architecture is documented separately 
 
 | Route | Method | Purpose | Auth |
 | --- | --- | --- | --- |
-| `/api/plans` | `POST` | Create a plan from title, meeting date, arrival time, and participant limit. | None |
-| `/api/plans/[code]` | `GET` | Read plan metadata, participants, and latest run. | None |
+| `/api/plans` | `POST` | Create a plan from title, arrival date, and participant limit; return a one-time host token. | None |
+| `/api/plans/[code]` | `GET` | Read public plan data, progress, and a shared result only after completion. | None |
 | `/api/plans/[code]/participants` | `POST` | Submit participant city and transport preferences. | None |
 | `/api/plans/[code]/candidates` | `GET` | Read stored candidate-city controls. | None |
 | `/api/plans/[code]/candidates` | `POST` | Currently unavailable for manual edits. | None |
-| `/api/plans/[code]/calculate` | `POST` | Run deterministic recommendation calculation after the participant limit is reached. | `x-participant-token` |
+| `/api/plans/[code]/calculate` | `POST` | Create an automatic run and return HTTP 202 without waiting for supplier work. | `x-participant-token` |
+| `/api/plans/[code]/runs/[runId]/advance` | `POST` | Advance one bounded transition or query batch idempotently. | `x-participant-token` |
 | `/api/plans/[code]/explain` | `POST` | Regenerate explanations for the latest recommendation run. | None |
 | `/api/cities/search` | `GET` | Search local city data first, then Amap-backed city-level matches. | None |
 

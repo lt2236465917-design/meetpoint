@@ -2,9 +2,11 @@
 
 Mobile-first H5 MVP for choosing a fair cross-city meeting city for 2-6 people in China. The same routes render as a centered phone-sized H5 canvas on desktop, and the app has a development fallback mode that can run the create-to-result flow without Supabase credentials.
 
-## Approved Next Version
+## Multi-Agent Migration Status
 
-The approved but not yet implemented product and Multi-Agent architecture is defined in [the 2026-07-15 design specification](docs/superpowers/specs/2026-07-15-multi-agent-recommendation-design.md). It replaces target arrival time with an arrival date, forbids estimated published recommendations, and targets one city with saving and fast schemes. The current flow below remains the source of truth for the running code until that specification is implemented and accepted.
+The approved [2026-07-15 Multi-Agent design](docs/superpowers/specs/2026-07-15-multi-agent-recommendation-design.md) is in progress. Tasks 1–9 are implemented in code: plans use an arrival date and host credential, verified quote evidence and route tasks are persisted, deterministic saving/fast/unique-city policy and agent review exist, and the Supabase path advances bounded runs before atomic publication. Task 9 still awaits independent review; Tasks 10–14 are not complete. Do not describe the target experience as released.
+
+The legacy MVP details below apply only to paths not yet migrated, especially the local fallback store and current result UI. They are not the target publication contract.
 
 ## Scripts
 
@@ -21,13 +23,14 @@ The approved but not yet implemented product and Multi-Agent architecture is def
 - `/p/[code]/join`: participant submits name, departure city, and accepted transport modes, then returns to the public plan page automatically.
 - `/p/[code]/manage`: legacy route that points users back to the public plan page.
 - `/p/[code]/result`: shared team result page that shows recommendation cards only after the latest run completes; while it is running, it reports progress, refreshes locally for a bounded period, and keeps a manual refresh action.
-- `POST /api/plans`: creates a plan from `{ title, meetingDate, targetArrivalTime, participantLimit }` and returns `{ code, shareUrl }`; local development requests from `localhost` return a LAN `shareUrl` when available.
-- `GET /api/plans/[code]`: returns `{ plan, participants, latestRun }` for public plan reads; clients must treat `latestRun.status === "running"` as in progress, not as a completed result.
+- `POST /api/plans`: creates a plan from `{ title, arrivalDate, participantLimit }` and returns `{ code, shareUrl, hostToken }`; the host token is returned once.
+- `GET /api/plans/[code]`: returns public plan data, `latestRun` progress, and `latestSharedResult` only when the latest run is `completed`.
 - `GET /api/cities/search?q=...`: searches the built-in city library first, then uses Amap to validate city-level local misses; returns `{ cities }`.
 - `POST /api/plans/[code]/participants`: creates a participant and returns `{ participantId, editToken }`.
 - `GET /api/plans/[code]/candidates`: returns stored candidate city controls for a plan.
 - `POST /api/plans/[code]/candidates`: currently returns `CANDIDATE_EDITING_UNAVAILABLE`.
-- `POST /api/plans/[code]/calculate`: manually calculates recommendations for a full plan and returns `{ runId, candidateCount }`; requires `x-participant-token` from a participant who filled the plan.
+- `POST /api/plans/[code]/calculate`: creates a bounded automatic run and returns HTTP 202 `{ runId, status: "pending" }`; requires `x-participant-token`.
+- `POST /api/plans/[code]/runs/[runId]/advance`: advances at most one state transition or one bounded query batch; requires `x-participant-token`.
 - `POST /api/plans/[code]/explain`: regenerates DeepSeek/fallback explanations for the latest run and returns `{ ok, count }`.
 
 ## Core Modules
@@ -39,9 +42,9 @@ The approved but not yet implemented product and Multi-Agent architecture is def
 - `src/lib/travel/estimate-provider.ts`: deterministic estimated travel option fallback using city distance and transport mode, with the upstream fallback reason preserved when available.
 - `src/lib/travel/gateway-client.ts` and `src/lib/travel/flyai-provider.ts`: server-side authenticated gateway client and per-mode provider fallback; real route facts are deterministically ordered before scoring, and stable gateway error codes are retained on estimated fallback rows.
 - `services/travel-provider-gateway/`: independently runnable FlyAI gateway with strict contracts, safe CLI execution, cache, concurrency limit, retry, authenticated HTTP API, and container configuration.
-- `src/lib/recommendation/scoring.ts`: deterministic city scoring and primary recommendation selection; each candidate city is scored from one selected route per participant rather than summing every accepted transport mode.
-- `src/lib/recommendation/calculate-run.ts`: manual calculation orchestration that generates candidates, queries travel options, stores recommendation explanations, and marks results stale after 30 minutes.
-- `src/lib/ai/recommendation-explainer.ts`: DeepSeek explanation boundary with strict Chinese JSON validation and deterministic fallback copy for missing, failed, timed-out, or malformed model output.
+- `src/lib/recommendation/policy.ts` and `validators.ts`: deterministic direct-first saving/fast schemes, unique-city ranking, evidence replay, and bounded policy evaluation.
+- `src/lib/agent/`: provider-neutral model boundary plus Manager, Query, Calculation, Supervisor, Fallback, tracing, and bounded orchestration modules.
+- `src/lib/agent/run-orchestrator.ts`: creates and incrementally advances Supabase-backed runs; it replaces the old synchronous calculation path.
 - `src/lib/ui/meeting-history.ts`: browser-only local recent-record storage; it caches `useSyncExternalStore` snapshots so the homepage does not trigger React update loops.
 
 ## Environment
@@ -75,7 +78,7 @@ For local real-ticket smoke tests, run the gateway separately and set `TRAVEL_GA
 
 Tasks 1-10 of the [Amap and FlyAI implementation plan](docs/superpowers/plans/2026-07-12-amap-flyai-integration.md) are complete: Amap city validation, travel query freshness persistence, the isolated gateway, main-app authenticated client, deterministic travel-search orchestration, and source/freshness result UI are fixture-verified. The app uses real normalized route facts when the gateway succeeds; per-mode failures fall back to deterministic estimates, while successful empty results remain unavailable rather than pretending to be estimates.
 
-Result cards show real FlyAI rows as `飞猪参考价` with the China-time query timestamp, train or flight number, stations where available, time range, duration, and fare. Estimates are marked `估算` and include the stable fallback reason when one is available, such as `PROVIDER_RATE_LIMITED` or `GATEWAY_UNAVAILABLE`; mixed cards show `部分数据为估算`. Result cards do not render provider booking links; users should use the displayed train or flight details to verify tickets in their preferred booking app. If the latest run has no primary recommendation label because no candidate is feasible for every participant, the result page asks the organizer to adjust the target arrival time or meeting date instead of presenting an unlabeled city as a recommendation.
+The legacy fallback result cards show real FlyAI rows as `飞猪参考价` with the China-time query timestamp, train or flight number, stations where available, time range, duration, and fare. Estimates are marked `估算` and include the stable fallback reason when one is available, such as `PROVIDER_RATE_LIMITED` or `GATEWAY_UNAVAILABLE`; mixed cards show `部分数据为估算`. This legacy presentation is scheduled for replacement in Tasks 10–13 and is not a valid target-architecture publication result.
 
 The gateway has its own environment file at `services/travel-provider-gateway/.env.example` and commands:
 

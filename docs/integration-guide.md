@@ -56,8 +56,7 @@ Recent meeting records are browser-local convenience data stored in `localStorag
 ```json
 {
   "title": "上海周末见面",
-  "meetingDate": "2026-08-15",
-  "targetArrivalTime": "18:00",
+  "arrivalDate": "2026-08-15",
   "participantLimit": 4
 }
 ```
@@ -67,7 +66,8 @@ Returns:
 ```json
 {
   "code": "ABC123",
-  "shareUrl": "http://192.168.31.69:3000/p/ABC123"
+  "shareUrl": "http://192.168.31.69:3000/p/ABC123",
+  "hostToken": "returned-once-secret"
 }
 ```
 
@@ -87,7 +87,7 @@ Returns:
 }
 ```
 
-When `latestRun.status` is `"running"`, it represents an incomplete calculation. Clients must show progress rather than a result entry or recommendation cards; only `"completed"` represents a displayable result.
+`latestRun` exposes `{ status, traceId, pendingGroups, retryAt, diagnosticCode }`. Any non-`"completed"` status is in progress, incomplete, or failed—not a result. `latestSharedResult` is present only when the latest run is `"completed"`.
 
 ### Search Cities
 
@@ -137,13 +137,17 @@ Returns:
 ```json
 {
   "runId": "...",
-  "candidateCount": 12
+  "status": "pending"
 }
 ```
 
-Calculation also stores recommendation `explanation` and `risk_summary` fields for the result page.
+The Supabase path returns HTTP 202 and does not wait for supplier work. The orchestrator uses only verified quotes, complete coverage, deterministic policy replay, Supervisor approval, and the guarded publication RPC. Legacy fallback behavior remains separate until Task 10.
 
-Result rankings are shared for the whole plan. The calculation service queries the gateway from server-side code once per distinct accepted mode, validates and deterministically orders valid real route facts, then maps them back to each participant. Route groups unfinished in the first pass receive one second-pass lookup before estimates are used. Gateway failures use estimates per mode; a successful empty result is unavailable. Result cards show provider source, query freshness, fallback reason, train or flight number, station names when available, time range, duration, and fare. Provider booking URLs are not rendered as user actions.
+### Advance a Run
+
+`POST /api/plans/[code]/runs/[runId]/advance`
+
+Requires `x-participant-token`. Each request performs at most one state transition or one bounded query batch, then returns `{ runId, status, traceId, retryAt, diagnosticCode }`. Repeated or concurrent requests return the already-current state rather than duplicate supplier work.
 
 ### Regenerate Recommendation Explanations
 
