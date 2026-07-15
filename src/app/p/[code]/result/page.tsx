@@ -89,7 +89,7 @@ export function ResultContent({
 
         {hasCompletedRun && !hasPrimary && (
           <Notice>
-            按当前到达时间，没有找到全员可行城市。请调整目标到达时间或会议日期后重新计算。
+            按当前计划到达日期，没有找到全员可行城市。请调整计划到达日期后重新计算。
           </Notice>
         )}
 
