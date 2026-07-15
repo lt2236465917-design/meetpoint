@@ -205,6 +205,134 @@ describe("AgentModel", () => {
     })).resolves.toEqual({ cityCode: "420100" });
   });
 
+  it.each([
+    ["participant primitive", { participant: "Alice" }],
+    ["participants primitive array", { participants: ["Alice"] }],
+    ["toJSON raw payload", {
+      wrapper: { toJSON: () => ({ rawPayload: { fare: 99 } }) },
+    }],
+    ["toJSON token", {
+      wrapper: { toJSON: () => ({ token: "credential" }) },
+    }],
+    ["toJSON participant identity", {
+      wrapper: { toJSON: () => ({ participant: { name: "Alice" } }) },
+    }],
+  ])("rejects unsafe serialized %s before the SDK call", async (_label, input) => {
+    openAiSdk.create.mockResolvedValue({
+      id: "chatcmpl-unsafe-serialized-input",
+      choices: [{ message: { role: "assistant", content: '{"cityCode":"420100"}' } }],
+    });
+
+    const error = await createAgentModel()!.generate({
+      agent: "manager",
+      system: "Return one verified city code.",
+      input,
+      outputSchema,
+      traceId: "00000000-0000-4000-8000-000000000006",
+    }).catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(AgentModelError);
+    expect(error).toMatchObject({ code: "MODEL_INVALID_OUTPUT" });
+    expect(String(error)).not.toContain("Alice");
+    expect(openAiSdk.create).not.toHaveBeenCalled();
+  });
+
+  it("allows structured participant IDs in serialized model input", async () => {
+    openAiSdk.create.mockResolvedValue({
+      id: "chatcmpl-safe-participant-id",
+      choices: [{ message: { role: "assistant", content: '{"cityCode":"420100"}' } }],
+    });
+
+    await expect(createAgentModel()!.generate({
+      agent: "manager",
+      system: "Return one verified city code.",
+      input: {
+        participants: [{
+          participantId: "00000000-0000-4000-8000-000000000007",
+        }],
+      },
+      outputSchema,
+      traceId: "00000000-0000-4000-8000-000000000008",
+    })).resolves.toEqual({ cityCode: "420100" });
+  });
+
+  it.each([
+    ["passthrough object", z.object({ cityCode: z.string() }).passthrough()],
+    ["catchall object", z.object({ cityCode: z.string() }).catchall(z.string())],
+    ["root any", z.any()],
+    ["nested any", z.object({ cityCode: z.string(), detail: z.any() })],
+  ] as const)("rejects unsafe %s output schemas before the SDK call", async (_label, schema) => {
+    openAiSdk.create.mockResolvedValue({
+      id: "chatcmpl-unsafe-schema",
+      choices: [{
+        message: {
+          role: "assistant",
+          content: JSON.stringify({
+            cityCode: "420100",
+            detail: { inventedFare: 99 },
+            inventedFare: 99,
+          }),
+        },
+      }],
+    });
+
+    const error = await createAgentModel()!.generate({
+      agent: "manager",
+      system: "Return one verified city code.",
+      input: { quoteIds: ["quote-1"] },
+      outputSchema: schema,
+      traceId: "00000000-0000-4000-8000-000000000009",
+    }).catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(AgentModelError);
+    expect(error).toMatchObject({ code: "MODEL_INVALID_OUTPUT" });
+    expect(openAiSdk.create).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [
+      "discriminated union",
+      z.discriminatedUnion("kind", [
+        z.object({ kind: z.literal("saving"), quoteId: z.string() }),
+        z.object({ kind: z.literal("fast"), quoteId: z.string() }),
+      ]),
+      { kind: "saving", quoteId: "quote-1" },
+    ],
+    [
+      "union",
+      z.union([
+        z.object({ status: z.literal("complete"), count: z.number() }),
+        z.object({ status: z.literal("incomplete"), missing: z.array(z.string()) }),
+      ]),
+      { status: "complete", count: 2 },
+    ],
+    ["array", z.array(z.object({ quoteId: z.string() })), [{ quoteId: "quote-1" }]],
+    ["tuple", z.tuple([z.string(), z.number()]), ["quote-1", 2]],
+    [
+      "record",
+      z.record(z.string(), z.string()),
+      {
+        "00000000-0000-4000-8000-000000000010": "quote-1",
+        "00000000-0000-4000-8000-000000000011": "quote-2",
+      },
+    ],
+  ] as const)("allows safe %s output schemas", async (_label, schema, providerOutput) => {
+    openAiSdk.create.mockResolvedValue({
+      id: "chatcmpl-safe-schema",
+      choices: [{
+        message: { role: "assistant", content: JSON.stringify(providerOutput) },
+      }],
+    });
+
+    await expect(createAgentModel()!.generate({
+      agent: "calculation",
+      system: "Return structured output.",
+      input: { quoteIds: ["quote-1", "quote-2"] },
+      outputSchema: schema,
+      traceId: "00000000-0000-4000-8000-000000000012",
+    })).resolves.toEqual(providerOutput);
+  });
+
   it("maps SDK timeout failures to a stable timeout error", async () => {
     const timeout = Object.assign(new Error("Request timed out."), {
       name: "APIConnectionTimeoutError",

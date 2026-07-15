@@ -38,9 +38,12 @@ export type AgentEventStatus = (typeof agentEventStatuses)[number];
 
 const eventTypes = new Set<string>(agentEventTypes);
 const eventStatuses = new Set<string>(agentEventStatuses);
+// Mirrors the project's configured default; additions require an explicit review.
+const trustedAgentModelNames = ["deepseek-v4-flash"] as const;
+export type TrustedAgentModel = (typeof trustedAgentModelNames)[number];
+const trustedAgentModels = new Set<string>(trustedAgentModelNames);
 const uuidPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const modelPattern = /^[a-z0-9][a-z0-9._:/-]{0,99}$/i;
 const sensitiveValue =
   /(authorization|token|secret|bookingurl|rawpayload|participantname|prompt|message)/i;
 
@@ -51,7 +54,7 @@ export interface AgentEvent {
   eventType: AgentEventType;
   status?: AgentEventStatus;
   durationMs?: number;
-  model?: string;
+  model?: TrustedAgentModel;
   taskId?: string;
   proposalId?: string;
   validationCodes?: string[];
@@ -61,15 +64,6 @@ export interface AgentEvent {
 
 const forbiddenCountKey =
   /(authorization|token|secret|bookingurl|rawpayload|name|prompt|message|system|input|auth|env)/i;
-
-function isSafeModelName(model: string): boolean {
-  return (
-    modelPattern.test(model) &&
-    !model.includes("://") &&
-    !model.toLowerCase().startsWith("sk-") &&
-    !sensitiveValue.test(model)
-  );
-}
 
 function assertSafeEvent(event: AgentEvent): void {
   const ids = [event.runId, event.traceId, event.taskId, event.proposalId];
@@ -81,7 +75,8 @@ function assertSafeEvent(event: AgentEvent): void {
       (id) => id === undefined || (typeof id === "string" && uuidPattern.test(id)),
     ) &&
     (event.model === undefined ||
-      (typeof event.model === "string" && isSafeModelName(event.model)));
+      (typeof event.model === "string" &&
+        trustedAgentModels.has(event.model)));
 
   if (!valid) throw new Error("Invalid agent event");
 }
@@ -115,7 +110,8 @@ function buildPayload(event: AgentEvent): Record<string, unknown> {
   if (event.proposalId !== undefined) payload.proposalId = event.proposalId;
   if (event.validationCodes !== undefined) {
     payload.validationCodes = event.validationCodes.filter(
-      (code) =>
+      (code): code is string =>
+        typeof code === "string" &&
         /^[A-Z][A-Z0-9_]{0,63}$/.test(code) && !sensitiveValue.test(code),
     );
   }

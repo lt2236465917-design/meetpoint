@@ -1,4 +1,5 @@
 import { createDeepSeekClient, getDeepSeekModel } from "@/lib/ai/deepseek-client";
+import { z } from "zod";
 import {
   AgentModelError,
   type AgentModel,
@@ -9,6 +10,8 @@ type DeepSeekClient = NonNullable<ReturnType<typeof createDeepSeekClient>>;
 
 const sensitiveInputKey =
   /(authorization|token|secret|bookingurl|rawpayload|prompt|messages?)/;
+const uuidPattern =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function normalizedKey(key: string): string {
   return key.replace(/[^a-z0-9]/gi, "").toLowerCase();
@@ -24,6 +27,13 @@ function assertSafeModelInput(
   activeObjects = new WeakSet<object>(),
   depth = 0,
 ): void {
+  const currentPath = normalizedKey(path.at(-1) ?? "");
+  if (
+    (currentPath === "participant" || currentPath === "participants") &&
+    (!value || typeof value !== "object")
+  ) {
+    throw new AgentModelError("MODEL_INVALID_OUTPUT");
+  }
   if (!value || typeof value !== "object") return;
   if (depth > 64 || activeObjects.has(value)) {
     throw new AgentModelError("MODEL_INVALID_OUTPUT");
@@ -43,7 +53,9 @@ function assertSafeModelInput(
       if (
         sensitiveInputKey.test(normalized) ||
         normalized === "participantname" ||
-        (normalized === "name" && isParticipantPath(path))
+        (normalized === "name" && isParticipantPath(path)) ||
+        (normalized === "participantid" &&
+          (typeof nestedValue !== "string" || !uuidPattern.test(nestedValue)))
       ) {
         throw new AgentModelError("MODEL_INVALID_OUTPUT");
       }
@@ -56,6 +68,97 @@ function assertSafeModelInput(
     }
   } finally {
     activeObjects.delete(value);
+  }
+}
+
+type JsonSchemaNode = Record<string, unknown>;
+
+function isJsonSchemaNode(value: unknown): value is JsonSchemaNode {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function hasConcreteSchemaPolicy(schema: unknown, depth = 0): boolean {
+  if (!isJsonSchemaNode(schema) || depth > 64) return false;
+
+  const concreteKeywords = [
+    "$ref",
+    "type",
+    "const",
+    "enum",
+    "properties",
+    "propertyNames",
+    "additionalProperties",
+    "items",
+    "prefixItems",
+    "oneOf",
+    "anyOf",
+    "allOf",
+    "not",
+  ];
+  if (!concreteKeywords.some((key) => key in schema)) return false;
+
+  if ("properties" in schema) {
+    if (!isJsonSchemaNode(schema.properties)) return false;
+    if (schema.additionalProperties !== false) return false;
+    if (!Object.values(schema.properties).every((property) =>
+      hasConcreteSchemaPolicy(property, depth + 1),
+    )) {
+      return false;
+    }
+  }
+
+  if (isJsonSchemaNode(schema.additionalProperties)) {
+    if ("properties" in schema || !isJsonSchemaNode(schema.propertyNames)) {
+      return false;
+    }
+    if (
+      !hasConcreteSchemaPolicy(schema.propertyNames, depth + 1) ||
+      !hasConcreteSchemaPolicy(schema.additionalProperties, depth + 1)
+    ) {
+      return false;
+    }
+  }
+
+  for (const key of ["items", "contains", "not", "if", "then", "else"]) {
+    if (key in schema && !hasConcreteSchemaPolicy(schema[key], depth + 1)) {
+      return false;
+    }
+  }
+
+  for (const key of ["prefixItems", "oneOf", "anyOf", "allOf"]) {
+    if (key in schema) {
+      const branches = schema[key];
+      if (
+        !Array.isArray(branches) ||
+        branches.length === 0 ||
+        !branches.every((branch) => hasConcreteSchemaPolicy(branch, depth + 1))
+      ) {
+        return false;
+      }
+    }
+  }
+
+  if ("$defs" in schema) {
+    if (
+      !isJsonSchemaNode(schema.$defs) ||
+      !Object.values(schema.$defs).every((definition) =>
+        hasConcreteSchemaPolicy(definition, depth + 1),
+      )
+    ) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function assertSafeOutputSchema(schema: AgentModelRequest<unknown>["outputSchema"]): void {
+  try {
+    if (!hasConcreteSchemaPolicy(z.toJSONSchema(schema))) {
+      throw new AgentModelError("MODEL_INVALID_OUTPUT");
+    }
+  } catch {
+    throw new AgentModelError("MODEL_INVALID_OUTPUT");
   }
 }
 
@@ -120,11 +223,13 @@ class DeepSeekAgentModel implements AgentModel {
   async generate<T>(request: AgentModelRequest<T>): Promise<T> {
     let input: string;
     try {
-      assertSafeModelInput(request.input);
+      assertSafeOutputSchema(request.outputSchema);
       input = JSON.stringify(request.input);
       if (typeof input !== "string") {
         throw new AgentModelError("MODEL_INVALID_OUTPUT");
       }
+      const serializedInput: unknown = JSON.parse(input);
+      assertSafeModelInput(serializedInput);
     } catch {
       throw new AgentModelError("MODEL_INVALID_OUTPUT");
     }

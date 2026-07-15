@@ -107,6 +107,9 @@ describe("recordAgentEvent", () => {
     ["model", { model: "raw prompt containing secret token" }],
     ["model URL", { model: "https://provider.example/model" }],
     ["model token shape", { model: "sk-live-credential" }],
+    ["model participant-like value", { model: "participant-alice" }],
+    ["model unprefixed token", { model: "abc123xyz" }],
+    ["model person name", { model: "Alice" }],
     ["non-string task ID", {
       taskId: {
         toString: () => "00000000-0000-4000-8000-000000000032",
@@ -142,6 +145,25 @@ describe("recordAgentEvent", () => {
       validationCodes: ["QUOTE_SET_COMPLETE", "SECRET_TOKEN_VALUE"],
     });
 
+    expect(persistence.insert).toHaveBeenCalledWith(expect.objectContaining({
+      payload: { validationCodes: ["QUOTE_SET_COMPLETE"] },
+    }));
+  });
+
+  it("drops non-string validation codes without invoking object coercion", async () => {
+    const disguisedCode = {
+      toString: vi.fn(() => "QUOTE_SET_COMPLETE"),
+    };
+
+    await recordAgentEvent({
+      runId: "00000000-0000-4000-8000-000000000050",
+      traceId: "00000000-0000-4000-8000-000000000051",
+      agent: "supervisor",
+      eventType: "validation_finished",
+      validationCodes: [disguisedCode, "QUOTE_SET_COMPLETE"] as never,
+    });
+
+    expect(disguisedCode.toString).not.toHaveBeenCalled();
     expect(persistence.insert).toHaveBeenCalledWith(expect.objectContaining({
       payload: { validationCodes: ["QUOTE_SET_COMPLETE"] },
     }));
