@@ -3,6 +3,11 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ParticipantList } from "@/components/plan/ParticipantList";
+import {
+  getRunProgressMessage,
+  isNonterminal,
+  type PublicRunProgress,
+} from "@/components/result/RefreshingResultNotice";
 import { Notice } from "@/components/ui/Notice";
 import { getApiErrorMessage } from "@/lib/ui/api-error-message";
 import {
@@ -24,7 +29,7 @@ type PublicPlanData = {
     accepted_modes: TransportMode[];
   }>;
   localParticipantEditToken?: string;
-  latestRun: { status: string } | null;
+  latestRun: PublicRunProgress | null;
 };
 
 export function PublicPlanContent({
@@ -42,7 +47,9 @@ export function PublicPlanContent({
   );
   const [calculateMessage, setCalculateMessage] = useState("");
   const [calculating, setCalculating] = useState(false);
-  const isCalculatingResult = data.latestRun?.status === "running";
+  const isCalculatingResult = data.latestRun
+    ? isNonterminal(data.latestRun.status)
+    : false;
   const hasCompletedResult = data.latestRun?.status === "completed";
   const participantsFull =
     data.participants.length >= data.plan.participant_limit;
@@ -72,24 +79,42 @@ export function PublicPlanContent({
         const response = await fetch(`/api/plans/${code}`, {
           cache: "no-store",
         });
-        if (!response.ok) return;
+        if (!response.ok) return null;
         const nextData = (await response.json()) as PublicPlanData;
         if (active) {
           setData(nextData);
         }
+        return nextData;
       } catch {
         // Keep the last good view; this is a background freshness check.
+        return null;
       }
     }
 
-    const interval = window.setInterval(refresh, 3000);
-    void refresh();
+    const delays = [2_000, 3_000, 5_000, 8_000, 13_000, 21_000];
+    let refreshCount = 0;
+    let timer: number | undefined;
+
+    function scheduleRefresh(latestRun: PublicRunProgress | null) {
+      if (!active || !latestRun || !isNonterminal(latestRun.status)) return;
+      const delay = delays[refreshCount];
+      if (delay === undefined) return;
+      timer = window.setTimeout(async () => {
+        refreshCount += 1;
+        const nextData = await refresh();
+        scheduleRefresh(nextData?.latestRun ?? latestRun);
+      }, delay);
+    }
+
+    void refresh().then((nextData) => {
+      scheduleRefresh(nextData?.latestRun ?? initialData.latestRun);
+    });
 
     return () => {
       active = false;
-      window.clearInterval(interval);
+      if (timer !== undefined) window.clearTimeout(timer);
     };
-  }, [code]);
+  }, [code, initialData.latestRun]);
 
   async function calculate() {
     if (calculating || !localParticipantEditToken) return;
@@ -167,7 +192,7 @@ export function PublicPlanContent({
           </div>
         ) : isCalculatingResult ? (
           <div className="mt-4">
-            <Notice>正在查询票价并生成结果，请稍后自动刷新。</Notice>
+            <Notice>{getRunProgressMessage(data.latestRun!)}</Notice>
           </div>
         ) : !data.latestRun ? (
           <div className="mt-4">

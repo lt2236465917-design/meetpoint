@@ -97,16 +97,46 @@ describe("PublicPlanContent", () => {
         code: "ABC123",
         initialData: {
           ...planData,
-          latestRun: { id: "run-1", status: "running" },
+          latestRun: {
+            runId: "run-1",
+            status: "collecting",
+            traceId: "trace-1",
+            pendingGroups: 6,
+            retryAt: null,
+            diagnosticCode: null,
+          },
         },
       }),
     );
 
-    expect(html).toContain("正在查询票价并生成结果");
+    expect(html).toContain("正在查询 6 组真实票价");
     expect(html).toContain("结果生成中");
     expect(html).toContain("正在生成结果");
     expect(html).not.toContain('href="/p/ABC123/result"');
     expect(html).not.toContain("已有结果");
+  });
+
+  it("shows validation progress on the public plan without exposing result cards", () => {
+    const html = renderToStaticMarkup(
+      createElement(PublicPlanContent, {
+        code: "ABC123",
+        initialData: {
+          ...planData,
+          latestRun: {
+            runId: "run-1",
+            status: "validating",
+            traceId: "trace-1",
+            pendingGroups: 0,
+            retryAt: null,
+            diagnosticCode: null,
+          },
+        },
+      }),
+    );
+
+    expect(html).toContain("正在核验全员路线");
+    expect(html).not.toContain('href="/p/ABC123/result"');
+    expect(html).not.toContain("省钱方案");
   });
 
   it("shows a direct calculation entry for local participants when participants are full", () => {

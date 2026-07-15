@@ -12,6 +12,9 @@ const apiErrorMessages: Record<string, string> = {
   CALCULATION_IN_PROGRESS: "正在查询票价并生成结果，请稍后自动刷新。",
   NOT_ENOUGH_PARTICIPANTS: "至少需要 2 个人填写后才能计算",
   RUN_NOT_FOUND: "还没有计算结果",
+  REAL_QUOTE_COVERAGE_INCOMPLETE: "真实票价覆盖不完整，可以重新计算",
+  AGENT_PROPOSAL_INVALID: "方案核验未通过，请重新计算",
+  PUBLICATION_GUARD_REJECTED: "结果未通过发布核验，请重新计算",
 };
 
 export function getApiErrorMessage(

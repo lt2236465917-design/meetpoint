@@ -1,105 +1,121 @@
-import { describe, expect, it, vi } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import {
-  hasPrimaryRecommendations,
-  ResultContent,
-} from "@/app/p/[code]/result/page";
+import { describe, expect, it, vi } from "vitest";
+import { ResultContent } from "@/app/p/[code]/result/page";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: vi.fn() }),
 }));
 
-describe("result page recommendation eligibility", () => {
-  it("treats a completed run with no primary labels as no feasible city", () => {
-    expect(
-      hasPrimaryRecommendations([
-        {
-          id: "rec-1",
-          city_code: "nanjing",
-          city_name: "南京",
-          total_price_cny: 0,
-          labels: [],
-          explanation: null,
-          risk_summary: null,
-          estimate_penalty: 0,
-          transfer_penalty: 0,
-          waiting_penalty: 0,
-          total_duration_minutes: 0,
-          fairness_gap: 0,
-        },
-      ]),
-    ).toBe(false);
+const baseProgress = {
+  runId: "run-12345678",
+  traceId: "trace-87654321",
+  pendingGroups: 8,
+  retryAt: null,
+  diagnosticCode: null,
+};
+
+function renderStatus(
+  status:
+    | "pending"
+    | "collecting"
+    | "cooling_down"
+    | "calculating"
+    | "validating"
+    | "awaiting_host_confirmation"
+    | "incomplete"
+    | "failed",
+  overrides: Partial<typeof baseProgress> = {},
+) {
+  return renderToStaticMarkup(
+    createElement(ResultContent, {
+      code: "ABC123",
+      title: "杭州周末见面",
+      progress: { ...baseProgress, ...overrides, status },
+      result: null,
+      now: new Date("2026-07-15T10:00:00.000Z"),
+    }),
+  );
+}
+
+describe("result page public states", () => {
+  it.each(["pending", "collecting"] as const)(
+    "shows remaining real-fare groups while %s",
+    (status) => {
+      const html = renderStatus(status);
+
+      expect(html).toContain("正在查询 8 组真实票价");
+      expect(html).toContain("刷新结果");
+      expect(html).not.toContain("省钱方案");
+      expect(html).not.toContain("省时方案");
+    },
+  );
+
+  it("shows the bounded supplier cooldown", () => {
+    const html = renderStatus("cooling_down", {
+      retryAt: "2026-07-15T10:00:12.000Z",
+    });
+
+    expect(html).toContain("供应商限流，12 秒后自动重试");
+    expect(html).not.toContain("省钱方案");
   });
 
-  it("detects at least one primary recommendation label", () => {
-    expect(
-      hasPrimaryRecommendations([
-        {
-          id: "rec-1",
-          city_code: "nanjing",
-          city_name: "南京",
-          total_price_cny: 1000,
-          labels: ["balanced"],
-          explanation: null,
-          risk_summary: null,
-          estimate_penalty: 0,
-          transfer_penalty: 0,
-          waiting_penalty: 0,
-          total_duration_minutes: 300,
-          fairness_gap: 100,
-        },
-      ]),
-    ).toBe(true);
+  it("shows calculation progress without result cards", () => {
+    const html = renderStatus("calculating");
+
+    expect(html).toContain("正在计算一城两方案");
+    expect(html).not.toContain("省钱方案");
   });
 
-  it("renders the no-feasible-city notice instead of unlabeled cards", () => {
+  it("shows validation progress without result cards", () => {
+    const html = renderStatus("validating");
+
+    expect(html).toContain("正在核验全员路线");
+    expect(html).not.toContain("省时方案");
+  });
+
+  it("does not expose a private alternative preview on the shared route", () => {
+    const html = renderStatus("awaiting_host_confirmation");
+
+    expect(html).toContain("替代城市正在等待发起人确认");
+    expect(html).not.toContain("仅你可见的预览");
+    expect(html).not.toContain("省钱方案");
+  });
+
+  it("shows retry guidance and a diagnostic id for incomplete coverage", () => {
+    const html = renderStatus("incomplete", {
+      diagnosticCode: "REAL_QUOTE_COVERAGE_INCOMPLETE",
+    });
+
+    expect(html).toContain("未生成推荐");
+    expect(html).toContain("真实票价覆盖不完整，尚未生成推荐");
+    expect(html).toContain("可以重新计算");
+    expect(html).toContain("诊断编号 RUN-12345678");
+    expect(html).not.toContain("省钱方案");
+  });
+
+  it("shows actionable failed-state guidance", () => {
+    const html = renderStatus("failed", {
+      diagnosticCode: "AGENT_PROPOSAL_INVALID",
+    });
+
+    expect(html).toContain("生成失败");
+    expect(html).toContain("请返回计划页重新计算");
+    expect(html).toContain("诊断编号 RUN-12345678");
+    expect(html).not.toContain("省钱方案");
+  });
+
+  it("renders no recommendation before a run exists", () => {
     const html = renderToStaticMarkup(
       createElement(ResultContent, {
         code: "ABC123",
         title: "杭州周末见面",
-        runStatus: "completed",
-        isStale: false,
-        recommendations: [
-          {
-            id: "rec-1",
-            city_code: "nanjing",
-            city_name: "南京",
-            total_price_cny: 0,
-            labels: [],
-            explanation: null,
-            risk_summary: null,
-            estimate_penalty: 0,
-            transfer_penalty: 0,
-            waiting_penalty: 0,
-            total_duration_minutes: 0,
-            fairness_gap: 0,
-          },
-        ],
+        progress: null,
+        result: null,
       }),
     );
 
-    expect(html).toContain(
-      "按当前计划到达日期，没有找到全员可行城市。请调整计划到达日期后重新计算。",
-    );
-    expect(html).not.toContain("目标到达时间");
-    expect(html).not.toContain("南京");
-  });
-
-  it("does not present an in-progress run as a completed result", () => {
-    const html = renderToStaticMarkup(
-      createElement(ResultContent, {
-        code: "ABC123",
-        title: "杭州周末见面",
-        runStatus: "running",
-        isStale: false,
-        recommendations: [],
-      }),
-    );
-
-    expect(html).toContain("正在查询票价并生成结果，请稍后自动刷新。");
-    expect(html).toContain("正在生成结果");
-    expect(html).toContain("刷新结果");
-    expect(html).not.toContain("没有找到全员可行城市");
+    expect(html).toContain("还没有计算结果");
+    expect(html).not.toContain("省钱方案");
   });
 });

@@ -140,6 +140,60 @@ function currentSharedResult(planId: string) {
   ) ?? null;
 }
 
+function publicSharedResult(planId: string) {
+  const result = currentSharedResult(planId);
+  if (!result || !result.publishedAt) return null;
+  const participants = participantsFor(planId);
+  const schemes = state().schemes
+    .filter((scheme) => scheme.resultId === result.id)
+    .sort((left, right) => left.kind === "saving" ? -1 : right.kind === "saving" ? 1 : 0)
+    .map((scheme) => ({
+      id: scheme.id,
+      kind: scheme.kind,
+      totalFareCny: scheme.totalFareCny,
+      totalDurationMinutes: scheme.totalDurationMinutes,
+      latestArrivalAt: scheme.latestArrivalAt,
+      teamTransferCount: scheme.teamTransferCount,
+      routes: state().schemeRoutes
+        .filter((route) => route.schemeId === scheme.id)
+        .map((route) => {
+          const participant = participants.find((entry) => entry.id === route.participantId);
+          const quote = state().quotes.find((entry) =>
+            entry.runId === result.runId && entry.id === route.verifiedQuoteId,
+          );
+          if (!participant || !quote) return null;
+          return {
+            participantId: participant.id,
+            participantName: participant.name,
+            departureCityName: participant.departureCityName,
+            quoteId: quote.quoteId,
+            mode: quote.mode,
+            provider: "flyai",
+            queriedAt: quote.queriedAt,
+            priceCny: quote.priceCny,
+            departAt: quote.departAt,
+            arriveAt: quote.arriveAt,
+            durationMinutes: quote.durationMinutes,
+            transferCount: quote.transferCount,
+            serviceName: quote.serviceName,
+            departureStationName: null,
+            arrivalStationName: null,
+          };
+        })
+        .filter((route): route is NonNullable<typeof route> => route !== null),
+    }));
+  if (schemes.length !== 2) return null;
+  return {
+    id: result.id,
+    cityCode: result.cityCode,
+    cityName: findCityByCode(result.cityCode)?.name ?? result.cityCode,
+    explanationZh: result.explanationZh,
+    isShared: true as const,
+    publishedAt: result.publishedAt,
+    schemes,
+  };
+}
+
 function publicPlan(plan: PlanRow) {
   return { code: plan.code, title: plan.title, meeting_date: plan.meetingDate, participant_limit: plan.participantLimit, status: plan.status };
 }
@@ -422,7 +476,7 @@ export function readFallbackPlan(code: string) {
   const plan = planFor(code);
   if (!plan) return null;
   const run = latestRun(plan.id);
-  const shared = currentSharedResult(plan.id);
+  const shared = publicSharedResult(plan.id);
   return {
     plan: publicPlan(plan),
     participants: participantsFor(plan.id).map((participant) => ({ id: participant.id, name: participant.name, departure_city_name: participant.departureCityName, accepted_modes: participant.acceptedModes })),
@@ -434,7 +488,7 @@ export function readFallbackPlan(code: string) {
 export function readFallbackResult(code: string) {
   const data = readFallbackPlan(code);
   if (!data) return null;
-  return { ...data, recommendations: [], latestRun: data.latestRun ? { status: data.latestRun.status, stale_after: null } : null };
+  return data;
 }
 
 export function readFallbackCandidates(code: string) { return planFor(code) ? [] : null; }

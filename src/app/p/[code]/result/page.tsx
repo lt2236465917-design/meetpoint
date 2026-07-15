@@ -1,108 +1,99 @@
 import { ResponsiveShell } from "@/components/layout/ResponsiveShell";
-import { RecommendationCard } from "@/components/result/RecommendationCard";
-import { RefreshingResultNotice } from "@/components/result/RefreshingResultNotice";
+import {
+  RefreshingResultNotice,
+  type PublicRunProgress,
+} from "@/components/result/RefreshingResultNotice";
+import {
+  SharedRecommendation,
+  type SharedResult,
+} from "@/components/result/SharedRecommendation";
 import { Notice } from "@/components/ui/Notice";
+import { findCityByCode } from "@/data/cities";
+import { runStatusSchema } from "@/lib/agent/contracts";
 import { readFallbackResult } from "@/lib/fallback/mvp-store";
 import {
   createServiceSupabaseClient,
   hasSupabaseEnvironment,
 } from "@/lib/supabase/server";
+import type { TransportMode } from "@/types/domain";
 
-import type {
-  TransportMode,
-  TravelProviderName,
-  TravelSource,
-} from "@/types/domain";
+type Relation<T> = T | T[] | null;
 
-type Recommendation = {
+type ResultRow = {
   id: string;
   city_code: string;
-  city_name: string;
-  total_price_cny: number;
-  labels: string[];
-  explanation: string | null;
-  risk_summary: string | null;
-  estimate_penalty: number;
-  transfer_penalty: number;
-  waiting_penalty: number;
-  total_duration_minutes: number;
-  fairness_gap: number;
-  participant_options?: ParticipantTravelOption[];
+  explanation_zh: string;
+  published_at: string;
 };
 
-type ParticipantTravelOption = {
-  participant_name: string;
-  departure_city_name: string;
-  mode: TransportMode;
-  price_cny: number | null;
-  duration_minutes: number | null;
-  depart_at: string | null;
-  arrive_at: string | null;
-  booking_url: string | null;
-  service_name: string | null;
-  departure_station_name: string | null;
-  arrival_station_name: string | null;
-  source: TravelSource;
-  provider: TravelProviderName;
-  queried_at: string | null;
-  failure_reason?: string | null;
+type SchemeRow = {
+  id: string;
+  kind: "saving" | "fast";
+  total_fare_cny: number;
+  total_duration_minutes: number;
+  latest_arrival_at: string;
+  team_transfer_count: number;
+};
+
+type RouteRow = {
+  scheme_id: string;
+  participant_id: string;
+  participants: Relation<{
+    name: string;
+    departure_city_name: string;
+  }>;
+  verified_quotes: Relation<{
+    quote_id: string;
+    mode: TransportMode;
+    provider: string;
+    queried_at: string;
+    price_cny: number;
+    depart_at: string;
+    arrive_at: string;
+    duration_minutes: number;
+    transfer_count: number;
+    service_name: string;
+    departure_station_name: string | null;
+    arrival_station_name: string | null;
+  }>;
 };
 
 export function ResultContent({
   code,
   title,
-  runStatus,
-  isStale,
-  recommendations,
+  progress,
+  result,
+  now,
 }: {
   code: string;
   title: string;
-  runStatus: "running" | "completed" | null;
-  isStale: boolean;
-  recommendations: Recommendation[];
+  progress: PublicRunProgress | null;
+  result: SharedResult | null;
+  now?: Date;
 }) {
-  const topRecommendations = recommendations.slice(0, 3);
-  const hasPrimary = hasPrimaryRecommendations(recommendations);
-  const isCalculating = runStatus === "running";
-  const hasCompletedRun = runStatus === "completed";
+  const completed = progress?.status === "completed";
 
   return (
     <ResponsiveShell
       title={title}
-      description="优先看前三个城市：均衡、费用和风险都放在同一张卡里。"
+      description="一个推荐城市，两套全员可核验的出行方案。"
       backHref={`/p/${code}`}
       backLabel="返回计划页"
       aside={
         <p className="text-center text-xs text-gray-500">
-          {isCalculating
-            ? "正在生成结果"
-            : isStale
-              ? "票价可能已变化"
-              : "结果仍可参考"}
+          {completed ? "结果来自已核验的真实票价" : "结果生成后才会公开方案"}
         </p>
       }
     >
       <div className="space-y-4">
-        {isCalculating && <RefreshingResultNotice />}
-        {!runStatus && <Notice>还没有计算结果。</Notice>}
-        {isStale && <Notice>票价可能已变化，建议重新计算。</Notice>}
-
-        {hasCompletedRun && !hasPrimary && (
-          <Notice>
-            按当前计划到达日期，没有找到全员可行城市。请调整计划到达日期后重新计算。
-          </Notice>
-        )}
-
-        {hasCompletedRun && hasPrimary && topRecommendations.length > 0 && (
-          <div className="grid gap-4">
-            {topRecommendations.map((recommendation) => (
-              <RecommendationCard
-                recommendation={recommendation}
-                key={recommendation.id}
-              />
-            ))}
-          </div>
-        )}
+        {!progress ? <Notice>还没有计算结果。</Notice> : null}
+        {progress && !completed ? (
+          <RefreshingResultNotice progress={progress} now={now} />
+        ) : null}
+        {completed && result ? <SharedRecommendation result={result} /> : null}
+        {completed && !result ? (
+          <Notice>结果数据不完整，请返回计划页重新计算。</Notice>
+        ) : null}
       </div>
     </ResponsiveShell>
   );
@@ -114,51 +105,9 @@ export default async function ResultPage({
   params: Promise<{ code: string }>;
 }) {
   const { code } = await params;
+  const data = await loadResultPageData(code);
 
-  if (!hasSupabaseEnvironment()) {
-    const data = readFallbackResult(code);
-    if (!data) {
-      return (
-        <ResponsiveShell
-          title="计划不存在"
-          description="这个计划可能已失效，或链接里的计划码不正确。"
-          backHref="/"
-          backLabel="返回首页"
-        >
-          <Notice>请让发起人重新确认公开链接。</Notice>
-        </ResponsiveShell>
-      );
-    }
-    const runStatus = data.latestRun?.status === "completed"
-      ? "completed"
-      : data.latestRun?.status
-        ? "running"
-        : null;
-    const staleAfter = data.latestRun?.stale_after;
-    const isStale =
-      runStatus === "completed" &&
-      typeof staleAfter === "string" &&
-      new Date(staleAfter).getTime() < new Date().getTime();
-
-    return (
-      <ResultContent
-        code={code}
-        title={data.plan.title}
-        runStatus={runStatus}
-        isStale={isStale}
-        recommendations={data.recommendations}
-      />
-    );
-  }
-
-  const supabase = createServiceSupabaseClient();
-  const { data: plan } = await supabase
-    .from("plans")
-    .select("id,title")
-    .eq("code", code)
-    .single();
-
-  if (!plan) {
+  if (!data) {
     return (
       <ResponsiveShell
         title="计划不存在"
@@ -171,133 +120,132 @@ export default async function ResultPage({
     );
   }
 
-  const { data: runs } = await supabase
-    .from("recommendation_runs")
-    .select("*")
-    .eq("plan_id", plan.id)
-    .order("started_at", { ascending: false })
-    .limit(1);
-  const run = runs?.[0] ?? null;
-  const runStatus =
-    run?.status === "running" || run?.status === "completed"
-      ? run.status
-      : null;
-  const hasCompletedRun = runStatus === "completed";
-  const { data: recommendations } = hasCompletedRun && run
-    ? await supabase
-        .from("city_recommendations")
-        .select("*")
-        .eq("run_id", run.id)
-        .order("score_balanced", { ascending: true })
-    : { data: [] };
-  const { data: travelOptions } = hasCompletedRun && run
-    ? await supabase
-        .from("travel_options")
-        .select(
-          "participant_id,candidate_city_code,mode,source,provider,queried_at,price_cny,depart_at,arrive_at,duration_minutes,booking_url,service_name,departure_station_name,arrival_station_name,failure_reason,participants(name,departure_city_name)",
-        )
-        .eq("run_id", run.id)
-    : { data: [] };
-  const isStale =
-    hasCompletedRun &&
-    Boolean(run?.stale_after) &&
-    new Date(run.stale_after).getTime() < new Date().getTime();
-
   return (
     <ResultContent
       code={code}
-      title={plan.title}
-      runStatus={runStatus}
-      isStale={isStale}
-      recommendations={attachParticipantOptions(
-        recommendations ?? [],
-        travelOptions ?? [],
-      )}
+      title={data.title}
+      progress={data.progress}
+      result={data.result}
     />
   );
 }
 
-function attachParticipantOptions(
-  recommendations: Recommendation[],
-  travelOptions: Array<{
-    participant_id: string;
-    candidate_city_code: string;
-    mode: TransportMode;
-    source: TravelSource;
-    provider: TravelProviderName;
-    queried_at: string | null;
-    price_cny: number | null;
-    depart_at: string | null;
-    arrive_at: string | null;
-    duration_minutes: number | null;
-    booking_url: string | null;
-    service_name: string | null;
-    departure_station_name: string | null;
-    arrival_station_name: string | null;
-    failure_reason?: string | null;
-    participants?:
-      | { name: string; departure_city_name: string }
-      | Array<{ name: string; departure_city_name: string }>
-      | null;
-  }>,
-) {
-  return recommendations.map((recommendation) => ({
-    ...recommendation,
-    participant_options: selectParticipantOptions(
-      travelOptions.filter(
-        (option) => option.candidate_city_code === recommendation.city_code,
-      ),
-    ),
-  }));
-}
-
-function selectParticipantOptions(
-  options: Parameters<typeof attachParticipantOptions>[1],
-): ParticipantTravelOption[] {
-  const selected = new Map<string, (typeof options)[number]>();
-
-  for (const option of options) {
-    const existing = selected.get(option.participant_id);
-    if (!existing || optionScore(option) < optionScore(existing)) {
-      selected.set(option.participant_id, option);
-    }
+async function loadResultPageData(code: string) {
+  if (!hasSupabaseEnvironment()) {
+    const data = readFallbackResult(code);
+    return data
+      ? { title: data.plan.title, progress: data.latestRun, result: data.latestSharedResult }
+      : null;
   }
 
-  return Array.from(selected.values()).map((option) => {
-    const participant = Array.isArray(option.participants)
-      ? option.participants[0]
-      : option.participants;
-    return {
-      participant_name: participant?.name ?? "参与者",
-      departure_city_name: participant?.departure_city_name ?? "出发城市",
-      mode: option.mode,
-      price_cny: option.price_cny,
-      duration_minutes: option.duration_minutes,
-      depart_at: option.depart_at,
-      arrive_at: option.arrive_at,
-      booking_url: option.booking_url,
-      service_name: option.service_name,
-      departure_station_name: option.departure_station_name,
-      arrival_station_name: option.arrival_station_name,
-      source: option.source,
-      provider: option.provider,
-      queried_at: option.queried_at,
-      failure_reason: option.failure_reason,
-    };
-  });
+  const supabase = createServiceSupabaseClient();
+  const { data: plan } = await supabase
+    .from("plans")
+    .select("id,title")
+    .eq("code", code)
+    .single();
+  if (!plan) return null;
+
+  const { data: runs } = await supabase
+    .from("recommendation_runs")
+    .select("id,status,trace_id,retry_after,error_summary,started_at")
+    .eq("plan_id", plan.id)
+    .order("started_at", { ascending: false })
+    .limit(1);
+  const run = runs?.[0] ?? null;
+  const parsedStatus = runStatusSchema.safeParse(run?.status);
+  if (!run || !parsedStatus.success) {
+    return { title: plan.title, progress: null, result: null };
+  }
+
+  const { count: pendingGroups } = await supabase
+    .from("route_tasks")
+    .select("id", { count: "exact", head: true })
+    .eq("run_id", run.id)
+    .in("status", ["pending", "running", "retryable_failure"]);
+  const progress: PublicRunProgress = {
+    runId: run.id,
+    status: parsedStatus.data,
+    traceId: run.trace_id,
+    pendingGroups: pendingGroups ?? 0,
+    retryAt: run.retry_after,
+    diagnosticCode: run.error_summary,
+  };
+  const result = progress.status === "completed"
+    ? await loadSharedResult(run.id)
+    : null;
+
+  return { title: plan.title, progress, result };
 }
 
-export function hasPrimaryRecommendations(
-  recommendations: Pick<Recommendation, "labels">[],
-) {
-  return recommendations.some((recommendation) => recommendation.labels.length > 0);
+async function loadSharedResult(runId: string): Promise<SharedResult | null> {
+  const supabase = createServiceSupabaseClient();
+  const { data: resultRows } = await supabase
+    .from("recommendation_results")
+    .select("id,city_code,explanation_zh,published_at")
+    .eq("run_id", runId)
+    .eq("is_shared", true)
+    .limit(1);
+  const result = resultRows?.[0] as ResultRow | undefined;
+  if (!result) return null;
+
+  const { data: rawSchemes } = await supabase
+    .from("recommendation_schemes")
+    .select("id,kind,total_fare_cny,total_duration_minutes,latest_arrival_at,team_transfer_count")
+    .eq("result_id", result.id)
+    .order("kind", { ascending: false });
+  const schemes = (rawSchemes ?? []) as SchemeRow[];
+  if (schemes.length !== 2) return null;
+
+  const { data: rawRoutes } = await supabase
+    .from("recommendation_scheme_routes")
+    .select("scheme_id,participant_id,participants(name,departure_city_name),verified_quotes(quote_id,mode,provider,queried_at,price_cny,depart_at,arrive_at,duration_minutes,transfer_count,service_name,departure_station_name,arrival_station_name)")
+    .in("scheme_id", schemes.map((scheme) => scheme.id));
+  const routes = (rawRoutes ?? []) as unknown as RouteRow[];
+  const cityName = findCityByCode(result.city_code)?.name ?? result.city_code;
+
+  return {
+    id: result.id,
+    cityCode: result.city_code,
+    cityName,
+    explanationZh: result.explanation_zh,
+    publishedAt: result.published_at,
+    schemes: schemes.map((scheme) => ({
+      id: scheme.id,
+      kind: scheme.kind,
+      totalFareCny: scheme.total_fare_cny,
+      totalDurationMinutes: scheme.total_duration_minutes,
+      latestArrivalAt: scheme.latest_arrival_at,
+      teamTransferCount: scheme.team_transfer_count,
+      routes: routes
+        .filter((route) => route.scheme_id === scheme.id)
+        .map((route) => {
+          const participant = firstRelation(route.participants);
+          const quote = firstRelation(route.verified_quotes);
+          if (!participant || !quote) return null;
+          return {
+            participantId: route.participant_id,
+            participantName: participant.name,
+            departureCityName: participant.departure_city_name,
+            quoteId: quote.quote_id,
+            mode: quote.mode,
+            provider: quote.provider,
+            queriedAt: quote.queried_at,
+            priceCny: quote.price_cny,
+            departAt: quote.depart_at,
+            arriveAt: quote.arrive_at,
+            durationMinutes: quote.duration_minutes,
+            transferCount: quote.transfer_count,
+            serviceName: quote.service_name,
+            departureStationName: quote.departure_station_name,
+            arrivalStationName: quote.arrival_station_name,
+          };
+        })
+        .filter((route): route is NonNullable<typeof route> => route !== null),
+    })),
+  };
 }
 
-function optionScore(option: {
-  source: TravelSource;
-  price_cny: number | null;
-  duration_minutes: number | null;
-}) {
-  if (option.source === "unavailable") return 999_999;
-  return (option.price_cny ?? 0) + (option.duration_minutes ?? 0);
+function firstRelation<T>(relation: Relation<T>) {
+  return Array.isArray(relation) ? relation[0] ?? null : relation;
 }

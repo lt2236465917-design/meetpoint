@@ -27,10 +27,18 @@ async function getPlan(code: string) {
     .eq("plan_id", plan.id);
   const { data: runs } = await supabase
     .from("recommendation_runs")
-    .select("status, started_at")
+    .select("id,status,trace_id,retry_after,error_summary,started_at")
     .eq("plan_id", plan.id)
     .order("started_at", { ascending: false })
     .limit(1);
+  const latestRun = runs?.[0] ?? null;
+  const { count: pendingGroups } = latestRun
+    ? await supabase
+        .from("route_tasks")
+        .select("id", { count: "exact", head: true })
+        .eq("run_id", latestRun.id)
+        .in("status", ["pending", "running", "retryable_failure"])
+    : { count: null };
 
   return {
     plan: {
@@ -41,7 +49,16 @@ async function getPlan(code: string) {
       status: plan.status,
     },
     participants: participants ?? [],
-    latestRun: runs?.[0] ? { status: runs[0].status } : null,
+    latestRun: latestRun
+      ? {
+          runId: latestRun.id,
+          status: latestRun.status,
+          traceId: latestRun.trace_id,
+          pendingGroups: pendingGroups ?? 0,
+          retryAt: latestRun.retry_after,
+          diagnosticCode: latestRun.error_summary,
+        }
+      : null,
   };
 }
 
