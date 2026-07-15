@@ -10,6 +10,7 @@ import {
 } from "@/lib/agent/contracts";
 import { generateCandidateCities } from "@/lib/city/candidate-generator";
 import { findCityByCode } from "@/data/cities";
+import { arrivalDateInShanghai } from "@/lib/recommendation/date";
 import { buildRouteTasks } from "@/lib/recommendation/query-matrix";
 import { rankEligibleCities } from "@/lib/recommendation/policy";
 import type { StoredRouteTask } from "@/lib/recommendation/repository";
@@ -82,6 +83,11 @@ type SchemeRow = {
 };
 
 type SchemeRouteRow = { schemeId: string; participantId: string; verifiedQuoteId: string };
+type EventRow = {
+  runId: string;
+  traceId: string;
+  eventType: "run_created" | "quote_seeded" | "proposal_approved" | "proposal_rejected" | "result_materialized" | "result_shared" | "run_advanced";
+};
 
 type StoreState = {
   version: 2;
@@ -96,7 +102,7 @@ type StoreState = {
   results: ResultRow[];
   schemes: SchemeRow[];
   schemeRoutes: SchemeRouteRow[];
-  events: Array<{ runId: string; traceId: string; event: string }>;
+  events: EventRow[];
 };
 
 const globalKey = "__crossCityMeetpointFallbackStore";
@@ -125,6 +131,14 @@ function latestRun(planId: string) {
 function participantsFor(planId: string) { return state().participants.filter((participant) => participant.planId === planId); }
 function planFor(code: string) { return state().plans.find((plan) => plan.code === code) ?? null; }
 function runFor(runId: string) { return state().runs.find((run) => run.id === runId) ?? null; }
+function recordEvent(run: RunRow, eventType: EventRow["eventType"]) {
+  state().events.push({ runId: run.id, traceId: run.traceId, eventType });
+}
+function currentSharedResult(planId: string) {
+  return state().results.find((result) =>
+    result.planId === planId && result.isShared && !result.supersededAt,
+  ) ?? null;
+}
 
 function publicPlan(plan: PlanRow) {
   return { code: plan.code, title: plan.title, meeting_date: plan.meetingDate, participant_limit: plan.participantLimit, status: plan.status };
@@ -193,6 +207,7 @@ function createMatrix(plan: PlanRow, kind: RunRow["kind"], requestedCityCode: st
     startedAt: timestamp(), completedAt: null,
   };
   state().runs.push(run);
+  recordEvent(run, "run_created");
   for (const draft of buildRouteTasks({
     participants: participants.map((participant) => ({ id: participant.id, departureCityCode: participant.departureCityCode, departureCityName: participant.departureCityName, acceptedModes: participant.acceptedModes })),
     candidates, arrivalDate: plan.meetingDate,
@@ -230,6 +245,7 @@ export function seedFallbackVerifiedQuotes(runId: string, quotes: readonly Verif
     if (!state().quotes.some((entry) => entry.runId === runId && entry.participantId === quote.participantId && entry.quoteId === quote.quoteId)) state().quotes.push({ ...quote, runId });
     task.status = "succeeded";
     task.attemptCount += 1;
+    recordEvent(run, "quote_seeded");
   }
 }
 
@@ -252,16 +268,27 @@ function deterministicProposal(run: RunRow): RecommendationProposal | null {
   };
 }
 
+function validationInput(run: RunRow, proposal: unknown) {
+  return {
+    participantIds: participantsFor(run.planId).map((participant) => participant.id),
+    arrivalDate: planById(run.planId)!.meetingDate,
+    cityInputs: cityInputs(run).map(({ cityCode, quotes }) => ({ cityCode, quotes })),
+    proposal,
+  };
+}
+
 function saveProposal(run: RunRow, output: unknown) {
   const parsed = calculationOutputSchema.safeParse(output);
   const proposal = parsed.success && parsed.data.status === "proposal" ? parsed.data : null;
-  const input = { participantIds: participantsFor(run.planId).map((participant) => participant.id), arrivalDate: planById(run.planId)!.meetingDate, cityInputs: cityInputs(run).map(({ cityCode, quotes }) => ({ cityCode, quotes })), proposal: output };
-  const validation = proposal ? validateRecommendationPolicy(input) : { ok: false as const, codes: ["INVALID_PROPOSAL"] };
+  const validation = proposal
+    ? validateRecommendationPolicy(validationInput(run, output))
+    : { ok: false as const, codes: ["INVALID_PROPOSAL"] };
   const row: ProposalRow = {
     id: id("proposal"), runId: run.id, version: 1,
     status: proposal && validation.ok ? "approved" : "rejected", output, validation,
   };
   state().proposals.push(row);
+  recordEvent(run, row.status === "approved" ? "proposal_approved" : "proposal_rejected");
   if (!proposal || !validation.ok) {
     run.status = "failed";
     run.errorCode = "AGENT_PROPOSAL_INVALID";
@@ -276,33 +303,51 @@ function materializeResult(run: RunRow, proposal: ProposalRow) {
   if (!parsed.success || parsed.data.status !== "proposal" || proposal.status !== "approved" || !proposal.validation.ok) {
     throw new Error("PUBLICATION_GUARD_REJECTED");
   }
+  const validation = validateRecommendationPolicy(validationInput(run, proposal.output));
+  if (!validation.ok) throw new Error("PUBLICATION_GUARD_REJECTED");
   const output = parsed.data;
   const existing = state().results.find((result) => result.runId === run.id && result.proposalId === proposal.id);
   if (existing) return existing;
-  const quoteById = new Map(state().quotes.filter((quote) => quote.runId === run.id).map((quote) => [quote.quoteId, quote]));
+  const quoteByParticipantAndId = new Map(
+    state().quotes
+      .filter((quote) => quote.runId === run.id)
+      .map((quote) => [`${quote.participantId}:${quote.quoteId}`, quote]),
+  );
   const result: ResultRow = { id: id("result"), planId: run.planId, runId: run.id, proposalId: proposal.id, cityCode: output.cityCode, explanationZh: output.explanationZh, isShared: false, publishedAt: null, supersededAt: null };
   const staged: Array<{ scheme: SchemeRow; routes: SchemeRouteRow[] }> = [];
   for (const scheme of output.schemes) {
-    const selected = participantsFor(run.planId).map((participant) => quoteById.get(scheme.quoteIdsByParticipant[participant.id] ?? ""));
-    if (selected.some((quote) => !quote || quote.cityCode !== result.cityCode)) throw new Error("PUBLICATION_GUARD_REJECTED");
+    const selected = participantsFor(run.planId).map((participant) =>
+      quoteByParticipantAndId.get(`${participant.id}:${scheme.quoteIdsByParticipant[participant.id] ?? ""}`),
+    );
+    if (selected.some((quote, index) =>
+      !quote
+      || quote.participantId !== participantsFor(run.planId)[index]!.id
+      || quote.cityCode !== result.cityCode
+      || arrivalDateInShanghai(quote.arriveAt) !== planById(run.planId)!.meetingDate,
+    )) throw new Error("PUBLICATION_GUARD_REJECTED");
     const verified = selected as VerifiedQuote[];
+    if (verified.reduce((sum, quote) => sum + quote.priceCny, 0) !== scheme.totalFareCny) {
+      throw new Error("PUBLICATION_GUARD_REJECTED");
+    }
     const schemeRow: SchemeRow = { id: id("scheme"), resultId: result.id, kind: scheme.kind, totalFareCny: scheme.totalFareCny, totalDurationMinutes: verified.reduce((sum, quote) => sum + quote.durationMinutes, 0), latestArrivalAt: verified.map((quote) => quote.arriveAt).sort().at(-1)!, teamTransferCount: verified.reduce((sum, quote) => sum + quote.transferCount, 0) };
     staged.push({ scheme: schemeRow, routes: verified.map((quote) => ({ schemeId: schemeRow.id, participantId: quote.participantId, verifiedQuoteId: quote.id })) });
   }
   state().results.push(result);
   state().schemes.push(...staged.map((entry) => entry.scheme));
   state().schemeRoutes.push(...staged.flatMap((entry) => entry.routes));
+  recordEvent(run, "result_materialized");
   return result;
 }
 
 function publishAutomatic(run: RunRow, proposal: ProposalRow) {
-  if (state().results.some((result) => result.planId === run.planId && result.isShared && !result.supersededAt)) throw new Error("PUBLICATION_GUARD_REJECTED");
+  if (currentSharedResult(run.planId)) throw new Error("PUBLICATION_GUARD_REJECTED");
   const result = materializeResult(run, proposal);
   result.isShared = true;
   result.publishedAt = timestamp();
   run.status = "completed";
   run.completedAt = timestamp();
   planById(run.planId)!.status = "completed";
+  recordEvent(run, "result_shared");
 }
 
 export function submitFallbackProposal(runId: string, output: unknown) {
@@ -329,11 +374,21 @@ export async function advanceFallbackRun(input: { runId: string; planId: string 
   } else if (run.status === "validating") {
     const proposal = state().proposals.find((entry) => entry.runId === run.id && entry.status === "approved");
     if (!proposal) { run.status = "failed"; run.errorCode = "AGENT_PROPOSAL_INVALID"; }
-    else if (run.kind === "alternative") { materializeResult(run, proposal); run.status = "awaiting_host_confirmation"; }
+    else if (run.kind === "alternative") {
+      try {
+        materializeResult(run, proposal);
+        run.status = "awaiting_host_confirmation";
+      } catch {
+        run.status = "failed";
+        run.errorCode = "PUBLICATION_GUARD_REJECTED";
+        run.completedAt = timestamp();
+      }
+    }
     else {
       try { publishAutomatic(run, proposal); } catch { run.status = "failed"; run.errorCode = "PUBLICATION_GUARD_REJECTED"; run.completedAt = timestamp(); }
     }
   }
+  recordEvent(run, "run_advanced");
   return publicProgress(run)!;
 }
 
@@ -352,12 +407,14 @@ export async function confirmFallbackAlternative(input: { runId: string; hostTok
   if (!credential || !await verifyToken(input.hostToken, credential.hostTokenHash)) throw new Error("INVALID_HOST_TOKEN");
   const result = state().results.find((entry) => entry.runId === run.id);
   if (!result) throw new Error("PUBLICATION_GUARD_REJECTED");
-  const current = state().results.find((entry) => entry.planId === run.planId && entry.isShared && !entry.supersededAt);
-  if (current) current.supersededAt = timestamp();
+  const current = currentSharedResult(run.planId);
+  if (!current) throw new Error("PUBLICATION_GUARD_REJECTED");
+  current.supersededAt = timestamp();
   result.isShared = true;
   result.publishedAt = timestamp();
   run.status = "completed";
   run.completedAt = timestamp();
+  recordEvent(run, "result_shared");
   return result;
 }
 
@@ -365,7 +422,7 @@ export function readFallbackPlan(code: string) {
   const plan = planFor(code);
   if (!plan) return null;
   const run = latestRun(plan.id);
-  const shared = run?.status === "completed" ? state().results.find((result) => result.runId === run.id && result.isShared) ?? null : null;
+  const shared = currentSharedResult(plan.id);
   return {
     plan: publicPlan(plan),
     participants: participantsFor(plan.id).map((participant) => ({ id: participant.id, name: participant.name, departure_city_name: participant.departureCityName, accepted_modes: participant.acceptedModes })),

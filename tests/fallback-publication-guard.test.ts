@@ -101,9 +101,23 @@ describe("fallback publication guard", () => {
 
     await expect(readFallbackPrivatePreview({ runId: preview.runId, participantToken: input.first.editToken })).resolves.toBeNull();
     await expect(readFallbackPrivatePreview({ runId: preview.runId, participantToken: input.second.editToken })).resolves.toMatchObject({ cityCode: "wuhan", isShared: false });
-    expect(readFallbackPlan(input.created.code)?.latestSharedResult).toBeNull();
+    expect(readFallbackPlan(input.created.code)?.latestSharedResult).toMatchObject({ cityCode: "beijing", isShared: true });
 
     await expect(confirmFallbackAlternative({ runId: preview.runId, hostToken: input.created.hostToken })).resolves.toMatchObject({ cityCode: "wuhan", isShared: true });
     expect(readFallbackPlan(input.created.code)?.latestSharedResult).toMatchObject({ cityCode: "wuhan", isShared: true });
+  });
+
+  it("rejects confirming an alternative when there is no shared result to replace", async () => {
+    const input = await setup();
+    const preview = await createFallbackAlternativePreview({ code: input.created.code, participantToken: input.second.editToken, cityCode: "wuhan" });
+    await advanceFallbackRun({ runId: preview.runId, planId: input.planId });
+    seedFallbackVerifiedQuotes(preview.runId, [quote(input.first.participantId, "wuhan", "1"), quote(input.second.participantId, "wuhan", "2")]);
+    await advanceFallbackRun({ runId: preview.runId, planId: input.planId });
+    await advanceFallbackRun({ runId: preview.runId, planId: input.planId });
+    await advanceFallbackRun({ runId: preview.runId, planId: input.planId });
+
+    await expect(confirmFallbackAlternative({ runId: preview.runId, hostToken: input.created.hostToken }))
+      .rejects.toThrow("PUBLICATION_GUARD_REJECTED");
+    expect(readFallbackPlan(input.created.code)?.latestSharedResult).toBeNull();
   });
 });
