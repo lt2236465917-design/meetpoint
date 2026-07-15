@@ -39,6 +39,29 @@ describe("multi-agent migration", () => {
     expect(sql).toContain("revoke all on table participant_credentials");
   });
 
+  it("drops the legacy run status check before migrating incomplete runs", async () => {
+    const sql = (await readFile(migrationPath, "utf8")).toLowerCase();
+    const dropConstraintAt = sql.indexOf(
+      "drop constraint recommendation_runs_status_check",
+    );
+    const migrateLegacyRunsAt = sql.indexOf("update recommendation_runs");
+    const addConstraintAt = sql.indexOf(
+      "add constraint recommendation_runs_status_check",
+    );
+
+    expect(dropConstraintAt).toBeGreaterThan(-1);
+    expect(migrateLegacyRunsAt).toBeGreaterThan(dropConstraintAt);
+    expect(addConstraintAt).toBeGreaterThan(migrateLegacyRunsAt);
+  });
+
+  it("omits the legacy running-only index from the canonical schema", async () => {
+    const schema = (await readFile("supabase/schema.sql", "utf8")).toLowerCase();
+
+    expect(schema).not.toContain("recommendation_runs_one_running_per_plan");
+    expect(schema).not.toContain("where status = 'running'");
+    expect(schema).toContain("recommendation_runs_one_active_per_plan");
+  });
+
   it("makes publication atomic and server-only", async () => {
     const sql = (await readFile(migrationPath, "utf8")).toLowerCase();
 
@@ -88,6 +111,24 @@ describe("multi-agent migration", () => {
     );
     expect(sql).toMatch(
       /confirm_alternative_result[\s\S]*?output_json[\s\S]*?quoteidsbyparticipant/,
+    );
+  });
+
+  it("rejects participant routes using an unaccepted transport mode", async () => {
+    const sql = (await readFile(migrationPath, "utf8")).toLowerCase();
+    const publishAt = sql.indexOf("create function publish_shared_result");
+    const confirmAt = sql.indexOf("create function confirm_alternative_result");
+    const revokeAt = sql.indexOf(
+      "revoke execute on function publish_shared_result",
+    );
+    const publishFunction = sql.slice(publishAt, confirmAt);
+    const confirmFunction = sql.slice(confirmAt, revokeAt);
+
+    expect(publishFunction).toContain(
+      "quote.mode = any (participant.accepted_modes)",
+    );
+    expect(confirmFunction).toContain(
+      "quote.mode = any (participant.accepted_modes)",
     );
   });
 });

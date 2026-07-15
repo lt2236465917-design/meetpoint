@@ -20,6 +20,9 @@ create table plan_credentials (
 
 drop index if exists recommendation_runs_one_running_per_plan;
 
+alter table recommendation_runs
+  drop constraint recommendation_runs_status_check;
+
 update recommendation_runs
 set
   status = 'incomplete',
@@ -31,7 +34,6 @@ set
 where status in ('running', 'partial');
 
 alter table recommendation_runs
-  drop constraint recommendation_runs_status_check,
   add column kind text not null default 'automatic'
     check (kind in ('automatic', 'alternative')),
   add column requested_city_code text,
@@ -356,6 +358,7 @@ begin
           or quote.run_id <> p_run_id
           or quote.participant_id <> scheme_route.participant_id
           or quote.city_code <> v_result.city_code
+          or not (quote.mode = any (participant.accepted_modes))
           or (quote.arrive_at at time zone 'Asia/Shanghai')::date <> v_meeting_date
           or quote.quote_id is distinct from v_proposal.output_json #>> array[
             'schemes',
@@ -547,6 +550,7 @@ begin
           or quote.run_id <> p_run_id
           or quote.participant_id <> scheme_route.participant_id
           or quote.city_code <> v_result.city_code
+          or not (quote.mode = any (participant.accepted_modes))
           or (quote.arrive_at at time zone 'Asia/Shanghai')::date <> v_meeting_date
           or quote.quote_id is distinct from v_proposal.output_json #>> array[
             'schemes',

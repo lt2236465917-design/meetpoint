@@ -83,10 +83,6 @@ create table if not exists recommendation_runs (
   )
 );
 
-create unique index if not exists recommendation_runs_one_running_per_plan
-  on recommendation_runs (plan_id)
-  where status = 'running';
-
 create unique index if not exists recommendation_runs_one_active_per_plan
   on recommendation_runs (plan_id)
   where status in (
@@ -430,6 +426,7 @@ begin
           or quote.run_id <> p_run_id
           or quote.participant_id <> scheme_route.participant_id
           or quote.city_code <> v_result.city_code
+          or not (quote.mode = any (participant.accepted_modes))
           or (quote.arrive_at at time zone 'Asia/Shanghai')::date <> v_meeting_date
           or quote.quote_id is distinct from v_proposal.output_json #>> array[
             'schemes',
@@ -585,6 +582,7 @@ begin
           or quote.run_id <> p_run_id
           or quote.participant_id <> scheme_route.participant_id
           or quote.city_code <> v_result.city_code
+          or not (quote.mode = any (participant.accepted_modes))
           or (quote.arrive_at at time zone 'Asia/Shanghai')::date <> v_meeting_date
           or quote.quote_id is distinct from v_proposal.output_json #>> array[
             'schemes',
