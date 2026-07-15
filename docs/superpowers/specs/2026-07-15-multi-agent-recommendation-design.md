@@ -1,14 +1,14 @@
 # Multi-Agent Recommendation Product And Architecture Design
 
-**Status:** Approved design; implementation has not started
+**Status:** Approved design; implementation in progress through Task 11
 
 **Date:** 2026-07-15
 
 ## Authority And Migration Status
 
-This specification defines the next product and architecture version. It supersedes conflicting product decisions in earlier MVP specifications about target arrival time, estimated recommendations, three result cities/cards, and explanation-only LLM use. Earlier specifications and plans remain unchanged as historical implementation records.
+This specification defines the approved product and architecture version. It supersedes conflicting product decisions in earlier MVP specifications about target arrival time, estimated recommendations, three result cities/cards, and explanation-only LLM use. Earlier specifications and plans remain unchanged as historical implementation records.
 
-The current code still uses a target arrival time, deterministic three-label ranking, and estimated fallback rows. `README.md`, `docs/architecture.md`, and `docs/integration-guide.md` continue to describe that deployed behavior until this design is implemented and accepted. Do not describe this target architecture as live before then.
+Implementation progress is tracked exclusively in `.superpowers/sdd/progress.md`. Tasks 1–11 are implemented; Tasks 12–14 remain. The shared result is one city with saving/fast schemes, but private alternative confirmation, legacy-path removal, PostgreSQL/Supabase migration smoke, supplier coverage, and real-device acceptance are not complete. Do not describe the full architecture as released before the Task 14 gate passes.
 
 ## Product Goal
 
@@ -290,6 +290,6 @@ Recommendation cards and the shared result entry appear only for a `completed` r
 - hotel or return-trip costs;
 - allowing an agent to bypass gateway limits, deterministic validation, host confirmation, or publication state transitions.
 
-## Required Next Step
+## Implementation Authority
 
-Create a reviewed implementation plan from this specification before modifying product code. The plan must separate schema/API migration, agent runtime and tools, query scheduling, Calculation/Supervisor policy validation, UI migration, historical data handling, tests, and live acceptance.
+The reviewed implementation sequence is `docs/superpowers/plans/2026-07-15-multi-agent-recommendation-implementation.md`; recovery status is `.superpowers/sdd/progress.md`. Complete Tasks 12–14 in order, and keep Task 14 as the release gate for PostgreSQL/Supabase migration smoke, supplier coverage, and real-device acceptance.

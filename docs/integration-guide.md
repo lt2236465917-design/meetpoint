@@ -38,14 +38,15 @@ Recent meeting records are browser-local convenience data stored in `localStorag
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Browser and server | Public anon key for browser reads. |
 | `SUPABASE_SERVICE_ROLE_KEY` | Server only | Service-role key for route handlers and calculations. |
 | `AMAP_API_KEY` | Server only | Local-miss Amap city validation for city-level selectable results. |
-| `DEEPSEEK_API_KEY` | Server only | DeepSeek explanations and share copy only. |
+| `DEEPSEEK_API_KEY` | Server only | Provider-neutral Calculation/Supervisor model and the legacy explanation endpoint. |
 | `DEEPSEEK_MODEL` | Server only | Optional server-side model override; defaults to `deepseek-v4-flash`. |
 | `FLYAI_PROBE_CLI_PATH` | Server only | Optional operator-only executable override for the redacted FlyAI probe. |
 | `TRAVEL_GATEWAY_URL` | Server only | Internal gateway URL used by the main-app travel provider. |
 | `TRAVEL_GATEWAY_TOKEN` | Server only | Bearer token for the internal gateway. |
 | `TRAVEL_GATEWAY_TIMEOUT_MS` | Server only | Main-app gateway request timeout; defaults to `30000` ms. |
-| `TRAVEL_CALCULATION_TIMEOUT_MS` | Server only | Optional total travel-query budget override; without it, the budget is the greater of 45 seconds or 25 seconds per distinct route/mode group. |
-| `TRAVEL_SECONDARY_QUERY_TIMEOUT_MS` | Server only | Second-pass budget for route groups unfinished in the first calculation pass; defaults to `15000` ms. |
+| `AGENT_QUERY_CONCURRENCY` | Server only | Logical QueryAgent workers, clamped to `1..8`; defaults to `4` without increasing gateway supplier concurrency. |
+| `TRAVEL_CALCULATION_TIMEOUT_MS` | Server only | Legacy travel-search budget retained until Task 13; defaults to `45000` ms. |
+| `TRAVEL_SECONDARY_QUERY_TIMEOUT_MS` | Server only | Legacy second-pass travel-search budget retained until Task 13; defaults to `15000` ms. |
 
 ## API Quick Reference
 
@@ -181,6 +182,15 @@ Returns:
 | `CALCULATION_IN_PROGRESS` | A calculation for this plan is already running; clients should wait for polling refresh. |
 | `RUN_NOT_FOUND` | No recommendation run exists for the plan. |
 
+Terminal run progress may expose these `diagnosticCode` values without publishing result cards:
+
+| Diagnostic | Meaning |
+| --- | --- |
+| `REAL_QUOTE_COVERAGE_INCOMPLETE` | At least one participant lacks a complete verified route for every required scheme; retry after supplier recovery. |
+| `AGENT_MODEL_UNAVAILABLE` | The provider-neutral model could not be created; check server-only model credentials and availability. |
+| `AGENT_PROPOSAL_INVALID` | Calculation/Supervisor output did not pass the bounded review and deterministic validators. |
+| `PUBLICATION_GUARD_REJECTED` | The persisted proposal/result failed final deterministic publication checks. |
+
 ## Manual Smoke Path
 
 1. Open `/create`, create a plan, and copy the public link.
@@ -189,7 +199,8 @@ Returns:
 4. After each participant submit, confirm the browser returns to `/p/[code]` and the filling records update without a manual refresh.
 5. When the participant limit is reached on a device that filled the plan, use the public plan page's direct "开始计算" action.
 6. Confirm the calculate request returns HTTP 202 and the advance endpoint reports a run ID and progress.
-7. Without Supabase and supplier-backed verified quotes, confirm the fallback run ends `incomplete` and exposes no shared result. One-city/two-scheme UI, PostgreSQL migration, real supplier coverage, and device acceptance remain unfinished work.
+7. Without Supabase and supplier-backed verified quotes, confirm the fallback run ends `incomplete` and exposes no shared result. The one-city/two-scheme UI is implemented; PostgreSQL migration smoke, real supplier coverage, and device acceptance remain Task 14 work.
+8. With a completed fixture or Supabase-backed run, confirm the result page shows one city, exactly saving/fast schemes, every persisted participant route, China-time quote freshness, and no estimate, average-fare, three-city, or booking-link UI.
 
 ## Responsive UI Checks
 
@@ -229,11 +240,11 @@ TRAVEL_GATEWAY_URL=http://127.0.0.1:8080
 TRAVEL_GATEWAY_TOKEN=<same value as services/travel-provider-gateway/.env>
 ```
 
-If these root variables are missing, `src/lib/travel/gateway-client.ts` reports the gateway as not configured and the main app falls back to estimates. If `/v1/search` returns `404` with `PROVIDER_NO_ROUTE` or `PROVIDER_NO_TICKET`, the gateway reached FlyAI but no usable route fact was available for that route/mode. If it returns `429` with `PROVIDER_RATE_LIMITED`, reduce probe volume or wait for quota recovery; this includes FlyAI/Fliggy `MCP HTTP 403` risk-control responses such as abnormal access behavior. If it returns `503` with `PROVIDER_UNAVAILABLE` or `PROVIDER_UPSTREAM_UNAVAILABLE`, treat it as supplier instability until a redacted direct gateway probe proves otherwise. If it returns `502` with `PROVIDER_CLI_FAILED` or `PROVIDER_INVALID_RESPONSE`, inspect gateway deployment and adapter normalization before changing main-app fallback behavior. Stable provider error codes are retained on estimated fallback rows as `travel_options.failure_reason` and appear on result cards as the estimate reason, so result-page checks and operations review can distinguish rate limiting, upstream unavailability, invalid responses, and local gateway unavailability.
+If these root variables are missing, `src/lib/travel/gateway-client.ts` reports the gateway as unavailable. In the active Multi-Agent path, route tasks follow bounded retry/cooldown rules and incomplete real coverage ends without publishing a shared result; it never converts the missing evidence into an estimate. If `/v1/search` returns `404` with `PROVIDER_NO_ROUTE` or `PROVIDER_NO_TICKET`, the gateway reached FlyAI but no usable route fact was available for that route/mode. If it returns `429` with `PROVIDER_RATE_LIMITED`, reduce probe volume or wait for quota recovery; this includes FlyAI/Fliggy `MCP HTTP 403` risk-control responses such as abnormal access behavior. If it returns `503` with `PROVIDER_UNAVAILABLE` or `PROVIDER_UPSTREAM_UNAVAILABLE`, treat it as supplier instability until a redacted direct gateway probe proves otherwise. If it returns `502` with `PROVIDER_CLI_FAILED` or `PROVIDER_INVALID_RESPONSE`, inspect gateway deployment and adapter normalization before changing retry policy. Legacy estimate modules still retain stable failure reasons but are not part of the guarded shared-result path and remain scheduled for Task 13 removal.
 
-The gateway contract, cache/retry/concurrency behavior, and container policy are locally verified with fixtures. The gateway executes supplier calls one at a time, joins same-key cache misses to one in-flight call, and caches only successful normalized responses. The main app also submits distinct route/mode groups serially; its default total collection budget is the greater of 45 seconds or 25 seconds per group, while `TRAVEL_CALCULATION_TIMEOUT_MS` remains an explicit override. This alignment prevents queued successful responses from being discarded as generic estimates. `PROVIDER_RATE_LIMITED` never retries immediately: it applies a global 5-second cooldown, then a 15-second cooldown if the first post-cooldown supplier call is also limited. The main application likewise does not immediately retry a rate-limited mode; it creates an estimated row retaining `PROVIDER_RATE_LIMITED`. Timeout, unavailable, and upstream-unavailable failures still retry once. Run `npm run probe:providers` from the repository root only with operator-managed keys; it outputs only redacted status/count/latency/field-name summaries. Supplier coverage is unverified until a new full plan has produced route-fingerprint diagnostics after cooldown; neither `/healthz` nor a single successful fare row proves supplier-wide authorization, quota recovery, or production readiness.
+The gateway contract, cache/retry/concurrency behavior, and container policy are locally verified with fixtures. The gateway executes supplier calls one at a time, joins same-key cache misses to one in-flight call, and caches only successful normalized responses. QueryAgent also serializes physical route/mode work and shares identical in-flight keys. `PROVIDER_RATE_LIMITED` never retries immediately: it applies a global 5-second cooldown, then a 15-second cooldown if the first post-cooldown supplier call is also limited; the run exposes `cooling_down` and a retry time. Retryable failures receive bounded recovery, while missing complete real coverage ends `incomplete`. Run `npm run probe:providers` from the repository root only with operator-managed keys; it outputs only redacted status/count/latency/field-name summaries. Supplier coverage is unverified until a new full plan has produced route-fingerprint diagnostics after cooldown; neither `/healthz` nor a single successful fare row proves supplier-wide authorization, quota recovery, or production readiness.
 
-After a supplier cooldown, use a new full plan for a live-ticket check. Real rows must still be labeled `飞猪参考价`; rows without a real response remain `估算` with their stable reason.
+After a supplier cooldown, use a new full plan for a live-ticket check. A completed shared result must contain verified FlyAI routes for every participant in both schemes; any coverage gap must remain unpublished and end with retry/diagnostic guidance.
 
 Treat any future Fliggy/FlyAI MCP as a gateway-side provider adapter. Before enabling it for recommendation runs, compare it against FlyAI with the same fixed origin/candidate/mode probe set and verify stable price units, China-time timestamps, safe booking URLs, error classifications, and production authorization.
 
@@ -242,16 +253,15 @@ Treat any future Fliggy/FlyAI MCP as a gateway-side provider adapter. Before ena
 Use these checks after wiring FlyAI/Fliggy or another ticket source and Amap city data. Until a human confirms authorization, quota, real fields, price units, timestamp semantics, and booking-link behavior, treat supplier acceptance as unverified even when fixture tests pass.
 
 1. Create a full plan with at least two departure cities and both flight and high-speed-rail preferences.
-2. Confirm each selected per-participant route stores the provider source, real `price_cny`, `duration_minutes`, `depart_at`, `arrive_at`, and `service_name` in `travel_options`.
-3. Open `/p/[code]/result` and confirm every recommendation card still shows the same shared city ranking to all viewers, plus each person's departure city, transport mode, real price, duration, and train number or flight number.
-4. Confirm real FlyAI rows show train or flight number, station names when available, China-time departure and arrival time, duration, fare, "飞猪参考价", and a China-time query timestamp. Result cards must not render booking links or "去飞猪查看" actions.
-5. Confirm estimated rows show "估算" plus a stable fallback reason when available, such as `PROVIDER_RATE_LIMITED` or `GATEWAY_UNAVAILABLE`; mixed real and fallback cards show "部分数据为估算".
+2. Confirm normalized supplier facts persist in `verified_quotes`, and each `recommendation_scheme_routes` row points to the exact verified quote selected for that participant.
+3. Open `/p/[code]/result` and confirm all viewers see one shared city, exactly “省钱方案” and “省时方案”, team total fare/duration/transfers, and every participant route.
+4. Confirm each route shows participant, departure city or station, transport/service, China-time departure and arrival, duration, transfer count, fare, provider label, short quote fingerprint, and China-time query timestamp.
+5. Confirm the page contains no estimated fare, average fare, fairness/three-city ranking, or booking URL/action. If any participant lacks real coverage, confirm the run is `incomplete` and no scheme card is published.
 6. Search city names through `/api/cities/search?q=...` and the join-page city combobox; confirm Amap-backed results normalize to the same city code/name shape used by recommendation and ticket lookup.
 
 ## DeepSeek Acceptance
 
 1. Store a valid `DEEPSEEK_API_KEY` only in `.env.local` and optionally set `DEEPSEEK_MODEL`; never paste the key into commands, logs, or documentation.
-2. Run the local app, complete a fallback-mode plan calculation, and call `POST /api/plans/[code]/explain`.
-3. Confirm the response is `{ "ok": true, "count": <latest recommendation count> }`.
-4. Confirm the latest recommendations contain non-empty Chinese explanations while rankings, scores, and travel options remain unchanged.
-5. Temporarily use an invalid key and repeat; confirm deterministic fallback explanations are stored and the endpoint still succeeds.
+2. For the active Supabase-backed flow, advance a fully covered run through `calculating` and `validating`; confirm Calculation and Supervisor outputs reference only persisted verified quote IDs and the publication guard replays the proposal before `completed`.
+3. Remove or invalidate the key and repeat with a new run; confirm it fails closed with `AGENT_MODEL_UNAVAILABLE` or a model validation diagnostic and publishes no result.
+4. The legacy `POST /api/plans/[code]/explain` endpoint still falls back to deterministic Chinese copy on provider failure without changing legacy scores or routes. Treat it as a compatibility path scheduled for Task 13 removal, not as the Multi-Agent publication flow.

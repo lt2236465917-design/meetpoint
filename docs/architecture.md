@@ -2,7 +2,7 @@
 
 This document is the stable technical map for the running system. Detailed task history lives in git commits and `docs/superpowers/plans/`.
 
-The approved next product and Multi-Agent architecture is documented separately in `docs/superpowers/specs/2026-07-15-multi-agent-recommendation-design.md`. Tasks 1–10 are implemented and independently reviewed; Tasks 11–14 remain. The PostgreSQL/Supabase migration and real supplier/device acceptance have not run. The result UI is still legacy and cannot validate the target publication contract.
+The approved product and Multi-Agent architecture is documented separately in `docs/superpowers/specs/2026-07-15-multi-agent-recommendation-design.md`. Tasks 1–11 are implemented; Tasks 12–14 remain. The shared result now renders one city and the persisted saving/fast schemes, but private alternative confirmation, legacy-path removal, the PostgreSQL/Supabase migration smoke, and real supplier/device acceptance are not complete.
 
 ## Runtime Shape
 
@@ -22,7 +22,7 @@ The approved next product and Multi-Agent architecture is documented separately 
 | `/p/[code]` | Public plan summary, auto-refreshed participant completion state, filling records, join entry, result entry, and direct calculation for local participants once the participant limit is reached. |
 | `/p/[code]/join` | Participant submits name, departure city, and accepted transport modes, then returns to the public plan page automatically. |
 | `/p/[code]/manage` | Legacy route that points users back to the public plan page. |
-| `/p/[code]/result` | Shows the latest shared team recommendation run, stale-result warning, team total fare, total duration, fairness gap, and per-participant travel details. |
+| `/p/[code]/result` | Shows one published city and exactly saving/fast schemes from persisted scheme routes after completion; all other run states show progress, retry, or diagnostic guidance without result cards. |
 
 ## API Routes
 
@@ -45,7 +45,7 @@ The approved next product and Multi-Agent architecture is documented separately 
 3. Candidate controls can be read from `candidate_cities`; manual candidate editing is disabled in the current no-management-token flow.
 4. After participant-token authorization, `POST /calculate` creates one `pending` automatic run and its route-task matrix, then returns HTTP 202. A duplicate active run receives `409 CALCULATION_IN_PROGRESS`. `POST /runs/[runId]/advance` owns a persisted lease in the Supabase path and performs at most one transition or bounded query batch. It accepts only verified quotes, requires at least one city with complete participant coverage, validates the deterministic saving/fast proposal, then invokes the guarded publication RPC. An automatic run cannot replace an existing shared result.
 5. The legacy explain API can regenerate explanation fields for legacy recommendation rows without changing their deterministic scores. It is not the target result-publication path.
-6. `GET /api/plans/[code]` exposes progress and exposes `latestSharedResult` only when the latest run is `completed`. The current `/result` screen still reads legacy recommendation tables, so Task 11 must replace it with the one-city/two-scheme result view before the target experience can be accepted.
+6. `GET /api/plans/[code]` exposes progress and exposes `latestSharedResult` only when the latest run is `completed`. The `/result` screen independently loads the shared `recommendation_results` row, its two `recommendation_schemes`, and each persisted `recommendation_scheme_routes` selection joined to the participant and verified quote. It renders those stored selections directly and never reselects a route in the browser.
 7. The browser stores local recent meeting records in `localStorage` when a plan is created, opened, or joined. Participant records keep the participant edit token on the filling device so the public plan page can show direct calculation after the plan is full. The homepage recent-record store refreshes on same-tab updates, `storage`, `pageshow`, and window focus so plans created on another route still appear after returning to `/`. This is a convenience layer only and is not a server-side history.
 
 In fallback mode, the same logical records are kept in process memory instead of Supabase. Tests may inject validated quotes, but the running app does not call suppliers in this mode; missing coverage ends the run as `incomplete` and no estimate or shared result is synthesized.
@@ -57,7 +57,7 @@ In fallback mode, the same logical records are kept in process memory instead of
 3. `services/travel-provider-gateway/` owns FlyAI credentials and CLI execution. Its HTTP boundary is `GET /healthz` and bearer-authenticated `POST /v1/search`; requests and responses are strict Zod schemas. `/healthz` proves only process reachability, never supplier quota, risk-control clearance, or real-ticket availability.
 4. The gateway uses argument-array `execFile` calls with shell execution disabled, a 12-second provider timeout, a five-minute route-facts cache, and global FIFO concurrency limited to one supplier call. Cache misses for the same normalized route key share one in-flight provider call. Timeout, unavailable, and upstream-unavailable failures retry once; a rate-limit failure never retries immediately, instead imposing a 5-second global cooldown and escalating the next cooldown to 15 seconds if the first post-cooldown supplier call is also rate limited. It classifies FlyAI CLI failures into stable no-route, no-ticket, rate-limit, upstream-unavailable, CLI-failed, timeout, unavailable, and invalid-response errors without returning raw provider output; FlyAI/Fliggy 403 risk-control rejections are treated as rate-limit failures. Only the default FlyAI path writes the server-only `flyai_diagnostic` event, containing a hashed route fingerprint, mode, outcome, field-name arrays, item counts, dropped categories, and CLI error code; it never contains provider text, ticket facts, city names, identities, or secrets and is not an HTTP, cache, or database contract. It does not receive participant identity, generate candidates, select routes, score cities, call DeepSeek, or persist plans.
 5. The gateway accepts both the fixture-era normalized FlyAI rows and the live FlyAI `data.itemList` response shape. Live price strings are normalized to integer CNY values, local China-time strings are converted to offset timestamps, and `jumpUrl` is admitted only through the booking URL allowlist. Each live item is validated independently: malformed siblings are dropped with a redacted category, while a non-empty list with no valid route becomes `PROVIDER_INVALID_RESPONSE`.
-6. The main application sends one authenticated JSON request per distinct accepted mode. It submits route/mode groups serially to match the gateway's single-supplier FIFO and, unless `TRAVEL_CALCULATION_TIMEOUT_MS` explicitly overrides the policy, gives the collection a 25-second budget per group with a 45-second minimum. This prevents valid responses waiting in the serial queue from being discarded as generic estimates. Route groups genuinely unfinished within that calculated budget receive one second-pass lookup before estimates are used, except that `PROVIDER_RATE_LIMITED` never receives an immediate same-mode retry. The app strictly validates responses, maps facts to the participant only after the gateway response, deterministically orders valid route facts before scoring, and keeps per-mode failures as estimates. When the gateway returns a stable provider error code, such as `PROVIDER_RATE_LIMITED`, the estimated fallback row preserves that code in `failureReason` and persists it as `travel_options.failure_reason`; result cards surface the same reason beside the estimated source label. Result cards show real route details without rendering provider booking links; production enablement still depends on supplier route coverage/quota behavior and full user-flow acceptance.
+6. The active Multi-Agent path runs up to `AGENT_QUERY_CONCURRENCY` logical QueryAgent workers (default `4`, clamped to `1..8`), while its physical scheduler serializes supplier work and deduplicates identical in-flight route/mode keys. Strictly validated real options become immutable `verified_quotes`; no participant identity crosses the gateway boundary. Retryable failures enter bounded cooldown/recovery, empty or terminal outcomes remain explicit, and incomplete real coverage ends the run as `incomplete` without a shared result. Legacy estimate-provider modules still exist for Task 13 cleanup but are not accepted by the guarded shared-result path. Production enablement still depends on supplier route coverage/quota behavior and full user-flow acceptance.
 7. Any future Fliggy/FlyAI MCP integration belongs behind the travel gateway as another provider adapter. The main app should keep calling the same normalized gateway contract, and provider replacement decisions should be based on fixed route/mode probe comparisons for coverage, stable fields, booking URL safety, and error classification.
 
 ## Core Modules
@@ -68,6 +68,8 @@ In fallback mode, the same logical records are kept in process memory instead of
 | `src/components/plan/PublicPlanContent.tsx` | Client public-plan content that keeps participant status fresh by polling the read-plan API. |
 | `src/components/plan/JoinParticipantForm.tsx` | Participant submission form with labeled controls and a post-submit return action. |
 | `src/components/plan/RecentMeetingRecords.tsx` | Homepage local recent-record list backed by `useSyncExternalStore` and cached snapshots. |
+| `src/components/result/SharedRecommendation.tsx`, `SchemeCard.tsx` | One-city/two-scheme shared result that renders persisted scheme-route rows, team totals, quote fingerprints, and China-time freshness without booking links or client-side route selection. |
+| `src/components/result/RefreshingResultNotice.tsx` | Chinese progress, cooldown, retry, and diagnostic feedback for every run status with bounded refresh backoff. |
 | `src/lib/city/candidate-generator.ts` | Deterministic candidate-city generation from participant cities and host controls. |
 | `src/lib/city/amap-client.ts`, `src/lib/city/city-provider.ts` | Local-first city search and Amap validation; city-level remote matches can be selected, while non-city remote places never enter scoring. |
 | `src/lib/fallback/mvp-store.ts` | In-memory local fallback persistence with target run states and publication guards; tests can seed verified quotes, while the running app cannot query suppliers in this mode. |
@@ -75,8 +77,8 @@ In fallback mode, the same logical records are kept in process memory instead of
 | `src/lib/recommendation/repository.ts` | Server-side persistence and guarded RPC boundary; it does not make policy decisions. |
 | `src/lib/recommendation/policy.ts`, `validators.ts` | Deterministic one-city/saving/fast policy replay and evidence/publication validation. |
 | `src/lib/travel/types.ts` | Vendor-neutral travel-provider interface plus main-app gateway request/response types. |
-| `src/lib/travel/estimate-provider.ts` | Deterministic estimated option fallback. |
-| `src/lib/travel/gateway-client.ts`, `src/lib/travel/flyai-provider.ts` | Server-only authenticated gateway client and per-mode fallback provider; no participant identity crosses this boundary. |
+| `src/lib/travel/estimate-provider.ts`, `src/lib/travel/flyai-provider.ts` | Legacy estimate path retained only until Task 13; it must not feed the guarded shared result. |
+| `src/lib/travel/gateway-client.ts` | Server-only authenticated gateway client used by QueryAgent; no participant identity crosses this boundary. |
 | `src/lib/travel/booking-url.ts` | Booking URL allowlist retained for validation and storage boundaries; result cards do not render booking actions. |
 | `services/travel-provider-gateway/src/contracts.ts` | Strict normalized gateway request, option, response, and stable error contracts. |
 | `services/travel-provider-gateway/src/flyai-adapter.ts` | Safe FlyAI CLI adapter with fixture and live `data.itemList` response normalization. |
@@ -87,14 +89,12 @@ In fallback mode, the same logical records are kept in process memory instead of
 | `src/lib/ai/recommendation-explainer.ts` | Strict Chinese JSON prompt, validation, and deterministic fallback for recommendation explanations. |
 | `src/lib/ui/meeting-history.ts` | Browser-local recent-record parsing, dedupe, snapshot caching, and storage helpers. |
 
-## AI Explanation Flow
+## Agent And Legacy Explanation Flows
 
-1. Calculation or `POST /api/plans/[code]/explain` passes an already-computed `CityRecommendation` to `explainRecommendation`.
-2. The server-only client uses `DEEPSEEK_MODEL` or defaults to `deepseek-v4-flash`; each request attempt times out after 15 seconds and the SDK retries at most once.
-3. DeepSeek is asked for a JSON object containing exactly `short_reason`, `risk_badges`, `share_summary`, and `detail_explanation`.
-4. Zod rejects unknown fields, blank values, and prose or badge values without a Han character.
-5. Missing credentials, request errors or timeouts, empty content, malformed JSON, and schema-invalid output all return deterministic fallback copy.
-6. Only explanation-related fields may be persisted; tickets, candidates, scores, and recommendation ordering remain unchanged.
+1. Manager and Query orchestration are deterministic. After complete verified-quote coverage, Calculation and Supervisor call the provider-neutral `AgentModel`; the current provider is DeepSeek using `DEEPSEEK_MODEL` or `deepseek-v4-flash`.
+2. The model receives bounded, sanitized inputs and strict closed output schemas. Calculation can reference only verified quote IDs; Supervisor returns an allowlisted decision/correction contract.
+3. Missing credentials, unavailable models, invalid output, or two rejected proposals fail the run closed. Deterministic validators recheck quote ownership, arrival dates, totals, scheme policy, and publication state before any shared result can become visible.
+4. The legacy `POST /api/plans/[code]/explain` path still requests the four Chinese fields `short_reason`, `risk_badges`, `share_summary`, and `detail_explanation`, and falls back to deterministic copy without changing legacy scores or routes. Task 13 removes this obsolete recommendation path.
 
 ## Security Boundaries
 
@@ -103,7 +103,7 @@ In fallback mode, the same logical records are kept in process memory instead of
 - Participant edit tokens are stored as hashes only.
 - Calculation requires a participant edit token from a participant in the plan, and the server checks that the participant limit has been reached before calculating.
 - Local participant permissions are a same-device convenience and not an auth boundary; server-side calculation still verifies the participant edit token hash.
-- Ticket normalization, coverage checks, policy replay, evidence validation, and publication guards remain deterministic. In the target in-progress pipeline, an agent may propose from verified quote IDs, but it cannot invent or mutate supplier facts and publication replays the policy deterministically.
+- Ticket normalization, coverage checks, policy replay, evidence validation, and publication guards remain deterministic. An agent may propose only from verified quote IDs; it cannot invent or mutate supplier facts, and publication replays the policy deterministically.
 - Result recommendations are plan-level shared decisions, not personalized rankings. The UI should surface team total fare and per-person route choices instead of average fare.
 - Fallback mode is local-only and must not be treated as durable storage.
 - Gateway logs and errors must exclude credentials, authorization headers, participant names, raw provider payloads, and complete booking URLs. Booking URLs are accepted only when HTTPS and on the approved `fliggy.com`, `alitrip.com`, or `feizhu.com` hosts (including subdomains).

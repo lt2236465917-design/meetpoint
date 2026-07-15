@@ -8,11 +8,11 @@ This project is a mobile-first Web H5 app for multi-person cross-city meeting pl
 
 - Use Chinese for user-facing copy.
 - Use English for code, files, variables, and commit messages.
-- Keep supplier facts, fare arithmetic, date filtering, evidence validation, and publication guardrails deterministic. The approved next architecture lets a policy-constrained Calculation Agent choose routes and the winning city only from verified quote IDs; see `docs/superpowers/specs/2026-07-15-multi-agent-recommendation-design.md`.
+- Keep supplier facts, fare arithmetic, date filtering, evidence validation, and publication guardrails deterministic. The Calculation Agent may choose routes and the winning city only from verified quote IDs; see `docs/superpowers/specs/2026-07-15-multi-agent-recommendation-design.md`.
 - Treat results as shared team decisions: publish one city with saving and fast schemes, show per-participant travel details, and do not use average fare as a UI decision metric.
-- Do not publish estimated fares or incomplete participant coverage in the approved next result flow. Until that architecture is implemented, document current estimate fallback behavior explicitly as current behavior rather than the target product contract.
-- Expose recommendation cards and a result entry only after the latest run is `completed`; a `running` run remains an in-progress state.
-- Keep the agent model provider-neutral behind an `AgentModel` boundary. DeepSeek remains explanation-only in the current implementation; the approved next architecture may use it for Manager, Calculation, Supervisor, and Fallback reasoning without giving it authority to invent or mutate supplier facts.
+- Do not publish estimated fares or incomplete participant coverage. Legacy estimate modules remain only for removal in Task 13 and must not feed the shared result.
+- Expose the shared result and its saving/fast scheme cards only after the latest run is `completed`; all other run states render progress, retry, or diagnostic guidance without result cards.
+- Keep the agent model provider-neutral behind an `AgentModel` boundary. Calculation and Supervisor may use DeepSeek without authority to invent or mutate supplier facts; deterministic validators and publication guards remain decisive.
 - Keep secrets in server-side environment variables only.
 - Keep browser Supabase access limited to the anon client; use the service-role client only in server-side code.
 - Run `npm run lint`, `npm run test`, and `npm run build` before reporting completion after code changes.
@@ -27,7 +27,7 @@ This project is a mobile-first Web H5 app for multi-person cross-city meeting pl
 - `supabase/`: database schema, RLS policies, and Realtime publication setup.
 - `src/lib/travel/`: vendor adapters and normalized travel option types.
 - `services/travel-provider-gateway/`: isolated server-side travel-provider access; it must follow the travel gateway ownership and safety rules above.
-- `src/lib/recommendation/`: current deterministic scoring and calculation orchestration; migrate it only through the approved multi-agent design and a reviewed implementation plan.
+- `src/lib/recommendation/`: deterministic policy, validators, persistence, and compatibility entry points; remove legacy scoring/estimate callers only through Task 13 of the reviewed implementation plan.
 - `src/lib/city/`: city search, distance, and candidate generation.
 - `src/lib/ai/`: DeepSeek explanation helpers.
 - `src/lib/supabase/`: browser anon client and server-only service-role client.
@@ -35,6 +35,7 @@ This project is a mobile-first Web H5 app for multi-person cross-city meeting pl
 - `src/app/`: mobile-first App Router pages with Chinese user-facing copy.
 - `src/components/layout/`: shared responsive page shells; desktop routes should remain centered phone-sized H5 canvases.
 - `src/components/`: mobile-first UI components.
+- `src/components/result/`: shared one-city/two-scheme rendering and bounded run-progress feedback; render persisted scheme routes directly and never reselect routes client-side.
 - `docs/architecture.md`: stable technical map for routes, data flow, modules, and security boundaries.
 - `docs/integration-guide.md`: stable setup, API, error-code, and smoke-test reference for handoff.
 - `docs/superpowers/specs/`: approved product and technical design specs.

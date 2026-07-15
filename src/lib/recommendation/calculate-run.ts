@@ -11,7 +11,6 @@ export async function calculatePlanRecommendations(input: {
   code: string;
   participantToken: string;
 }) {
-  // Task 10 replaces this compatibility branch with contract-parity local persistence.
   if (!hasSupabaseEnvironment()) return calculateFallbackRecommendations(input.code);
   return startAutomaticRun(input);
 }

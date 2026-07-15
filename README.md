@@ -4,9 +4,9 @@ Mobile-first H5 MVP for choosing a fair cross-city meeting city for 2-6 people i
 
 ## Multi-Agent Migration Status
 
-The approved [2026-07-15 Multi-Agent design](docs/superpowers/specs/2026-07-15-multi-agent-recommendation-design.md) is in progress. Tasks 1–10 are implemented and independently reviewed: plans use an arrival date and host credential, verified quote evidence and route tasks are persisted, deterministic saving/fast/unique-city policy and agent review exist, and bounded runs publish through an atomic guard. Tasks 11–14 are not complete. The PostgreSQL/Supabase migration has not received its live smoke test. Do not describe the target experience as released.
+The approved [2026-07-15 Multi-Agent design](docs/superpowers/specs/2026-07-15-multi-agent-recommendation-design.md) is in progress. Tasks 1–11 are implemented: plans use an arrival date and host credential, verified quote evidence and route tasks are persisted, deterministic saving/fast/unique-city policy and agent review exist, bounded runs publish through an atomic guard, and the shared result renders one city with two persisted schemes. Tasks 12–14 are not complete. The PostgreSQL/Supabase migration has not received its live smoke test. Do not describe the target experience as released.
 
-The legacy MVP details below apply only to paths not yet migrated, especially the result UI and estimate-based travel presentation. They are not the target publication contract.
+Legacy estimate and three-city modules remain only as cleanup targets for Task 13. They do not define the shared-result publication contract.
 
 ## Scripts
 
@@ -22,7 +22,7 @@ The legacy MVP details below apply only to paths not yet migrated, especially th
 - `/p/[code]`: public plan page with meeting summary, participant completion state, filling records, join entry, result entry, automatic participant-status refresh, and a direct calculate action for local participants when the participant limit is reached.
 - `/p/[code]/join`: participant submits name, departure city, and accepted transport modes, then returns to the public plan page automatically.
 - `/p/[code]/manage`: legacy route that points users back to the public plan page.
-- `/p/[code]/result`: shared team result page that shows recommendation cards only after the latest run completes; while it is running, it reports progress, refreshes locally for a bounded period, and keeps a manual refresh action.
+- `/p/[code]/result`: shared team result page that renders one recommended city plus exactly “省钱方案” and “省时方案” from persisted scheme routes only after completion. Pending, collecting, cooling, calculating, validating, incomplete, and failed states show bounded progress, retry, or diagnostic guidance without result cards.
 - `POST /api/plans`: creates a plan from `{ title, arrivalDate, participantLimit }` and returns `{ code, shareUrl, hostToken }`; the host token is returned once.
 - `GET /api/plans/[code]`: returns public plan data, `latestRun` progress, and `latestSharedResult` only when the latest run is `completed`.
 - `GET /api/cities/search?q=...`: searches the built-in city library first, then uses Amap to validate city-level local misses; returns `{ cities }`.
@@ -40,11 +40,14 @@ The legacy MVP details below apply only to paths not yet migrated, especially th
 - `src/lib/fallback/mvp-store.ts`: server-side in-memory fallback store that preserves the target run states and publication guards for local tests; it never synthesizes estimates or calls suppliers.
 - `src/lib/travel/types.ts`: normalized travel-provider boundary, including gateway request/response types and query timestamps for real prices.
 - `src/lib/travel/estimate-provider.ts`: deterministic estimated travel option fallback using city distance and transport mode, with the upstream fallback reason preserved when available.
-- `src/lib/travel/gateway-client.ts` and `src/lib/travel/flyai-provider.ts`: server-side authenticated gateway client and per-mode provider fallback; real route facts are deterministically ordered before scoring, and stable gateway error codes are retained on estimated fallback rows.
+- `src/lib/travel/gateway-client.ts`: server-side authenticated gateway client used by QueryAgent to persist verified quotes without participant identity crossing the gateway boundary.
+- `src/lib/travel/flyai-provider.ts` and `estimate-provider.ts`: legacy estimate path retained only until Task 13; it does not feed the guarded shared result.
 - `services/travel-provider-gateway/`: independently runnable FlyAI gateway with strict contracts, safe CLI execution, cache, concurrency limit, retry, authenticated HTTP API, and container configuration.
 - `src/lib/recommendation/policy.ts` and `validators.ts`: deterministic direct-first saving/fast schemes, unique-city ranking, evidence replay, and bounded policy evaluation.
 - `src/lib/agent/`: provider-neutral model boundary plus Manager, Query, Calculation, Supervisor, Fallback, tracing, and bounded orchestration modules.
 - `src/lib/agent/run-orchestrator.ts`: creates and incrementally advances durable runs with a persisted lease; it dispatches to the guarded in-memory fallback when Supabase is absent.
+- `src/components/result/SharedRecommendation.tsx` and `SchemeCard.tsx`: render the published city once and map persisted participant routes directly, including team totals, route facts, quote fingerprints, and China-time freshness; they never render booking links or client-side route selection.
+- `src/components/result/RefreshingResultNotice.tsx`: maps every run status to Chinese progress/retry guidance and uses bounded refresh backoff.
 - `src/lib/ui/meeting-history.ts`: browser-only local recent-record storage; it caches `useSyncExternalStore` snapshots so the homepage does not trigger React update loops.
 
 ## Environment
@@ -61,24 +64,25 @@ Supabase variables:
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`: public anon key for browser-side reads.
 - `SUPABASE_SERVICE_ROLE_KEY`: server-only service-role key for route handlers and background calculations.
 - `AMAP_API_KEY`: server-side Amap key for local-miss city validation; Amap-backed city-level results can be selected even when they are not in the local scoring city library.
-- `DEEPSEEK_API_KEY`: server-side DeepSeek key for explanation and share-copy generation only.
+- `DEEPSEEK_API_KEY`: server-side DeepSeek key for the provider-neutral Calculation/Supervisor model and the legacy explanation endpoint.
 - `DEEPSEEK_MODEL`: optional server-side model override; defaults to `deepseek-v4-flash`.
 - `FLYAI_PROBE_CLI_PATH`: optional operator-only executable override for the redacted FlyAI capability probe.
 - `TRAVEL_GATEWAY_URL`: server-side internal gateway URL used by the main-app travel provider.
 - `TRAVEL_GATEWAY_TOKEN`: server-side bearer token for the internal gateway.
 - `TRAVEL_GATEWAY_TIMEOUT_MS`: optional main-app gateway request timeout; defaults to `30000` ms.
-- `TRAVEL_CALCULATION_TIMEOUT_MS`: optional total travel-query budget override. Without an override, the main app budgets `25000` ms per distinct route/mode group, with a `45000` ms minimum, so the budget matches the serial supplier gateway instead of discarding queued real results.
-- `TRAVEL_SECONDARY_QUERY_TIMEOUT_MS`: optional second-pass travel-query budget for unfinished searches; defaults to `15000` ms.
+- `AGENT_QUERY_CONCURRENCY`: optional logical QueryAgent worker count, clamped to `1..8`; defaults to `4` and does not change the gateway's physical supplier concurrency.
+- `TRAVEL_CALCULATION_TIMEOUT_MS`: legacy travel-search budget retained until Task 13; defaults to `45000` ms.
+- `TRAVEL_SECONDARY_QUERY_TIMEOUT_MS`: legacy second-pass travel-search budget retained until Task 13; defaults to `15000` ms.
 
-DeepSeek requests use a 15-second timeout and at most one SDK retry. Provider failures never fail recommendation calculation or change deterministic rankings; they return local fallback explanations instead.
+The provider-neutral `AgentModel` uses DeepSeek for Calculation and Supervisor when Supabase-backed runs reach complete real-quote coverage. Missing or invalid model output fails closed and cannot publish; deterministic policy replay and publication guards remain authoritative. The separate legacy explanation endpoint still uses deterministic fallback copy on DeepSeek failure until Task 13 removes that path.
 
-For local real-ticket smoke tests, run the gateway separately and set `TRAVEL_GATEWAY_URL=http://127.0.0.1:8080` in `.env.local`. The `.env.local` `TRAVEL_GATEWAY_TOKEN` must match `services/travel-provider-gateway/.env`; otherwise the main app treats the gateway as unavailable and falls back to estimates.
+For local real-ticket smoke tests, run the gateway separately and set `TRAVEL_GATEWAY_URL=http://127.0.0.1:8080` in `.env.local`. The `.env.local` `TRAVEL_GATEWAY_TOKEN` must match `services/travel-provider-gateway/.env`; otherwise QueryAgent records the gateway failure and the run cannot publish without complete verified coverage.
 
 ## Travel Provider Status
 
-Tasks 1-10 of the [Amap and FlyAI implementation plan](docs/superpowers/plans/2026-07-12-amap-flyai-integration.md) are complete: Amap city validation, travel query freshness persistence, the isolated gateway, main-app authenticated client, deterministic travel-search orchestration, and source/freshness result UI are fixture-verified. The app uses real normalized route facts when the gateway succeeds; per-mode failures fall back to deterministic estimates, while successful empty results remain unavailable rather than pretending to be estimates.
+Tasks 1-10 of the historical [Amap and FlyAI implementation plan](docs/superpowers/plans/2026-07-12-amap-flyai-integration.md) are complete: Amap city validation, travel query freshness persistence, the isolated gateway, and its authenticated client are fixture-verified. The active Multi-Agent path now persists only validated real options as verified quotes; retryable failures receive bounded recovery, and incomplete coverage publishes nothing. Historical estimate behavior remains only in legacy modules pending Task 13 cleanup.
 
-The legacy result cards can still render historical real and estimated `travel_options`, but they are not a target-architecture publication result. The fallback store no longer creates estimate rows or a legacy three-city result; Task 11 will replace the shared-result UI with the one-city/two-scheme contract.
+The shared result no longer reads historical `city_recommendations` or `travel_options`. It loads the guarded `recommendation_results`, `recommendation_schemes`, and selected verified-quote routes, then renders one city with saving and fast schemes. Legacy estimate/scoring modules and the legacy explanation path remain in the repository only until Task 13 removes them.
 
 The gateway has its own environment file at `services/travel-provider-gateway/.env.example` and commands:
 
@@ -121,17 +125,9 @@ In managed sandboxes, `npm run build` can fail if Next/Turbopack is blocked from
 
 For UI changes, also verify a mobile viewport around `390x844` and a desktop viewport around `1440x1000`. The desktop routes should render as a centered phone-sized H5 canvas, not a wide document page or marketing page.
 
-## MVP Verification
+## Manual Handoff Smoke
 
-Run before handoff:
-
-```bash
-npm run lint
-npm run test
-npm run build
-```
-
-Manual browser smoke before Tasks 11–14:
+After the automated verification above, run this browser smoke before Tasks 12–14:
 
 1. Create a plan.
 2. Return to `/` and confirm the created plan appears in recent meeting records on the same device.
@@ -141,3 +137,4 @@ Manual browser smoke before Tasks 11–14:
 6. After the participant limit is reached, start calculation from the public plan page on a device that has filled the plan.
 7. Confirm the calculate request returns a pending run and the progress route is reachable with the participant token.
 8. Do not use local fallback to claim a published target result: it has no supplier adapter and will finish as `incomplete` without injected verified quotes. Full PostgreSQL, supplier, and device acceptance remains Task 14.
+9. With a completed fixture or Supabase-backed run, confirm `/p/[code]/result` shows the city once, exactly “省钱方案” and “省时方案”, every participant route, quote freshness in China time, and no estimate, average-fare, three-city, or booking-link UI.
