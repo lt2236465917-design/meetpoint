@@ -58,6 +58,8 @@ const travelSearchInput: TravelSearchInput = {
 function gatewayResponse(mode: TransportMode = "flight") {
   return {
     options: [{
+      quoteId: "flyai:7c4198543e0fde40f3da35015176499ecef35a5c9241186a6f31d01e65a8af7e",
+      providerQuoteId: "native-quote-1",
       mode,
       source: "real",
       provider: "flyai",
@@ -74,6 +76,8 @@ function gatewayResponse(mode: TransportMode = "flight") {
       bookingUrl: "https://a.feizhu.com/booking/123",
     }],
     queriedAt: "2026-07-12T08:00:00.000Z",
+    traceId: "6f8ae519-a19f-4d4a-baa9-4b4ab9a07c3e",
+    cache: "miss",
   };
 }
 
@@ -82,7 +86,7 @@ const gatewaySearchRequest = {
   originCityName: "北京",
   destinationCityCode: "wuhan",
   destinationCityName: "武汉",
-  meetingDate: "2026-08-01",
+  departureDate: "2026-08-01",
   mode: "flight" as const,
 };
 
@@ -144,7 +148,7 @@ describe("FlyAITravelProvider", () => {
         originCityName: "北京",
         destinationCityCode: "wuhan",
         destinationCityName: "武汉",
-        meetingDate: "2026-08-01",
+        departureDate: "2026-08-01",
         mode: "flight",
       }),
       signal: expect.any(AbortSignal),
@@ -155,6 +159,8 @@ describe("FlyAITravelProvider", () => {
       mode: "flight",
       source: "real",
       provider: "flyai",
+      quoteId: "flyai:7c4198543e0fde40f3da35015176499ecef35a5c9241186a6f31d01e65a8af7e",
+      providerQuoteId: "native-quote-1",
       queriedAt: "2026-07-12T08:00:00.000Z",
       priceCny: 680,
       bookingUrl: "https://a.feizhu.com/booking/123",
@@ -253,6 +259,8 @@ describe("FlyAITravelProvider", () => {
     const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(new Response(JSON.stringify({
       code: "PROVIDER_RATE_LIMITED",
       message: "Provider rate limited",
+      traceId: "6f8ae519-a19f-4d4a-baa9-4b4ab9a07c3e",
+      retryAfterMs: 5_000,
     }), { status: 429 })));
     vi.stubGlobal("fetch", fetchMock);
     vi.stubEnv("TRAVEL_GATEWAY_URL", "http://gateway.internal:8080");
@@ -298,6 +306,7 @@ describe("FlyAITravelProvider", () => {
   it("creates one unavailable option for a successful empty gateway search", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
       options: [], queriedAt: "2026-07-12T08:00:00.000Z",
+      traceId: "6f8ae519-a19f-4d4a-baa9-4b4ab9a07c3e", cache: "miss",
     }), { status: 200 })));
     vi.stubEnv("TRAVEL_GATEWAY_URL", "http://gateway.internal:8080");
     vi.stubEnv("TRAVEL_GATEWAY_TOKEN", "gateway-token");

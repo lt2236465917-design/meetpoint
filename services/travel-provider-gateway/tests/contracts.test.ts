@@ -13,11 +13,13 @@ const validRequest = {
   originCityName: "北京",
   destinationCityCode: "shanghai",
   destinationCityName: "上海",
-  meetingDate: "2026-07-20",
+  departureDate: "2026-07-20",
   mode: "flight",
 } as const;
 
 const validOption = {
+  quoteId: "flyai:7c4198543e0fde40f3da35015176499ecef35a5c9241186a6f31d01e65a8af7e",
+  providerQuoteId: "native-quote-1",
   mode: "flight",
   source: "real",
   provider: "flyai",
@@ -45,8 +47,15 @@ describe("gatewaySearchRequestSchema", () => {
   });
 
   it("rejects impossible dates and oversized city names", () => {
-    expect(() => gatewaySearchRequestSchema.parse({ ...validRequest, meetingDate: "2026-02-30" })).toThrow();
+    expect(() => gatewaySearchRequestSchema.parse({ ...validRequest, departureDate: "2026-02-30" })).toThrow();
     expect(() => gatewaySearchRequestSchema.parse({ ...validRequest, originCityName: "北".repeat(25) })).toThrow();
+  });
+
+  it("requires departureDate and rejects the former meetingDate field", () => {
+    const withoutDepartureDate: Record<string, unknown> = { ...validRequest };
+    delete withoutDepartureDate.departureDate;
+    expect(() => gatewaySearchRequestSchema.parse(withoutDepartureDate)).toThrow();
+    expect(() => gatewaySearchRequestSchema.parse({ ...validRequest, meetingDate: "2026-07-20" })).toThrow();
   });
 });
 
@@ -100,12 +109,15 @@ describe("gateway error schema", () => {
     const errorBody = {
       code: "PROVIDER_TIMEOUT",
       message: "FlyAI request timed out",
+      traceId: "6f8ae519-a19f-4d4a-baa9-4b4ab9a07c3e",
+      retryAfterMs: null,
     } as const;
 
     expect(gatewayErrorBodySchema.parse(errorBody)).toEqual(errorBody);
     expect(() => gatewayErrorBodySchema.parse({ ...errorBody, code: "UNKNOWN_ERROR" })).toThrow();
     expect(() => gatewayErrorBodySchema.parse({ ...errorBody, message: " " })).toThrow();
     expect(() => gatewayErrorBodySchema.parse({ ...errorBody, retryAfter: 5 })).toThrow();
+    expect(() => gatewayErrorBodySchema.parse({ ...errorBody, retryAfterMs: -1 })).toThrow();
   });
 });
 
@@ -114,6 +126,8 @@ describe("gatewaySearchResponseSchema", () => {
     const response = {
       options: [validOption],
       queriedAt: "2026-07-12T12:00:00Z",
+      traceId: "6f8ae519-a19f-4d4a-baa9-4b4ab9a07c3e",
+      cache: "miss",
     };
     expect(gatewaySearchResponseSchema.parse(response)).toEqual(response);
     expect(() => gatewaySearchResponseSchema.parse({ ...response, providerRanking: 1 })).toThrow();

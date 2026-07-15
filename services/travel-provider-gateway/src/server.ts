@@ -1,4 +1,4 @@
-import { createHash, timingSafeEqual } from "node:crypto";
+import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { fileURLToPath } from "node:url";
 
@@ -68,31 +68,43 @@ function readJson(request: IncomingMessage): Promise<unknown> {
   });
 }
 
-function sendStableError(response: ServerResponse, error: unknown): void {
+function sendStableError(response: ServerResponse, error: unknown, traceId: string): void {
   const code = error instanceof GatewayServiceError ? error.code : "INTERNAL_ERROR";
-  sendJson(response, STATUS_BY_CODE[code], { code, message: MESSAGE_BY_CODE[code] });
+  const retryAfterMs = code === "PROVIDER_RATE_LIMITED" && error instanceof GatewayServiceError
+    && error.retryAfterMs !== null
+    ? Math.max(0, Math.min(15_000, error.retryAfterMs))
+    : null;
+  sendJson(response, STATUS_BY_CODE[code], {
+    code,
+    message: MESSAGE_BY_CODE[code],
+    traceId,
+    retryAfterMs,
+  });
 }
 
 export function createGatewayServer(dependencies: ServerDependencies): Server {
   return createServer((request, response) => {
     void (async () => {
+    const traceId = randomUUID();
     if (request.method === "GET" && request.url === "/healthz") {
       sendJson(response, 200, { status: "ok" });
       return;
     }
     if (request.method !== "POST" || request.url !== "/v1/search") {
-      sendJson(response, 400, { code: "INVALID_REQUEST", message: "Invalid request" });
+      sendJson(response, 400, {
+        code: "INVALID_REQUEST", message: "Invalid request", traceId, retryAfterMs: null,
+      });
       return;
     }
     if (!authorized(request.headers.authorization, dependencies.token)) {
-      sendJson(response, 401, { code: "UNAUTHORIZED", message: "Unauthorized" });
+      sendJson(response, 401, { code: "UNAUTHORIZED", message: "Unauthorized", traceId, retryAfterMs: null });
       return;
     }
     try {
       const input = await readJson(request);
-      sendJson(response, 200, await dependencies.service.search(input));
+      sendJson(response, 200, { ...await dependencies.service.search(input), traceId });
     } catch (error) {
-      sendStableError(response, error);
+      sendStableError(response, error, traceId);
     }
     })();
   });

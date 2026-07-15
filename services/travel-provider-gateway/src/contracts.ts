@@ -22,11 +22,13 @@ export const gatewaySearchRequestSchema = z.object({
   originCityName: z.string().trim().min(1).max(24),
   destinationCityCode: z.string().regex(/^[a-z0-9-]{1,24}$/),
   destinationCityName: z.string().trim().min(1).max(24),
-  meetingDate: calendarDateSchema,
+  departureDate: calendarDateSchema,
   mode: z.enum(["flight", "high_speed_rail", "normal_train"]),
 }).strict();
 
 export const gatewayTravelOptionSchema = z.object({
+  quoteId: z.string().regex(/^flyai:[a-f0-9]{64}$/),
+  providerQuoteId: z.string().trim().min(1).max(256).nullable(),
   mode: z.enum(["flight", "high_speed_rail", "normal_train"]),
   source: z.literal("real"),
   provider: z.literal("flyai"),
@@ -43,9 +45,14 @@ export const gatewayTravelOptionSchema = z.object({
   bookingUrl: bookingUrlSchema.nullable(),
 }).strict();
 
-export const gatewaySearchResponseSchema = z.object({
+export const gatewaySearchResultSchema = z.object({
   options: z.array(gatewayTravelOptionSchema),
   queriedAt: offsetIsoTimestampSchema,
+  cache: z.enum(["hit", "miss"]),
+}).strict();
+
+export const gatewaySearchResponseSchema = gatewaySearchResultSchema.extend({
+  traceId: z.uuid(),
 }).strict();
 
 export const gatewayErrorCodeSchema = z.enum([
@@ -67,10 +74,17 @@ export type GatewayErrorCode = z.infer<typeof gatewayErrorCodeSchema>;
 export const gatewayErrorBodySchema = z.object({
   code: gatewayErrorCodeSchema,
   message: z.string().trim().min(1).max(200),
-}).strict();
+  traceId: z.uuid(),
+  retryAfterMs: z.number().int().min(0).max(15_000).nullable(),
+}).strict().superRefine((body, context) => {
+  if (body.retryAfterMs !== null && body.code !== "PROVIDER_RATE_LIMITED") {
+    context.addIssue({ code: "custom", message: "Retry metadata requires a rate-limit cooldown" });
+  }
+});
 
 export type GatewayErrorBody = z.infer<typeof gatewayErrorBodySchema>;
 
 export type GatewaySearchRequest = z.infer<typeof gatewaySearchRequestSchema>;
 export type GatewayTravelOption = z.infer<typeof gatewayTravelOptionSchema>;
+export type GatewaySearchResult = z.infer<typeof gatewaySearchResultSchema>;
 export type GatewaySearchResponse = z.infer<typeof gatewaySearchResponseSchema>;

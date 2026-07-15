@@ -1,0 +1,99 @@
+# Task 3 Report: Traceable Gateway Quote Evidence
+
+## Status
+
+DONE
+
+## Implementation
+
+- Replaced the gateway request field `meetingDate` with the strict required `departureDate`; the former field is rejected.
+- Added gateway-issued evidence IDs in the form `flyai:<sha256>`. The canonical JSON contains only the provider-native ID, mode, origin/destination codes, query departure date, service identity, departure/arrival timestamps with offsets, normalized integer price, and transfer count.
+- Preserved upstream-native `itemId`, `quoteId`, or `id` as nullable `providerQuoteId`, in that priority order.
+- Added response-level `traceId`, `queriedAt`, and `cache` metadata. The HTTP server creates one UUID per request; the service retains cache and in-flight dedupe behavior and marks misses/hits explicitly.
+- Added stable error bodies `{ code, message, traceId, retryAfterMs }`. Rate-limit errors expose the current remaining cooldown, bounded to `0..15000` ms; other errors return `null`.
+- Kept provider execution serialized through the existing default `FifoLimiter(1)` and retained argument-array `execFile` with `shell: false`.
+- Updated the main-app gateway request/response schemas and propagated `quoteId` / `providerQuoteId` through the FlyAI provider boundary.
+
+## Files
+
+- `services/travel-provider-gateway/src/contracts.ts`
+- `services/travel-provider-gateway/src/flyai-adapter.ts`
+- `services/travel-provider-gateway/src/service.ts`
+- `services/travel-provider-gateway/src/server.ts`
+- `services/travel-provider-gateway/tests/contracts.test.ts`
+- `services/travel-provider-gateway/tests/flyai-adapter.test.ts`
+- `services/travel-provider-gateway/tests/service.test.ts`
+- `services/travel-provider-gateway/tests/server.test.ts`
+- `src/lib/travel/types.ts`
+- `src/lib/travel/gateway-client.ts`
+- `src/lib/travel/flyai-provider.ts` (required request-field mapping at the existing app/provider boundary)
+- `tests/provider-shells.test.ts`
+- `.superpowers/sdd/task-3-report.md`
+
+## TDD Evidence
+
+### RED
+
+Command:
+
+```bash
+cd services/travel-provider-gateway && npm run test -- tests/contracts.test.ts tests/flyai-adapter.test.ts tests/service.test.ts tests/server.test.ts
+```
+
+Key original output:
+
+```text
+❯ tests/contracts.test.ts (10 tests | 5 failed)
+    × accepts a valid normalized search
+    × accepts a complete real FlyAI option
+    × accepts only a strict nonempty error body
+    × accepts a strict response with a query timestamp
+❯ tests/flyai-adapter.test.ts (39 tests | 7 failed)
+    × builds safe flight CLI arguments
+    × normalizes complete flight fields without logging raw stdout
+    × issues stable evidence IDs and retains a provider-native itemId
+    × changes the evidence ID when the normalized price or schedule changes
+❯ tests/service.test.ts (17 tests | 16 failed)
+```
+
+Expected reason: production still required `meetingDate` and did not define evidence fields, result/cache metadata, HTTP trace IDs, or retry cooldown metadata. The failures therefore exercised the missing Task 3 contract rather than a syntax or fixture error.
+
+### GREEN
+
+Same focused command, rerun after implementation and final refactor:
+
+```text
+Test Files  4 passed (4)
+Tests       85 passed (85)
+Duration    218ms
+```
+
+Behavior covered includes identical normalized evidence producing the same ID despite station-name/booking-URL changes, price or schedule changes producing different IDs, `itemId` retention, old request rejection, cache hit/miss metadata, UUID response traces, and bounded secret-free 429 errors.
+
+## Verification
+
+- `cd services/travel-provider-gateway && npm run test -- tests/contracts.test.ts tests/flyai-adapter.test.ts tests/service.test.ts tests/server.test.ts` — PASS, 4 files / 85 tests.
+- `cd services/travel-provider-gateway && npm run lint` — PASS, exit 0.
+- `cd services/travel-provider-gateway && npm run test` — PASS, 7 files / 90 tests.
+- `cd services/travel-provider-gateway && npm run build` — PASS, exit 0.
+- `npm run test -- tests/provider-shells.test.ts` — PASS, 1 file / 34 tests.
+- `npm run lint` — PASS, exit 0.
+- `npm run test` — PASS, 39 files / 164 tests.
+- `npm run build` — first sandboxed run failed because Turbopack could not bind an internal port (`Operation not permitted`); the identical approved sandbox-external rerun PASSed, including compile, TypeScript, page data, and 7/7 static pages.
+- `git diff --check` — PASS, exit 0.
+
+During refactor verification, the first gateway lint pass found 10 strict lint errors in new test matchers and clone typing, then one remaining unsafe clone inference. These were corrected without changing the contract; focused and full suites were rerun afterward.
+
+## Self-review
+
+- Confirmed the SHA-256 canonical input excludes city names, station names, booking URLs, and raw provider text.
+- Confirmed `providerQuoteId` remains separate from the gateway-issued `quoteId` and is nullable.
+- Confirmed `traceId` is generated by the HTTP server and not accepted from callers or generated by the supplier adapter.
+- Confirmed cooldown exposure is rate-limit-only and bounded, while public error messages never echo exception/provider text.
+- Confirmed cache hits clone results, concurrent misses still share one provider promise, limiter concurrency remains one, and CLI execution remains `shell: false`.
+- Confirmed no Task 4 agent selection, scoring, persistence, or publication logic was added.
+- Confirmed `.superpowers/sdd/progress.md` was not modified and no push was performed.
+
+## Concerns
+
+None.

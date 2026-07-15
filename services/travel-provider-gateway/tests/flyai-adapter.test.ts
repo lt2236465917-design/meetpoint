@@ -11,7 +11,7 @@ const baseInput: GatewaySearchRequest = {
   originCityName: "北京",
   destinationCityCode: "shanghai",
   destinationCityName: "上海",
-  meetingDate: "2026-08-20",
+  departureDate: "2026-08-20",
   mode: "flight",
 };
 
@@ -84,7 +84,10 @@ describe("searchFlyAI", () => {
 
     const result = await searchFlyAI(baseInput, { execFile, executable: "/safe/flyai", logger });
 
+    expect(result[0]?.quoteId).toMatch(/^flyai:[a-f0-9]{64}$/);
     expect(result).toEqual([{
+      quoteId: result[0]?.quoteId,
+      providerQuoteId: null,
       mode: "flight",
       source: "real",
       provider: "flyai",
@@ -130,7 +133,10 @@ describe("searchFlyAI", () => {
 
     const result = await searchFlyAI(baseInput, { execFile, executable: "/safe/flyai" });
 
+    expect(result[0]?.quoteId).toMatch(/^flyai:[a-f0-9]{64}$/);
     expect(result).toEqual([{
+      quoteId: result[0]?.quoteId,
+      providerQuoteId: null,
       mode: "flight",
       source: "real",
       provider: "flyai",
@@ -146,6 +152,52 @@ describe("searchFlyAI", () => {
       arrivalStationName: "上海虹桥",
       bookingUrl: "https://a.feizhu.com/flight/MU5101",
     }]);
+  });
+
+  it("issues stable evidence IDs and retains a provider-native itemId", async () => {
+    const nativeItem = { ...liveFlightItem, itemId: "native-item-42" };
+    const renamed = {
+      ...nativeItem,
+      jumpUrl: "https://a.feizhu.com/flight/another-booking-path",
+      journeys: [{ segments: [{
+        ...nativeItem.journeys[0].segments[0],
+        depStationName: "首都机场 T2",
+        arrStationName: "虹桥机场 T2",
+      }] }],
+    };
+
+    const first = await searchFlyAI(baseInput, {
+      execFile: executorReturning({ data: { itemList: [nativeItem] } }),
+      executable: "/safe/flyai",
+    });
+    const second = await searchFlyAI(baseInput, {
+      execFile: executorReturning({ data: { itemList: [renamed] } }),
+      executable: "/safe/flyai",
+    });
+
+    expect(first[0]?.quoteId).toMatch(/^flyai:[a-f0-9]{64}$/);
+    expect(first[0]?.providerQuoteId).toBe("native-item-42");
+    expect(second[0]?.quoteId).toBe(first[0]?.quoteId);
+  });
+
+  it("changes the evidence ID when the normalized price or schedule changes", async () => {
+    const search = async (item: typeof liveFlightItem) => searchFlyAI(baseInput, {
+      execFile: executorReturning({ data: { itemList: [item] } }),
+      executable: "/safe/flyai",
+    });
+    const baseline = await search(liveFlightItem);
+    const changedPrice = await search({ ...liveFlightItem, ticketPrice: "681" });
+    const changedSchedule = await search({
+      ...liveFlightItem,
+      journeys: [{ segments: [{
+        ...liveFlightItem.journeys[0].segments[0],
+        depDateTime: "2026-08-20 09:00:00",
+        arrDateTime: "2026-08-20 11:15:00",
+      }] }],
+    });
+
+    expect(changedPrice[0]?.quoteId).not.toBe(baseline[0]?.quoteId);
+    expect(changedSchedule[0]?.quoteId).not.toBe(baseline[0]?.quoteId);
   });
 
   it("keeps valid live items when a sibling item is malformed", async () => {

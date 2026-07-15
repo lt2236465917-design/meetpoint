@@ -10,6 +10,8 @@ const bookingUrlSchema = z.url().refine((value) => {
 }, "Booking URL must use HTTPS on an approved FlyAI booking host");
 
 const gatewayOptionSchema = z.object({
+  quoteId: z.string().regex(/^flyai:[a-f0-9]{64}$/),
+  providerQuoteId: z.string().trim().min(1).max(256).nullable(),
   mode: z.enum(["flight", "high_speed_rail", "normal_train"]),
   source: z.literal("real"),
   provider: z.literal("flyai"),
@@ -29,6 +31,8 @@ const gatewayOptionSchema = z.object({
 const gatewayResponseSchema = z.object({
   options: z.array(gatewayOptionSchema),
   queriedAt: z.iso.datetime({ offset: true }),
+  traceId: z.uuid(),
+  cache: z.enum(["hit", "miss"]),
 }).strict();
 
 export type GatewaySearchResult = z.infer<typeof gatewayResponseSchema>;
@@ -45,10 +49,17 @@ export type GatewayClientErrorCode =
   | "PROVIDER_RATE_LIMITED"
   | "PROVIDER_UPSTREAM_UNAVAILABLE"
   | "PROVIDER_CLI_FAILED"
-  | "PROVIDER_INVALID_RESPONSE";
+  | "PROVIDER_INVALID_RESPONSE"
+  | "INVALID_REQUEST"
+  | "UNAUTHORIZED"
+  | "INTERNAL_ERROR";
 
 export class GatewayClientError extends Error {
-  constructor(readonly code: GatewayClientErrorCode) {
+  constructor(
+    readonly code: GatewayClientErrorCode,
+    readonly traceId: string | null = null,
+    readonly retryAfterMs: number | null = null,
+  ) {
     super(code);
     this.name = "GatewayClientError";
   }
@@ -91,16 +102,23 @@ const gatewayErrorBodySchema = z.object({
     "PROVIDER_UPSTREAM_UNAVAILABLE",
     "PROVIDER_CLI_FAILED",
     "PROVIDER_INVALID_RESPONSE",
+    "INVALID_REQUEST",
+    "UNAUTHORIZED",
+    "INTERNAL_ERROR",
   ]),
-  message: z.string(),
-}).passthrough();
+  message: z.string().trim().min(1).max(200),
+  traceId: z.uuid(),
+  retryAfterMs: z.number().int().min(0).max(15_000).nullable(),
+}).strict();
 
-async function gatewayErrorCode(response: Response): Promise<GatewayClientErrorCode> {
+async function gatewayError(response: Response): Promise<GatewayClientError> {
   try {
     const parsed = gatewayErrorBodySchema.safeParse(await response.json());
-    return parsed.success ? parsed.data.code : "GATEWAY_UNAVAILABLE";
+    return parsed.success
+      ? new GatewayClientError(parsed.data.code, parsed.data.traceId, parsed.data.retryAfterMs)
+      : new GatewayClientError("GATEWAY_UNAVAILABLE");
   } catch {
-    return "GATEWAY_UNAVAILABLE";
+    return new GatewayClientError("GATEWAY_UNAVAILABLE");
   }
 }
 
@@ -130,7 +148,7 @@ export async function searchGateway(
     throw new GatewayClientError(isAbort(error) ? "GATEWAY_TIMEOUT" : "GATEWAY_UNAVAILABLE");
   }
 
-  if (!response.ok) throw new GatewayClientError(await gatewayErrorCode(response));
+  if (!response.ok) throw await gatewayError(response);
 
   let body: unknown;
   try {

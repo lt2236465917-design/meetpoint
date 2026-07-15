@@ -2,15 +2,17 @@ import type { AddressInfo } from "node:net";
 import { Server } from "node:http";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { GatewaySearchRequest, GatewaySearchResponse } from "../src/contracts.js";
+import { gatewayErrorBodySchema, gatewaySearchResponseSchema, type GatewaySearchRequest, type GatewaySearchResult } from "../src/contracts.js";
 import { GatewayServiceError } from "../src/service.js";
 import { createGatewayServer, startGatewayServer } from "../src/server.js";
 
 const request: GatewaySearchRequest = {
   originCityCode: "beijing", originCityName: "北京", destinationCityCode: "shanghai",
-  destinationCityName: "上海", meetingDate: "2026-08-20", mode: "flight",
+  destinationCityName: "上海", departureDate: "2026-08-20", mode: "flight",
 };
-const response: GatewaySearchResponse = { options: [], queriedAt: "2026-07-12T08:00:00.000Z" };
+const response: GatewaySearchResult = {
+  options: [], queriedAt: "2026-07-12T08:00:00.000Z", cache: "miss",
+};
 const servers: ReturnType<typeof createGatewayServer>[] = [];
 
 async function start(search = vi.fn().mockResolvedValue(response), token = "gateway-secret") {
@@ -45,7 +47,9 @@ describe("createGatewayServer", () => {
     if (authorization !== undefined) headers.authorization = authorization;
     const result = await fetch(`${baseUrl}/v1/search`, { method: "POST", headers, body: JSON.stringify(request) });
     expect(result.status).toBe(401);
-    expect(await result.json()).toEqual({ code: "UNAUTHORIZED", message: "Unauthorized" });
+    const body = gatewayErrorBodySchema.parse(await result.json());
+    expect(body).toEqual({ ...body, code: "UNAUTHORIZED", message: "Unauthorized", retryAfterMs: null });
+    expect(body.traceId).toMatch(/^[0-9a-f-]{36}$/);
     expect(search).not.toHaveBeenCalled();
   });
 
@@ -54,10 +58,16 @@ describe("createGatewayServer", () => {
     const headers = { authorization: "Bearer gateway-secret", "content-type": "application/json" };
     const oversized = await fetch(`${baseUrl}/v1/search`, { method: "POST", headers, body: JSON.stringify({ value: "x".repeat(16_384) }) });
     expect(oversized.status).toBe(400);
-    expect(await oversized.json()).toEqual({ code: "INVALID_REQUEST", message: "Invalid request" });
+    const oversizedBody = gatewayErrorBodySchema.parse(await oversized.json());
+    expect(oversizedBody).toEqual({
+      ...oversizedBody, code: "INVALID_REQUEST", message: "Invalid request", retryAfterMs: null,
+    });
     const malformed = await fetch(`${baseUrl}/v1/search`, { method: "POST", headers, body: "{" });
     expect(malformed.status).toBe(400);
-    expect(await malformed.json()).toEqual({ code: "INVALID_REQUEST", message: "Invalid request" });
+    const malformedBody = gatewayErrorBodySchema.parse(await malformed.json());
+    expect(malformedBody).toEqual({
+      ...malformedBody, code: "INVALID_REQUEST", message: "Invalid request", retryAfterMs: null,
+    });
   });
 
   it("returns a valid authenticated response", async () => {
@@ -66,7 +76,9 @@ describe("createGatewayServer", () => {
       method: "POST", headers: { authorization: "Bearer gateway-secret", "content-type": "application/json" }, body: JSON.stringify(request),
     });
     expect(result.status).toBe(200);
-    expect(await result.json()).toEqual(response);
+    const body = gatewaySearchResponseSchema.parse(await result.json());
+    expect(body).toEqual({ ...response, traceId: body.traceId });
+    expect(body.traceId).toMatch(/^[0-9a-f-]{36}$/);
     expect(search).toHaveBeenCalledWith(request);
   });
 
@@ -85,7 +97,32 @@ describe("createGatewayServer", () => {
     const body: unknown = JSON.parse(text);
     expect(result.status).toBe(status);
     expect(body).toMatchObject({ code });
+    expect(gatewayErrorBodySchema.safeParse(body).success).toBe(true);
     expect(text).not.toMatch(/secret|raw provider/);
+  });
+
+  it("returns a bounded retryAfterMs on 429 without provider text", async () => {
+    const search = vi.fn().mockRejectedValue(
+      new GatewayServiceError("PROVIDER_RATE_LIMITED", "supplier secret detail", 4_500),
+    );
+    const { baseUrl } = await start(search);
+    const result = await fetch(`${baseUrl}/v1/search`, {
+      method: "POST",
+      headers: { authorization: "Bearer gateway-secret", "content-type": "application/json" },
+      body: JSON.stringify(request),
+    });
+    const text = await result.text();
+    const body = gatewayErrorBodySchema.parse(JSON.parse(text));
+
+    expect(result.status).toBe(429);
+    expect(body).toEqual({
+      code: "PROVIDER_RATE_LIMITED",
+      message: "Provider rate limited",
+      traceId: body.traceId,
+      retryAfterMs: 4_500,
+    });
+    expect(body.traceId).toMatch(/^[0-9a-f-]{36}$/);
+    expect(text).not.toMatch(/supplier|secret|detail/);
   });
 });
 

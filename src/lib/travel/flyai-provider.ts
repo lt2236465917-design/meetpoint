@@ -10,7 +10,7 @@ function toGatewayRequest(input: TravelSearchInput, mode: GatewaySearchRequest["
     originCityName: input.originCityName,
     destinationCityCode: input.destinationCityCode,
     destinationCityName: input.destinationCityName,
-    meetingDate: input.meetingDate,
+    departureDate: input.meetingDate,
     mode,
   };
 }

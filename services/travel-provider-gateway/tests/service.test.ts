@@ -8,7 +8,7 @@ vi.mock("../src/flyai-adapter.js", async () => {
 });
 
 import {
-  gatewaySearchResponseSchema,
+  gatewaySearchResultSchema,
   type GatewaySearchRequest,
   type GatewayTravelOption,
 } from "../src/contracts.js";
@@ -18,9 +18,11 @@ import { createTravelSearchService } from "../src/service.js";
 const request: GatewaySearchRequest = {
   originCityCode: "beijing", originCityName: "北京",
   destinationCityCode: "shanghai", destinationCityName: "上海",
-  meetingDate: "2026-08-20", mode: "flight",
+  departureDate: "2026-08-20", mode: "flight",
 };
 const option: GatewayTravelOption = {
+  quoteId: "flyai:7c4198543e0fde40f3da35015176499ecef35a5c9241186a6f31d01e65a8af7e",
+  providerQuoteId: "native-quote-1",
   mode: "flight", source: "real", provider: "flyai", priceCny: 680,
   departAt: "2026-08-20T08:00:00+08:00", arriveAt: "2026-08-20T10:15:00+08:00",
   durationMinutes: 135, isDirect: true, hasTransfer: false, transferCount: 0,
@@ -68,7 +70,9 @@ describe("createTravelSearchService", () => {
     const first = await service.search(request);
     const second = await service.search({ ...request, originCityName: "北京市", destinationCityName: "上海市" });
 
-    expect(second).toEqual(first);
+    expect(second.options).toEqual(first.options);
+    expect(first.cache).toBe("miss");
+    expect(second.cache).toBe("hit");
     expect(searchProvider).toHaveBeenCalledTimes(1);
     expect(first.queriedAt).toBe("2026-07-12T08:00:00.000Z");
   });
@@ -83,8 +87,8 @@ describe("createTravelSearchService", () => {
     Object.assign(first, { injected: "from-miss" });
 
     const second = await service.search(request);
-    expect(second).toEqual({ options: [option], queriedAt: "2026-07-12T08:00:00.000Z" });
-    expect(gatewaySearchResponseSchema.safeParse(second).success).toBe(true);
+    expect(second).toEqual({ options: [option], queriedAt: "2026-07-12T08:00:00.000Z", cache: "hit" });
+    expect(gatewaySearchResultSchema.safeParse(second).success).toBe(true);
     expect(second).not.toBe(first);
     expect(second.options).not.toBe(first.options);
     expect(second.options[0]).not.toBe(first.options[0]);
@@ -94,8 +98,8 @@ describe("createTravelSearchService", () => {
     Object.assign(second, { injected: "from-hit" });
 
     const third = await service.search(request);
-    expect(third).toEqual({ options: [option], queriedAt: "2026-07-12T08:00:00.000Z" });
-    expect(gatewaySearchResponseSchema.safeParse(third).success).toBe(true);
+    expect(third).toEqual({ options: [option], queriedAt: "2026-07-12T08:00:00.000Z", cache: "hit" });
+    expect(gatewaySearchResultSchema.safeParse(third).success).toBe(true);
     expect(third).not.toBe(second);
     expect(third.options).not.toBe(second.options);
     expect(third.options[0]).not.toBe(second.options[0]);
@@ -184,6 +188,20 @@ describe("createTravelSearchService", () => {
     await vi.advanceTimersByTimeAsync(1);
     await expect(next).resolves.toMatchObject({ options: [option] });
     expect(searchProvider).toHaveBeenCalledTimes(2);
+  });
+
+  it("exposes the bounded current cooldown on rate-limit errors", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-12T08:00:00Z"));
+    const searchProvider = vi.fn().mockRejectedValue(
+      new FlyAIAdapterError("PROVIDER_RATE_LIMITED", "supplier detail"),
+    );
+    const service = createTravelSearchService({ searchProvider });
+
+    await expect(service.search(request)).rejects.toMatchObject({
+      code: "PROVIDER_RATE_LIMITED",
+      retryAfterMs: 5_000,
+    });
   });
 
   it("waits fifteen seconds after the first post-cooldown provider call is rate limited", async () => {

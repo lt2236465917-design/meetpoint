@@ -130,7 +130,7 @@ export interface FlyAIAdapterDependencies {
 }
 
 function routeFingerprint(input: GatewaySearchRequest): string {
-  const routeKey = ["v1", input.originCityCode, input.destinationCityCode, input.meetingDate, input.mode].join(":");
+  const routeKey = ["v1", input.originCityCode, input.destinationCityCode, input.departureDate, input.mode].join(":");
   return createHash("sha256").update(routeKey).digest("hex").slice(0, 16);
 }
 
@@ -185,7 +185,7 @@ function buildArgs(input: GatewaySearchRequest): string[] {
     "--destination",
     input.destinationCityName,
     "--dep-date",
-    input.meetingDate,
+    input.departureDate,
     "--sort-type",
     "3",
   ];
@@ -313,10 +313,38 @@ function normalizeLiveItem(
   };
 }
 
+type EvidenceFields = {
+  providerQuoteId: string | null;
+  serviceName: string;
+  departAt: string;
+  arriveAt: string;
+  priceCny: number;
+  transferCount: number;
+};
+
+function evidenceId(input: GatewaySearchRequest, option: EvidenceFields): string {
+  const canonical = JSON.stringify([
+    "flyai",
+    option.providerQuoteId,
+    input.mode,
+    input.originCityCode,
+    input.destinationCityCode,
+    input.departureDate,
+    option.serviceName,
+    option.departAt,
+    option.arriveAt,
+    option.priceCny,
+    option.transferCount,
+  ]);
+  return `flyai:${createHash("sha256").update(canonical).digest("hex")}`;
+}
+
 function normalizeRow(
   row: z.infer<typeof rawRowSchema>,
-  mode: GatewaySearchRequest["mode"],
+  input: GatewaySearchRequest,
+  providerQuoteId: string | null,
 ): GatewayTravelOption | null {
+  const mode = input.mode;
   const serviceName = row.flightNumber ?? row.trainNumber!;
   const classifiedMode = row.flightNumber === undefined && /^[GCD]/i.test(serviceName)
     ? "high_speed_rail"
@@ -329,7 +357,17 @@ function normalizeRow(
   }
 
   const transferCount = row.direct ? 0 : (row.transferCount ?? 1);
+  const evidence = {
+    providerQuoteId,
+    serviceName,
+    departAt: row.departureTime,
+    arriveAt: row.arrivalTime,
+    priceCny: row.price,
+    transferCount,
+  };
   return gatewayTravelOptionSchema.parse({
+    quoteId: evidenceId(input, evidence),
+    providerQuoteId,
     mode: classifiedMode,
     source: "real",
     provider: "flyai",
@@ -368,7 +406,7 @@ export async function searchFlyAI(
     const legacy = z.array(rawRowSchema).safeParse(parsed);
     if (legacy.success) {
       const result = legacy.data
-        .map((row) => normalizeRow(row, input.mode))
+        .map((row) => normalizeRow(row, input, firstStringValue(row, ["itemId", "quoteId", "id"])))
         .filter((row): row is GatewayTravelOption => row !== null);
       emitDiagnostic(dependencies.diagnosticLogger, diagnosticFor(input, "SUCCESS", { topLevelKeys }));
       return result;
@@ -394,7 +432,8 @@ export async function searchFlyAI(
           continue;
         }
         try {
-          const option = normalizeRow(rawRow.data, input.mode);
+          const providerQuoteId = firstStringValue(liveItem.data, ["itemId", "quoteId", "id"]);
+          const option = normalizeRow(rawRow.data, input, providerQuoteId);
           if (option === null) {
             droppedReasons.add("missing_required_route_fact");
           } else {
