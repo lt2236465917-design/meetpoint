@@ -1,7 +1,12 @@
 import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
 
-import type { QueryOutcome, RouteTask, RunStatus } from "@/lib/agent/contracts";
+import type {
+  QueryOutcome,
+  RouteTask,
+  RunStatus,
+  ValidationDecision,
+} from "@/lib/agent/contracts";
 import { createServiceSupabaseClient } from "@/lib/supabase/server";
 import type { RouteTaskDraft } from "./query-matrix";
 
@@ -19,6 +24,29 @@ export type CreateRunMatrixInput = {
   candidates: CandidateRecord[];
   tasks: RouteTaskDraft[];
 };
+
+export type SavedAgentProposal = {
+  proposalId: string;
+  runId: string;
+  version: number;
+  policyVersion: string;
+  output: unknown;
+  validationDecision: ValidationDecision;
+  status: "pending" | "rejected";
+};
+
+export type ProposalReview = {
+  runId: string;
+  version: number;
+  approved: boolean;
+  codes: string[];
+};
+
+export interface AgentProposalRepository {
+  saveProposal(input: SavedAgentProposal): Promise<void>;
+  reviewProposal(input: ProposalReview): Promise<void>;
+  markRunFailed(runId: string, code: "AGENT_PROPOSAL_INVALID"): Promise<void>;
+}
 
 export interface RecommendationRepository {
   createRunMatrix(input: CreateRunMatrixInput): Promise<{ runId: string; taskIds: string[] }>;
@@ -57,6 +85,10 @@ export function deterministicVerifiedQuoteId(
   quoteId: string,
 ): string {
   return uuidFromSeed(["verified-quote", runId, participantId, quoteId].join(":"));
+}
+
+export function deterministicAgentProposalId(runId: string, version: number): string {
+  return uuidFromSeed(["agent-proposal", runId, String(version)].join(":"));
 }
 
 type RouteTaskRow = {
@@ -116,7 +148,8 @@ const runMatrixResultSchema = z.object({
   taskIds: z.array(z.uuid()),
 }).strict();
 
-export class SupabaseRecommendationRepository implements RecommendationRepository {
+export class SupabaseRecommendationRepository
+  implements RecommendationRepository, AgentProposalRepository {
   async createRunMatrix(input: CreateRunMatrixInput) {
     const supabase = createServiceSupabaseClient();
     const runId = randomUUID();
@@ -239,6 +272,52 @@ export class SupabaseRecommendationRepository implements RecommendationRepositor
     if (error) throw new Error(`Failed to update recommendation run: ${error.message}`);
     if (!Array.isArray(data) || data.length !== 1 || data[0]?.id !== runId) {
       throw new Error("Failed to update recommendation run: expected exactly one row");
+    }
+  }
+
+  async saveProposal(input: SavedAgentProposal): Promise<void> {
+    const { error } = await createServiceSupabaseClient()
+      .from("recommendation_proposals")
+      .insert({
+        id: input.proposalId,
+        run_id: input.runId,
+        version: input.version,
+        policy_version: input.policyVersion,
+        status: input.status,
+        output_json: input.output,
+        validation_decision: input.validationDecision,
+      });
+    if (error) throw new Error("Failed to persist agent proposal");
+  }
+
+  async reviewProposal(input: ProposalReview): Promise<void> {
+    const { data, error } = await createServiceSupabaseClient()
+      .from("recommendation_proposals")
+      .update({
+        status: input.approved ? "approved" : "rejected",
+        supervisor_approved_version: input.approved ? input.version : null,
+        supervisor_codes: input.codes,
+        reviewed_at: new Date().toISOString(),
+      })
+      .eq("run_id", input.runId)
+      .eq("version", input.version)
+      .select("id");
+    if (error || !Array.isArray(data) || data.length !== 1) {
+      throw new Error("Failed to persist Supervisor review");
+    }
+  }
+
+  async markRunFailed(
+    runId: string,
+    code: "AGENT_PROPOSAL_INVALID",
+  ): Promise<void> {
+    const { data, error } = await createServiceSupabaseClient()
+      .from("recommendation_runs")
+      .update({ status: "failed", error_summary: code })
+      .eq("id", runId)
+      .select("id");
+    if (error || !Array.isArray(data) || data.length !== 1) {
+      throw new Error("Failed to mark recommendation run failed");
     }
   }
 }
