@@ -93,6 +93,24 @@ describe("multi-agent migration", () => {
     );
   });
 
+  it("makes run matrix and task outcome writes atomic and server-only", async () => {
+    for (const path of [migrationPath, "supabase/schema.sql"]) {
+      const sql = (await readFile(path, "utf8")).toLowerCase();
+      for (const name of ["create_recommendation_run_matrix", "save_route_task_outcome"]) {
+        expect(sql).toContain(`create function ${name}`);
+        expect(sql).toMatch(new RegExp(
+          `create function ${name}[\\s\\S]*?security invoker[\\s\\S]*?set search_path = ''`,
+        ));
+        expect(sql).toMatch(new RegExp(
+          `revoke execute on function ${name}[\\s\\S]*?from public, anon, authenticated`,
+        ));
+        expect(sql).toContain(`grant execute on function ${name}`);
+      }
+      expect(sql).toContain("jsonb_to_recordset");
+      expect(sql).toContain("route task must be running");
+    }
+  });
+
   it("prevents automatic replacement and reserves superseding for host confirmation", async () => {
     const sql = (await readFile(migrationPath, "utf8")).toLowerCase();
 

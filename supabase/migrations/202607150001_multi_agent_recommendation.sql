@@ -241,6 +241,378 @@ create policy "public read shared recommendation scheme routes"
     )
   );
 
+create function create_recommendation_run_matrix(
+  p_run_id uuid,
+  p_plan_id uuid,
+  p_arrival_date date,
+  p_candidates jsonb,
+  p_tasks jsonb
+)
+returns jsonb
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  v_meeting_date date;
+begin
+  if p_run_id is null
+    or p_plan_id is null
+    or p_arrival_date is null
+    or jsonb_typeof(p_candidates) is distinct from 'array'
+    or jsonb_typeof(p_tasks) is distinct from 'array'
+    or jsonb_array_length(p_candidates) = 0
+    or jsonb_array_length(p_tasks) = 0
+  then
+    raise exception 'invalid run matrix input';
+  end if;
+
+  select public.plans.meeting_date
+  into v_meeting_date
+  from public.plans
+  where public.plans.id = p_plan_id
+  for update;
+  if not found or v_meeting_date is distinct from p_arrival_date then
+    raise exception 'plan arrival date mismatch';
+  end if;
+
+  if exists (
+    select 1
+    from jsonb_to_recordset(p_candidates) as candidate(
+      city_code text,
+      city_name text,
+      source text
+    )
+    where nullif(btrim(candidate.city_code), '') is null
+      or nullif(btrim(candidate.city_name), '') is null
+      or candidate.source is distinct from 'system'
+  ) or (
+    select count(distinct candidate.city_code)
+    from jsonb_to_recordset(p_candidates) as candidate(city_code text)
+  ) <> jsonb_array_length(p_candidates) then
+    raise exception 'invalid candidate matrix';
+  end if;
+
+  if exists (
+    select 1
+    from jsonb_to_recordset(p_tasks) as task(
+      id uuid,
+      participant_id uuid,
+      city_code text,
+      origin_city_code text,
+      mode text,
+      search_date date,
+      physical_key text
+    )
+    left join public.participants as participant
+      on participant.id = task.participant_id
+      and participant.plan_id = p_plan_id
+    where task.id is null
+      or participant.id is null
+      or participant.departure_city_code is distinct from task.origin_city_code
+      or not (task.mode = any (participant.accepted_modes))
+      or nullif(btrim(task.city_code), '') is null
+      or nullif(btrim(task.origin_city_code), '') is null
+      or task.mode not in ('flight', 'high_speed_rail', 'normal_train')
+      or task.search_date is null
+      or task.physical_key is distinct from concat_ws(
+        ':', task.origin_city_code, task.city_code, task.mode, task.search_date::text
+      )
+      or not exists (
+        select 1
+        from jsonb_to_recordset(p_candidates) as candidate(city_code text)
+        where candidate.city_code = task.city_code
+      )
+  ) or (
+    select count(distinct task.id)
+    from jsonb_to_recordset(p_tasks) as task(id uuid)
+  ) <> jsonb_array_length(p_tasks) then
+    raise exception 'invalid route task matrix';
+  end if;
+
+  insert into public.recommendation_runs (
+    id, plan_id, status, kind
+  ) values (
+    p_run_id, p_plan_id, 'pending', 'automatic'
+  );
+
+  insert into public.candidate_cities (
+    plan_id, city_code, city_name, source, enabled
+  )
+  select
+    p_plan_id,
+    candidate.city_code,
+    candidate.city_name,
+    candidate.source,
+    true
+  from jsonb_to_recordset(p_candidates) as candidate(
+    city_code text,
+    city_name text,
+    source text
+  )
+  on conflict (plan_id, city_code, source) do update
+  set city_name = excluded.city_name, enabled = true;
+
+  insert into public.route_tasks (
+    id,
+    run_id,
+    participant_id,
+    city_code,
+    origin_city_code,
+    mode,
+    search_date,
+    physical_key,
+    status
+  )
+  select
+    task.id,
+    p_run_id,
+    task.participant_id,
+    task.city_code,
+    task.origin_city_code,
+    task.mode,
+    task.search_date,
+    task.physical_key,
+    'pending'
+  from jsonb_to_recordset(p_tasks) as task(
+    id uuid,
+    participant_id uuid,
+    city_code text,
+    origin_city_code text,
+    mode text,
+    search_date date,
+    physical_key text
+  );
+
+  return jsonb_build_object(
+    'runId', p_run_id,
+    'taskIds', (
+      select coalesce(jsonb_agg(entry.value -> 'id' order by entry.ordinality), '[]'::jsonb)
+      from jsonb_array_elements(p_tasks) with ordinality as entry(value, ordinality)
+    )
+  );
+end;
+$$;
+
+create function save_route_task_outcome(
+  p_task_id uuid,
+  p_outcome jsonb,
+  p_quotes jsonb
+)
+returns boolean
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  v_task public.route_tasks%rowtype;
+  v_status text;
+  v_task_status text;
+  v_error_code text;
+  v_retry_after timestamptz;
+  v_meeting_date date;
+  v_expected_quote_count integer;
+  v_persisted_quote_count integer;
+  v_updated_count integer;
+begin
+  if p_task_id is null
+    or jsonb_typeof(p_outcome) is distinct from 'object'
+    or jsonb_typeof(p_quotes) is distinct from 'array'
+  then
+    raise exception 'invalid route task outcome input';
+  end if;
+
+  select *
+  into v_task
+  from public.route_tasks
+  where public.route_tasks.id = p_task_id
+    and public.route_tasks.status = 'running'
+  for update;
+  if not found then
+    raise exception 'route task must be running';
+  end if;
+
+  v_status := p_outcome ->> 'status';
+  v_error_code := nullif(btrim(p_outcome ->> 'code'), '');
+  if (p_outcome - array['status', 'code', 'retry_after']) <> '{}'::jsonb then
+    raise exception 'invalid route task outcome fields';
+  end if;
+  case v_status
+    when 'success' then v_task_status := 'succeeded';
+    when 'empty' then v_task_status := 'empty';
+    when 'retryable_failure' then v_task_status := 'retryable_failure';
+    when 'terminal_failure' then v_task_status := 'terminal_failure';
+    else raise exception 'invalid route task outcome status';
+  end case;
+
+  if (v_status = 'success' and jsonb_array_length(p_quotes) = 0)
+    or (v_status <> 'success' and jsonb_array_length(p_quotes) <> 0)
+    or (v_status in ('retryable_failure', 'terminal_failure') and v_error_code is null)
+  then
+    raise exception 'invalid route task outcome payload';
+  end if;
+
+  if v_status = 'retryable_failure' then
+    begin
+      v_retry_after := (p_outcome ->> 'retry_after')::timestamptz;
+    exception when others then
+      raise exception 'invalid retry_after';
+    end;
+  end if;
+
+  if v_status = 'success' then
+    select public.plans.meeting_date
+    into v_meeting_date
+    from public.recommendation_runs
+    join public.plans on public.plans.id = public.recommendation_runs.plan_id
+    where public.recommendation_runs.id = v_task.run_id;
+
+    if exists (
+      select 1
+      from jsonb_to_recordset(p_quotes) as quote(
+        id uuid,
+        participant_id uuid,
+        city_code text,
+        quote_id text,
+        provider_quote_id text,
+        mode text,
+        search_date date,
+        queried_at timestamptz,
+        provider text,
+        price_cny integer,
+        depart_at timestamptz,
+        arrive_at timestamptz,
+        duration_minutes integer,
+        transfer_count integer,
+        is_direct boolean,
+        service_name text,
+        evidence_ref text
+      )
+      where quote.id is null
+        or quote.participant_id is distinct from v_task.participant_id
+        or quote.city_code is distinct from v_task.city_code
+        or quote.mode is distinct from v_task.mode
+        or quote.search_date is distinct from v_task.search_date
+        or quote.provider is distinct from 'flyai'
+        or quote.quote_id !~ '^flyai:[0-9a-f]{64}$'
+        or quote.evidence_ref is distinct from quote.quote_id
+        or quote.queried_at is null
+        or quote.price_cny < 0
+        or quote.depart_at is null
+        or quote.arrive_at is null
+        or (quote.arrive_at at time zone 'Asia/Shanghai')::date is distinct from v_meeting_date
+        or quote.duration_minutes <= 0
+        or quote.transfer_count < 0
+        or quote.is_direct is null
+        or nullif(btrim(quote.service_name), '') is null
+    ) then
+      raise exception 'invalid verified quote evidence';
+    end if;
+
+    insert into public.verified_quotes (
+      id,
+      route_task_id,
+      run_id,
+      participant_id,
+      city_code,
+      quote_id,
+      provider_quote_id,
+      mode,
+      search_date,
+      queried_at,
+      provider,
+      price_cny,
+      depart_at,
+      arrive_at,
+      duration_minutes,
+      transfer_count,
+      is_direct,
+      service_name,
+      evidence_ref
+    )
+    select distinct on (quote.quote_id)
+      quote.id,
+      p_task_id,
+      v_task.run_id,
+      quote.participant_id,
+      quote.city_code,
+      quote.quote_id,
+      quote.provider_quote_id,
+      quote.mode,
+      quote.search_date,
+      quote.queried_at,
+      quote.provider,
+      quote.price_cny,
+      quote.depart_at,
+      quote.arrive_at,
+      quote.duration_minutes,
+      quote.transfer_count,
+      quote.is_direct,
+      quote.service_name,
+      quote.evidence_ref
+    from jsonb_to_recordset(p_quotes) as quote(
+      id uuid,
+      participant_id uuid,
+      city_code text,
+      quote_id text,
+      provider_quote_id text,
+      mode text,
+      search_date date,
+      queried_at timestamptz,
+      provider text,
+      price_cny integer,
+      depart_at timestamptz,
+      arrive_at timestamptz,
+      duration_minutes integer,
+      transfer_count integer,
+      is_direct boolean,
+      service_name text,
+      evidence_ref text
+    )
+    order by quote.quote_id, quote.id
+    on conflict (run_id, participant_id, quote_id) do nothing;
+
+    select count(distinct quote.quote_id)
+    into v_expected_quote_count
+    from jsonb_to_recordset(p_quotes) as quote(quote_id text);
+    select count(*)
+    into v_persisted_quote_count
+    from public.verified_quotes
+    where public.verified_quotes.route_task_id = p_task_id
+      and public.verified_quotes.run_id = v_task.run_id
+      and public.verified_quotes.participant_id = v_task.participant_id
+      and public.verified_quotes.city_code = v_task.city_code
+      and public.verified_quotes.mode = v_task.mode
+      and public.verified_quotes.search_date = v_task.search_date
+      and public.verified_quotes.quote_id in (
+        select quote.quote_id
+        from jsonb_to_recordset(p_quotes) as quote(quote_id text)
+      );
+    if v_persisted_quote_count <> v_expected_quote_count then
+      raise exception 'verified quote conflict';
+    end if;
+  end if;
+
+  update public.route_tasks
+  set
+    status = v_task_status,
+    retry_after = case when v_status = 'retryable_failure' then v_retry_after else null end,
+    error_code = case
+      when v_status in ('retryable_failure', 'terminal_failure') then v_error_code
+      else null
+    end,
+    updated_at = now()
+  where public.route_tasks.id = p_task_id
+    and public.route_tasks.status = 'running';
+  get diagnostics v_updated_count = row_count;
+  if v_updated_count <> 1 then
+    raise exception 'route task outcome compare-and-set failed';
+  end if;
+
+  return true;
+end;
+$$;
+
 create function publish_shared_result(
   p_run_id uuid,
   p_proposal_id uuid
@@ -617,11 +989,19 @@ begin
 end;
 $$;
 
+revoke execute on function create_recommendation_run_matrix(uuid, uuid, date, jsonb, jsonb)
+  from public, anon, authenticated;
+revoke execute on function save_route_task_outcome(uuid, jsonb, jsonb)
+  from public, anon, authenticated;
 revoke execute on function publish_shared_result(uuid, uuid)
   from public, anon, authenticated;
 revoke execute on function confirm_alternative_result(uuid, uuid, text)
   from public, anon, authenticated;
 
+grant execute on function create_recommendation_run_matrix(uuid, uuid, date, jsonb, jsonb)
+  to service_role;
+grant execute on function save_route_task_outcome(uuid, jsonb, jsonb)
+  to service_role;
 grant execute on function publish_shared_result(uuid, uuid)
   to service_role;
 grant execute on function confirm_alternative_result(uuid, uuid, text)

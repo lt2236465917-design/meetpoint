@@ -167,4 +167,44 @@ describe("QueryAgent", () => {
     expect(ticketTool).toHaveBeenCalledTimes(2);
     expect(maximum).toBe(1);
   });
+
+  it("fails closed before execution when the stored physical key is not canonical", async () => {
+    const invalid = { ...task("t1", "p1"), physicalKey: "wrong:key" };
+    const repository = queryRepository([invalid]);
+    const ticketTool = vi.fn(async () => result);
+    const agent = new QueryAgent(repository.repository, ticketTool, createPhysicalTicketScheduler());
+
+    await expect(agent.execute("t1")).rejects.toThrow("physicalKey");
+    expect(ticketTool).not.toHaveBeenCalled();
+    expect(repository.outcomes).toHaveLength(0);
+  });
+
+  it("fails closed on a malformed stored task", async () => {
+    const malformed = { ...task("t1", "p1"), attemptCount: -1 } as StoredRouteTask;
+    const repository = queryRepository([malformed]);
+    const ticketTool = vi.fn(async () => result);
+
+    await expect(new QueryAgent(
+      repository.repository,
+      ticketTool,
+      createPhysicalTicketScheduler(),
+    ).execute("t1")).rejects.toThrow();
+    expect(ticketTool).not.toHaveBeenCalled();
+  });
+
+  it("deduplicates success quotes by gateway-issued quoteId", async () => {
+    const repository = queryRepository([task("t1", "p1")]);
+    const ticketTool = vi.fn(async () => ({
+      ...result,
+      options: [result.options[0], { ...result.options[0] }],
+    }));
+
+    const outcome = await new QueryAgent(
+      repository.repository,
+      ticketTool,
+      createPhysicalTicketScheduler(),
+    ).execute("t1");
+    expect(outcome.status).toBe("success");
+    if (outcome.status === "success") expect(outcome.quotes).toHaveLength(1);
+  });
 });

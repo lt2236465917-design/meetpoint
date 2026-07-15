@@ -35,7 +35,7 @@ export class FallbackAgent {
         retryAt: coverage.retryAfter,
       });
     }
-    if (coverage.errorCode === "PROVIDER_RATE_LIMITED" || coverage.recoveryAttemptCount >= 2) {
+    if (coverage.recoveryAttemptCount >= 2) {
       return recoveryActionSchema.parse({
         type: "stop_incomplete",
         taskId: coverage.taskId,

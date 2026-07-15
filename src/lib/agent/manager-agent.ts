@@ -20,7 +20,19 @@ const participantSchema = z.object({
 const managerInputSchema = z.object({
   planId: z.string().trim().min(1),
   arrivalDate: z.iso.date(),
-  participants: z.array(participantSchema).min(2).max(6),
+  participants: z.array(participantSchema).min(2).max(6).superRefine((participants, context) => {
+    const seen = new Set<string>();
+    for (const [index, participant] of participants.entries()) {
+      if (seen.has(participant.id)) {
+        context.addIssue({
+          code: "custom",
+          path: [index, "id"],
+          message: "duplicate participant id",
+        });
+      }
+      seen.add(participant.id);
+    }
+  }),
   manualAddCityCodes: z.array(z.string()).optional(),
   manualExcludeCityCodes: z.array(z.string()).optional(),
 }).strict();

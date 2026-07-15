@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { z } from "zod";
 
 import type { QueryOutcome, RouteTask, RunStatus } from "@/lib/agent/contracts";
 import { createServiceSupabaseClient } from "@/lib/supabase/server";
@@ -24,7 +25,12 @@ export interface RecommendationRepository {
   getRouteTask(taskId: string): Promise<StoredRouteTask | null>;
   markTaskRunning(taskId: string): Promise<StoredRouteTask>;
   saveTaskOutcome(taskId: string, outcome: QueryOutcome): Promise<void>;
-  updateRunStatus(runId: string, status: RunStatus, retryAfter?: string | null): Promise<void>;
+  updateRunStatus(
+    runId: string,
+    status: RunStatus,
+    retryAfter?: string | null,
+    expectedStatus?: RunStatus,
+  ): Promise<void>;
 }
 
 function uuidFromSeed(seed: string): string {
@@ -105,61 +111,44 @@ function toStoredTask(row: RouteTaskRow): StoredRouteTask {
   };
 }
 
-function outcomeTaskFields(outcome: QueryOutcome) {
-  switch (outcome.status) {
-    case "success": return { status: "succeeded", retry_after: null, error_code: null } as const;
-    case "empty": return { status: "empty", retry_after: null, error_code: null } as const;
-    case "terminal_failure":
-      return { status: "terminal_failure", retry_after: null, error_code: outcome.code } as const;
-    case "retryable_failure":
-      return {
-        status: "retryable_failure",
-        retry_after: new Date(Date.now() + outcome.retryAfterMs).toISOString(),
-        error_code: outcome.code,
-      } as const;
-  }
-}
+const runMatrixResultSchema = z.object({
+  runId: z.uuid(),
+  taskIds: z.array(z.uuid()),
+}).strict();
 
 export class SupabaseRecommendationRepository implements RecommendationRepository {
   async createRunMatrix(input: CreateRunMatrixInput) {
     const supabase = createServiceSupabaseClient();
     const runId = randomUUID();
     const taskIds = input.tasks.map((task) => deterministicRouteTaskId(runId, task));
-    const { error: runError } = await supabase.from("recommendation_runs").insert({
-      id: runId,
-      plan_id: input.planId,
-      status: "pending",
-      kind: "automatic",
-    });
-    if (runError) throw new Error(`Failed to create recommendation run: ${runError.message}`);
-
-    const { error: candidateError } = await supabase.from("candidate_cities").upsert(
-      input.candidates.map((candidate) => ({
-        plan_id: input.planId,
+    const { data, error } = await supabase.rpc("create_recommendation_run_matrix", {
+      p_run_id: runId,
+      p_plan_id: input.planId,
+      p_arrival_date: input.arrivalDate,
+      p_candidates: input.candidates.map((candidate) => ({
         city_code: candidate.cityCode,
         city_name: candidate.cityName,
         source: candidate.source,
-        enabled: true,
       })),
-      { onConflict: "plan_id,city_code,source" },
-    );
-    if (candidateError) throw new Error(`Failed to persist candidates: ${candidateError.message}`);
-
-    const { error: taskError } = await supabase.from("route_tasks").insert(
-      input.tasks.map((task, index) => ({
+      p_tasks: input.tasks.map((task, index) => ({
         id: taskIds[index],
-        run_id: runId,
         participant_id: task.participantId,
         city_code: task.cityCode,
         origin_city_code: task.originCityCode,
         mode: task.mode,
         search_date: task.searchDate,
         physical_key: task.physicalKey,
-        status: "pending",
       })),
-    );
-    if (taskError) throw new Error(`Failed to persist route tasks: ${taskError.message}`);
-    return { runId, taskIds };
+    });
+    if (error) throw new Error(`Failed to create recommendation run matrix: ${error.message}`);
+    const parsed = runMatrixResultSchema.safeParse(data);
+    if (!parsed.success
+      || parsed.data.runId !== runId
+      || parsed.data.taskIds.length !== taskIds.length
+      || parsed.data.taskIds.some((id, index) => id !== taskIds[index])) {
+      throw new Error("Failed to create recommendation run matrix: invalid RPC result");
+    }
+    return parsed.data;
   }
 
   async getRouteTask(taskId: string): Promise<StoredRouteTask | null> {
@@ -193,15 +182,25 @@ export class SupabaseRecommendationRepository implements RecommendationRepositor
   }
 
   async saveTaskOutcome(taskId: string, outcome: QueryOutcome): Promise<void> {
-    const task = await this.getRouteTask(taskId);
-    if (!task) throw new Error(`Route task not found: ${taskId}`);
-    const supabase = createServiceSupabaseClient();
-    if (outcome.status === "success") {
-      const { error: quoteError } = await supabase.from("verified_quotes").upsert(
-        outcome.quotes.map((quote) => ({
+    const quotes = outcome.status === "success"
+      ? [...new Map(outcome.quotes.map((quote) => [quote.quoteId, quote])).values()]
+      : [];
+    const outcomePayload = outcome.status === "retryable_failure"
+      ? {
+          status: outcome.status,
+          code: outcome.code,
+          retry_after: new Date(Date.now() + outcome.retryAfterMs).toISOString(),
+        }
+      : outcome.status === "terminal_failure"
+        ? { status: outcome.status, code: outcome.code }
+        : { status: outcome.status };
+    const { data, error } = await createServiceSupabaseClient().rpc(
+      "save_route_task_outcome",
+      {
+        p_task_id: taskId,
+        p_outcome: outcomePayload,
+        p_quotes: quotes.map((quote) => ({
           id: quote.id,
-          route_task_id: taskId,
-          run_id: task.runId,
           participant_id: quote.participantId,
           city_code: quote.cityCode,
           quote_id: quote.quoteId,
@@ -219,22 +218,27 @@ export class SupabaseRecommendationRepository implements RecommendationRepositor
           service_name: quote.serviceName,
           evidence_ref: quote.quoteId,
         })),
-        { onConflict: "run_id,participant_id,quote_id" },
-      );
-      if (quoteError) throw new Error(`Failed to persist verified quotes: ${quoteError.message}`);
-    }
-    const { error } = await supabase.from("route_tasks").update({
-      ...outcomeTaskFields(outcome),
-      updated_at: new Date().toISOString(),
-    }).eq("id", taskId).eq("status", "running");
+      },
+    );
     if (error) throw new Error(`Failed to persist task outcome: ${error.message}`);
+    if (data !== true) throw new Error("Failed to persist task outcome: invalid RPC result");
   }
 
-  async updateRunStatus(runId: string, status: RunStatus, retryAfter: string | null = null) {
-    const { error } = await createServiceSupabaseClient().from("recommendation_runs").update({
+  async updateRunStatus(
+    runId: string,
+    status: RunStatus,
+    retryAfter: string | null = null,
+    expectedStatus?: RunStatus,
+  ) {
+    let query = createServiceSupabaseClient().from("recommendation_runs").update({
       status,
       retry_after: retryAfter,
     }).eq("id", runId);
+    if (expectedStatus) query = query.eq("status", expectedStatus);
+    const { data, error } = await query.select("id");
     if (error) throw new Error(`Failed to update recommendation run: ${error.message}`);
+    if (!Array.isArray(data) || data.length !== 1 || data[0]?.id !== runId) {
+      throw new Error("Failed to update recommendation run: expected exactly one row");
+    }
   }
 }

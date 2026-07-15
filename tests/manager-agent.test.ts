@@ -68,4 +68,13 @@ describe("ManagerAgent", () => {
       [...first.tasks.map((task) => task.participantId)].sort(),
     );
   });
+
+  it("rejects duplicate participant IDs before persistence", async () => {
+    const { repository, tasks } = managerRepository();
+    await expect(new ManagerAgent(repository).prepare({
+      ...validInput,
+      participants: [validInput.participants[0], { ...validInput.participants[1], id: "p2" }],
+    })).rejects.toThrow("participant");
+    expect(tasks).toHaveLength(0);
+  });
 });

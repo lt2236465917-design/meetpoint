@@ -5,6 +5,11 @@ export function queryConcurrencyFromEnv(value = process.env.AGENT_QUERY_CONCURRE
   return Math.min(8, Math.max(1, Math.trunc(parsed)));
 }
 
+function normalizeConcurrency(value: number | undefined): number {
+  if (value === undefined || !Number.isFinite(value)) return queryConcurrencyFromEnv();
+  return Math.min(8, Math.max(1, Math.trunc(value)));
+}
+
 export async function runQueryPool(
   taskIds: readonly string[],
   options: {
@@ -13,17 +18,23 @@ export async function runQueryPool(
   },
 ): Promise<void> {
   if (taskIds.length === 0) return;
-  const configured = options.logicalConcurrency === undefined
-    ? queryConcurrencyFromEnv()
-    : Math.min(8, Math.max(1, Math.trunc(options.logicalConcurrency)));
+  const configured = normalizeConcurrency(options.logicalConcurrency);
   const workerCount = Math.min(configured, taskIds.length);
   let nextIndex = 0;
+  let failed = false;
+  let firstError: unknown;
   async function worker() {
-    while (nextIndex < taskIds.length) {
+    while (!failed && nextIndex < taskIds.length) {
       const index = nextIndex;
       nextIndex += 1;
-      await options.execute(taskIds[index]!);
+      try {
+        await options.execute(taskIds[index]!);
+      } catch (error) {
+        if (!failed) firstError = error;
+        failed = true;
+      }
     }
   }
-  await Promise.all(Array.from({ length: workerCount }, () => worker()));
+  await Promise.allSettled(Array.from({ length: workerCount }, () => worker()));
+  if (failed) throw firstError;
 }

@@ -16,6 +16,17 @@ describe("FallbackAgent", () => {
     expect(action).toEqual({ type: "wait_until", taskId: "t1", retryAt: "2026-07-15T10:01:00.000Z" });
   });
 
+  it("reruns a rate-limited task after cooldown when recovery remains", () => {
+    const action = new FallbackAgent({ now: () => now }).decide({
+      taskId: "t1",
+      errorCode: "PROVIDER_RATE_LIMITED",
+      retryAfter: "2026-07-15T09:59:00.000Z",
+      recoveryAttemptCount: 1,
+      secondaryAdapterConfigured: false,
+    });
+    expect(action).toEqual({ type: "rerun_task", taskId: "t1" });
+  });
+
   it("caps recovery at two attempts per task and marks exhausted coverage incomplete", () => {
     const agent = new FallbackAgent({ now: () => now });
     expect(agent.decide({

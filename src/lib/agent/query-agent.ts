@@ -1,5 +1,7 @@
+import { z } from "zod";
+
 import { findCityByCode } from "@/data/cities";
-import { queryOutcomeSchema, type QueryOutcome } from "@/lib/agent/contracts";
+import { queryOutcomeSchema, routeTaskSchema, type QueryOutcome } from "@/lib/agent/contracts";
 import {
   deterministicVerifiedQuoteId,
   type RecommendationRepository,
@@ -50,6 +52,23 @@ const retryableCodes = new Set([
 
 const emptyCodes = new Set(["PROVIDER_NO_ROUTE", "PROVIDER_NO_TICKET"]);
 
+const storedRouteTaskSchema = routeTaskSchema.extend({ arrivalDate: z.iso.date() }).strict();
+
+function validatedTask(value: unknown, taskId: string): StoredRouteTask {
+  const task = storedRouteTaskSchema.parse(value);
+  if (task.id !== taskId) throw new Error(`Route task id mismatch: ${taskId}`);
+  const canonicalPhysicalKey = [
+    task.originCityCode,
+    task.cityCode,
+    task.mode,
+    task.searchDate,
+  ].join(":");
+  if (task.physicalKey !== canonicalPhysicalKey) {
+    throw new Error(`Route task physicalKey mismatch: ${taskId}`);
+  }
+  return task;
+}
+
 function gatewayRequest(task: StoredRouteTask): GatewaySearchRequest | null {
   const origin = findCityByCode(task.originCityCode);
   const destination = findCityByCode(task.cityCode);
@@ -89,7 +108,8 @@ export class QueryAgent {
   async execute(taskId: string): Promise<QueryOutcome> {
     const stored = await this.repository.getRouteTask(taskId);
     if (!stored) throw new Error(`Route task not found: ${taskId}`);
-    const task = await this.repository.markTaskRunning(taskId);
+    validatedTask(stored, taskId);
+    const task = validatedTask(await this.repository.markTaskRunning(taskId), taskId);
     const request = gatewayRequest(task);
     let outcome: QueryOutcome;
     if (!request) {
@@ -100,23 +120,24 @@ export class QueryAgent {
         if (result.options.some((option) => option.mode !== task.mode)) {
           outcome = { status: "terminal_failure", code: "GATEWAY_EVIDENCE_MISMATCH" };
         } else {
-          const quotes = result.options.map((option) => ({
-                id: deterministicVerifiedQuoteId(task.runId, task.participantId, option.quoteId),
-                quoteId: option.quoteId,
-                providerQuoteId: option.providerQuoteId,
-                participantId: task.participantId,
-                cityCode: task.cityCode,
-                mode: option.mode,
-                searchDate: task.searchDate,
-                queriedAt: result.queriedAt,
-                priceCny: option.priceCny,
-                departAt: option.departAt,
-                arriveAt: option.arriveAt,
-                durationMinutes: option.durationMinutes,
-                transferCount: option.transferCount,
-                isDirect: option.isDirect,
-                serviceName: option.serviceName,
-              })).filter((quote) => validateArrivalDate(quote, task.arrivalDate).ok);
+          const quotesById = new Map(result.options.map((option) => [option.quoteId, option]));
+          const quotes = [...quotesById.values()].map((option) => ({
+            id: deterministicVerifiedQuoteId(task.runId, task.participantId, option.quoteId),
+            quoteId: option.quoteId,
+            providerQuoteId: option.providerQuoteId,
+            participantId: task.participantId,
+            cityCode: task.cityCode,
+            mode: option.mode,
+            searchDate: task.searchDate,
+            queriedAt: result.queriedAt,
+            priceCny: option.priceCny,
+            departAt: option.departAt,
+            arriveAt: option.arriveAt,
+            durationMinutes: option.durationMinutes,
+            transferCount: option.transferCount,
+            isDirect: option.isDirect,
+            serviceName: option.serviceName,
+          })).filter((quote) => validateArrivalDate(quote, task.arrivalDate).ok);
           outcome = quotes.length > 0 ? { status: "success", quotes } : { status: "empty" };
         }
       } catch (error) {

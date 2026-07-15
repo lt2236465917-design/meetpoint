@@ -22,4 +22,31 @@ describe("runQueryPool", () => {
     expect(queryConcurrencyFromEnv("99")).toBe(8);
     expect(queryConcurrencyFromEnv("not-a-number")).toBe(4);
   });
+
+  it("uses the default when explicit concurrency is NaN", async () => {
+    let calls = 0;
+    await runQueryPool(["t1"], {
+      logicalConcurrency: Number.NaN,
+      execute: async () => { calls += 1; },
+    });
+    expect(calls).toBe(1);
+  });
+
+  it("stops claiming work after failure and waits for started workers", async () => {
+    const started: string[] = [];
+    const finished: string[] = [];
+    const promise = runQueryPool(["t1", "t2", "t3", "t4"], {
+      logicalConcurrency: 3,
+      execute: async (taskId) => {
+        started.push(taskId);
+        if (taskId === "t1") throw new Error("boom");
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        finished.push(taskId);
+      },
+    });
+
+    await expect(promise).rejects.toThrow("boom");
+    expect(started).toEqual(["t1", "t2", "t3"]);
+    expect(finished).toEqual(expect.arrayContaining(["t2", "t3"]));
+  });
 });
