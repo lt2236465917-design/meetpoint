@@ -5,6 +5,7 @@ import {
 } from "@/lib/agent/contracts";
 import { arrivalDateInShanghai } from "@/lib/recommendation/date";
 import {
+  PolicyLimitExceededError,
   rankEligibleCities,
   type PolicyQuote,
 } from "@/lib/recommendation/policy";
@@ -78,11 +79,19 @@ export function validateRecommendationPolicy(
     )) codes.add("MISSING_PARTICIPANT");
   }
 
-  const ranked = rankEligibleCities(input.cityInputs.map((city) => ({
-    ...city,
-    participantIds: input.participantIds,
-    arrivalDate: input.arrivalDate,
-  })));
+  let ranked;
+  try {
+    ranked = rankEligibleCities(input.cityInputs.map((city) => ({
+      ...city,
+      participantIds: input.participantIds,
+      arrivalDate: input.arrivalDate,
+    })));
+  } catch (error) {
+    if (error instanceof PolicyLimitExceededError) {
+      return { ok: false, codes: [error.code] };
+    }
+    throw error;
+  }
   const orderedCityCodes = ranked.map((city) => city.cityCode);
   const eligibleCityCodes = [...orderedCityCodes].sort();
   if (

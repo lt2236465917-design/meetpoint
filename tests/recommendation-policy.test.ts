@@ -5,6 +5,7 @@ import {
   buildFastScheme,
   buildSavingScheme,
   directFirstEligible,
+  PolicyLimitExceededError,
   rankEligibleCities,
 } from "@/lib/recommendation/policy";
 
@@ -178,6 +179,36 @@ describe("buildFastScheme", () => {
       quote("p1", "p1", { priceCny: 100 }),
       quote("p2", "p2", { priceCny: 100 }),
     ], 150)).toBeNull();
+  });
+
+  it("rejects a state space beyond the deterministic policy budget", () => {
+    const p1Quotes = Array.from({ length: 256 }, (_, index) => quote(`p1-${index}`, "p1", {
+      priceCny: 1_000_000 + index,
+    }));
+    const p2Quotes = Array.from({ length: 256 }, (_, index) => quote(`p2-${index}`, "p2", {
+      priceCny: 1_000_000 + index * 256,
+    }));
+
+    expect(() => buildFastScheme(
+      ["p1", "p2"],
+      [...p1Quotes, ...p2Quotes],
+      2_000_000,
+    )).toThrow(PolicyLimitExceededError);
+  });
+
+  it("rejects excessive transitions even when fare states collide", () => {
+    const p1Quotes = Array.from({ length: 501 }, (_, index) => quote(`p1-${index}`, "p1", {
+      priceCny: 1_000_000 + index,
+    }));
+    const p2Quotes = Array.from({ length: 501 }, (_, index) => quote(`p2-${index}`, "p2", {
+      priceCny: 1_000_000,
+    }));
+
+    expect(() => buildFastScheme(
+      ["p1", "p2"],
+      [...p1Quotes, ...p2Quotes],
+      2_000_000,
+    )).toThrow(PolicyLimitExceededError);
   });
 });
 

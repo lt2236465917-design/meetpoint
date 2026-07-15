@@ -21,6 +21,18 @@ export type CityPolicyResult = {
   totalDurationMinutes: number;
 };
 
+export const MAX_FAST_POLICY_STATES = 50_000;
+export const MAX_FAST_POLICY_TRANSITIONS = 200_000;
+
+export class PolicyLimitExceededError extends Error {
+  readonly code = "POLICY_INPUT_LIMIT_EXCEEDED";
+
+  constructor() {
+    super("Fast policy state budget exceeded");
+    this.name = "PolicyLimitExceededError";
+  }
+}
+
 function compareNumber(left: number, right: number): number {
   return left < right ? -1 : left > right ? 1 : 0;
 }
@@ -104,6 +116,7 @@ export function buildFastScheme(
   quotes: readonly VerifiedQuote[],
   savingTotal: number,
 ): SchemeProposal | null {
+  let transitionCount = 0;
   let states = new Map<number, FastState>([[0, {
     totalFare: 0,
     totalDuration: 0,
@@ -122,6 +135,10 @@ export function buildFastScheme(
     const nextStates = new Map<number, FastState>();
     for (const state of states.values()) {
       for (const quote of eligible) {
+        transitionCount += 1;
+        if (transitionCount > MAX_FAST_POLICY_TRANSITIONS) {
+          throw new PolicyLimitExceededError();
+        }
         const totalFare = state.totalFare + quote.priceCny;
         if (totalFare * 10 > savingTotal * 13) continue;
 
@@ -137,6 +154,9 @@ export function buildFastScheme(
           orderedQuoteIds: [...state.orderedQuoteIds, quote.quoteId],
         };
         const existing = nextStates.get(totalFare);
+        if (!existing && nextStates.size >= MAX_FAST_POLICY_STATES) {
+          throw new PolicyLimitExceededError();
+        }
         if (!existing || compareFastStateAtSameFare(candidate, existing) < 0) {
           nextStates.set(totalFare, candidate);
         }

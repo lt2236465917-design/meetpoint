@@ -163,4 +163,22 @@ describe("validateRecommendationPolicy", () => {
     expect(decision.ok).toBe(false);
     if (!decision.ok) expect(decision.codes).toContain("POLICY_MISMATCH");
   });
+
+  it("rejects unbounded fast-policy input instead of selecting a partial scheme", () => {
+    const p1Quotes = Array.from({ length: 256 }, (_, index) => quote(`p1-${index}`, "p1", "wuhan", {
+      priceCny: 1_000_000 + index,
+    }));
+    const p2Quotes = Array.from({ length: 256 }, (_, index) => quote(`p2-${index}`, "p2", "wuhan", {
+      priceCny: 1_000_000 + index * 256,
+    }));
+
+    const decision = validateRecommendationPolicy({
+      participantIds: ["p1", "p2"],
+      arrivalDate,
+      cityInputs: [{ cityCode: "wuhan", quotes: [...p1Quotes, ...p2Quotes] }],
+      proposal: proposal(),
+    });
+
+    expect(decision).toEqual({ ok: false, codes: ["POLICY_INPUT_LIMIT_EXCEEDED"] });
+  });
 });
