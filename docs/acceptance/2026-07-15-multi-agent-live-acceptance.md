@@ -4,12 +4,12 @@ This record covers the Task 14 release gate. It contains no secrets, authorizati
 
 ## Verdict
 
-**Blocked — do not describe the Multi-Agent architecture as released.** Real Supabase migration, guarded RPC smoke, supplier evidence, physical-phone H5 checks including first host confirmation, automated gates, and final code review pass. Remaining release blockers are one fresh Calculation/Supervisor publication on the post-fix code that reaches guarded publication, and rotation of the exposed Supabase credentials.
+**Blocked — do not describe the Multi-Agent architecture as released.** Real Supabase migration, guarded RPC smoke, supplier evidence, physical-phone H5 checks including first host confirmation, automated gates, final code review, and one fresh post-fix Calculation/Supervisor guarded publication pass. Remaining release blocker is rotation of the exposed Supabase credentials.
 
 ## Evidence Metadata
 
-- Recorded at: `2026-07-16 21:18 CST`
-- Evidence base commit: docs and Calculation/Supervisor publication fixes landed together on 2026-07-16 (invalid-output retry, review persist retry, winning-city scheme canonicalize); see git history for the exact SHA after commit
+- Recorded at: `2026-07-16 23:40 CST`
+- Evidence base commit: `542713a` (invalid-output retry, review persist retry, winning-city scheme canonicalize)
 - Desktop host: macOS local development environment
 - Automated browser: Codex in-app browser; Chromium version was not exposed
 - Real phone/device: physical phone on the same LAN; browser/version was not exposed
@@ -37,7 +37,7 @@ Status: **PASS**.
 
 ## Fixed Supplier Coverage Plan
 
-Status: **PARTIAL PASS** — supplier matrix coverage, quote persistence, and one guarded publication are proven, but that successful publication used temporary preselected-winner wiring removed in final review. A fresh publication with the final authority-compliant Calculation code remains blocked.
+Status: **PASS** — supplier matrix coverage, quote persistence, and a fresh post-fix guarded publication on `542713a` are proven (plan `VXYI6G` / run `93e7ad8c-1e15-4a3b-905f-c5fb67b02c45`: two schemes, six same-run quote routes). Earlier successful publication that used temporary preselected-winner wiring is retained only as historical evidence.
 
 - No direct gateway probe was counted. Early diagnostic runs used new three-participant plans persisted in Supabase, with flight, high-speed rail, and normal-train participants. Each matrix contained 84 route tasks: 24 flight, 24 high-speed rail, 36 normal train, including 48 previous-day tasks.
 - Run `a2197d4e-b3bb-457c-80d1-4839a73c8919` stored 85 verified quotes (26 flight, 44 high-speed rail, 15 normal train), including 20 previous-day and 20 overnight-arrival quotes. All three participants and one complete candidate city were covered. Task outcomes were 18 succeeded, 12 empty, 10 terminal `PROVIDER_INVALID_RESPONSE`, and 44 not needed after complete coverage; no cooldown timestamps occurred. Calculation then failed because the DeepSeek JSON-output request omitted the required JSON instruction.
@@ -55,7 +55,8 @@ Status: **PARTIAL PASS** — supplier matrix coverage, quote persistence, and on
 - After the gateway was confirmed healthy (`GET /healthz` → `{ "status": "ok" }`), final-code run `6802e82a-66d8-4ef1-8206-1da6eef56679` (plan `YESX56`) stored 94 verified quotes: 55 flight, 26 high-speed rail, and 13 normal train. All three participants and one complete candidate city were covered. Task outcomes were 20 succeeded, 9 empty, 7 terminal `PROVIDER_INVALID_RESPONSE`, and 48 not needed after complete coverage. The run entered `calculating`, recorded Calculation `model_failed` with `invalid_output`, persisted no proposal rows, and failed closed with `RUN_ADVANCE_FAILED`. No Supervisor approval or guarded publication occurred. Do not treat this run as a completed publication.
 - Root cause of that `invalid_output`: DeepSeek intermittently returned non-JSON content even with `response_format=json_object` (reproduced redacted on the same 16-quote eligible-city input: 1 of 5 SDK calls failed `json_parse`; the rest were schema-valid). Calculation recorded `model_failed` and threw, which bypassed the two-attempt proposal loop and became `RUN_ADVANCE_FAILED`.
 - Failing-first fixes: DeepSeek adapter retries once on `MODEL_INVALID_OUTPUT`; the orchestrator consumes retryable model/persist failures inside the two-attempt loop instead of fail-closing the advance lease; Supervisor `reviewProposal` retries transport errors and treats an already-applied approval as idempotent success; when the model selects the deterministic winning city, Calculation canonicalizes schemes/totals/comparison evidence from `rankEligibleCities` before validation (model input still has no preselected winner).
-- Post-fix live attempts (gateway healthy): run `52f45eb0-41fd-4842-b673-6b0166eb6d99` (plan `081CFA`) reached Calculation with 110 quotes / one eligible city; attempt 1 was `POLICY_MISMATCH`, attempt 2 validated and Supervisor model completed, then review persistence failed closed as `RUN_ADVANCE_FAILED` before the review-retry fix. Run `712406d3-ef90-4cf8-b62f-d3d1bb9d3b70` (plan `TFCHT3`) reached Calculation with 78 quotes; both attempts were rejected for `TOTAL_FARE_MISMATCH`/`POLICY_MISMATCH` before scheme canonicalize landed (`AGENT_PROPOSAL_INVALID`). Run `e80716c9-ea53-4525-b50c-5651b9998e5a` (plan `UV4VQ5`) after canonicalize ended `incomplete` with `REAL_QUOTE_COVERAGE_INCOMPLETE` after repeated cooling_down (28 quotes; no eligible city; no Calculation events). Stopped further supplier-backed attempts to avoid additional rate-limit burn. A fresh complete-coverage publication on the fixed code remains required.
+- Post-fix live attempts (gateway healthy): run `52f45eb0-41fd-4842-b673-6b0166eb6d99` (plan `081CFA`) reached Calculation with 110 quotes / one eligible city; attempt 1 was `POLICY_MISMATCH`, attempt 2 validated and Supervisor model completed, then review persistence failed closed as `RUN_ADVANCE_FAILED` before the review-retry fix. Run `712406d3-ef90-4cf8-b62f-d3d1bb9d3b70` (plan `TFCHT3`) reached Calculation with 78 quotes; both attempts were rejected for `TOTAL_FARE_MISMATCH`/`POLICY_MISMATCH` before scheme canonicalize landed (`AGENT_PROPOSAL_INVALID`). Run `e80716c9-ea53-4525-b50c-5651b9998e5a` (plan `UV4VQ5`) after canonicalize ended `incomplete` with `REAL_QUOTE_COVERAGE_INCOMPLETE` after repeated cooling_down (28 quotes; no eligible city; no Calculation events). Stopped further supplier-backed attempts to avoid additional rate-limit burn.
+- After a later supplier probe returned real flight options (Beijing→Shanghai, 10 rows, HTTP 200, no rate-limit), the production Next.js bundle was rebuilt at `542713a` and one fresh three-person plan was executed. Plan `VXYI6G` / run `93e7ad8c-1e15-4a3b-905f-c5fb67b02c45` progressed `pending` → `collecting` → `calculating` → `validating` → `completed` with no diagnostic code. It stored 57 verified quotes (35 flight, 15 high-speed rail, 7 normal train) covering all three participants. The guarded publication wrote a shared result for city `hefei` with exactly two schemes (`saving`, `fast`) and six route rows (three per scheme). Every `recommendation_scheme_routes.verified_quote_id` references a `verified_quotes.id` from this same run. Public `GET /api/plans/VXYI6G` exposes `latestRun.status=completed` and `latestSharedResult` for that city. This clears the fresh post-fix publication blocker.
 
 ## Browser And Device Acceptance
 
@@ -94,11 +95,11 @@ Status: **PASS**.
 - No Critical finding was reported.
 - Three Important findings were independently verified and fixed with failing-first regressions. Calculation no longer receives a preselected deterministic winner; it proposes from verified candidate facts while deterministic policy replay validates afterward. This also removes the pre-model policy-limit throw and contradictory `coverageComplete`/`deterministicPolicyResult` state.
 - Regressions verify that no recommendation is preselected in model input, policy-limit rejection preserves `POLICY_INPUT_LIMIT_EXCEEDED`, and malformed candidate snapshots remain untrusted model input that deterministic validation rejects.
-- The prior successful publication and confirmed alternative were generated while the temporary preselected-winner wiring was present. Final review therefore requires one fresh supplier-backed run through Calculation, Supervisor, and guarded publication with the corrected code before the live gate can close.
+- The prior successful publication and confirmed alternative were generated while the temporary preselected-winner wiring was present. Final review therefore required one fresh supplier-backed run through Calculation, Supervisor, and guarded publication with the corrected code; that run is now recorded above as plan `VXYI6G` / run `93e7ad8c-1e15-4a3b-905f-c5fb67b02c45` on commit `542713a`.
 
 ## Release Blockers
 
-1. After supplier recovery, run one fresh supplier-backed plan through Calculation, Supervisor, and guarded publication on the post-fix code (invalid-output retry + winning-city scheme canonicalize + review persist retry); verify both schemes and all six selected quote references belong to that same run's `verified_quotes`.
+1. ~~After supplier recovery, run one fresh supplier-backed plan through Calculation, Supervisor, and guarded publication on the post-fix code; verify both schemes and all six selected quote references belong to that same run's `verified_quotes`.~~ **Cleared** by plan `VXYI6G` / run `93e7ad8c-1e15-4a3b-905f-c5fb67b02c45` on `542713a`.
 2. Rotate the Supabase secret key and database password that were exposed in the operator conversation and update local server-only configuration.
 
-Task 14 remains incomplete until both blockers are cleared.
+Task 14 remains incomplete until the credential-rotation blocker is cleared.
