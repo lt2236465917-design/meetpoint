@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Notice } from "@/components/ui/Notice";
 import type { RunStatus } from "@/lib/agent/contracts";
+import { readMeetingHistory } from "@/lib/ui/meeting-history";
 
 const REFRESH_DELAYS_MS = [2_000, 3_000, 5_000, 8_000, 13_000, 21_000];
 
@@ -16,10 +17,33 @@ export type PublicRunProgress = {
   diagnosticCode: string | null;
 };
 
+export async function advanceAutomaticRun({
+  code,
+  runId,
+  participantToken,
+  request = fetch,
+}: {
+  code: string;
+  runId: string;
+  participantToken: string;
+  request?: typeof fetch;
+}) {
+  const response = await request(
+    `/api/plans/${encodeURIComponent(code)}/runs/${encodeURIComponent(runId)}/advance`,
+    {
+      method: "POST",
+      headers: { "x-participant-token": participantToken },
+    },
+  );
+  return response.ok;
+}
+
 export function RefreshingResultNotice({
+  code,
   progress,
   now = new Date(),
 }: {
+  code?: string;
   progress: PublicRunProgress;
   now?: Date;
 }) {
@@ -28,14 +52,28 @@ export function RefreshingResultNotice({
   const autoRefresh = isNonterminal(progress.status);
   const delay = REFRESH_DELAYS_MS[refreshCount];
 
+  const refresh = useCallback(async () => {
+    if (code && autoRefresh) {
+      const participantToken = readMeetingHistory()
+        .find((item) => item.code === code)
+        ?.participantEditToken;
+      if (participantToken) {
+        await advanceAutomaticRun({
+          code,
+          runId: progress.runId,
+          participantToken,
+        }).catch(() => false);
+      }
+    }
+    setRefreshCount((count) => count + 1);
+    router.refresh();
+  }, [autoRefresh, code, progress.runId, router]);
+
   useEffect(() => {
     if (!autoRefresh || delay === undefined) return;
-    const timer = window.setTimeout(() => {
-      setRefreshCount((count) => count + 1);
-      router.refresh();
-    }, delay);
+    const timer = window.setTimeout(() => void refresh(), delay);
     return () => window.clearTimeout(timer);
-  }, [autoRefresh, delay, router]);
+  }, [autoRefresh, delay, refresh]);
 
   return (
     <div aria-live="polite" className="space-y-2" role="status">
@@ -47,7 +85,7 @@ export function RefreshingResultNotice({
       ) : null}
       <button
         className="w-full rounded-lg border border-gray-200 py-3 text-sm font-medium text-gray-950"
-        onClick={() => router.refresh()}
+        onClick={() => void refresh()}
         type="button"
       >
         刷新结果

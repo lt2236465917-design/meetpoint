@@ -37,7 +37,7 @@ This project is a mobile-first Web H5 app for multi-person cross-city meeting pl
 - `src/app/`: mobile-first App Router pages with Chinese user-facing copy.
 - `src/components/layout/`: shared responsive page shells; desktop routes should remain centered phone-sized H5 canvases.
 - `src/components/`: mobile-first UI components.
-- `src/components/result/`: shared one-city/two-scheme rendering and bounded run-progress feedback; render persisted scheme routes directly and never reselect routes client-side.
+- `src/components/result/`: shared one-city/two-scheme rendering and bounded run-progress feedback; render persisted scheme routes directly, never reselect routes client-side, and let a nonterminal automatic result page post one bounded authenticated advance before refresh when the device has a local participant token.
 - `docs/architecture.md`: stable technical map for routes, data flow, modules, and security boundaries.
 - `docs/integration-guide.md`: stable setup, API, error-code, and smoke-test reference for handoff.
 - `docs/superpowers/README.md`: authority order for current specifications, plans, the recovery ledger, and historical records.

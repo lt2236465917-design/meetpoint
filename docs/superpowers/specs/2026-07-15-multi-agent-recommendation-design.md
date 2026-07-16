@@ -1,6 +1,6 @@
 # Multi-Agent Recommendation Product And Architecture Design
 
-**Status:** Approved design; implementation in progress through Task 12
+**Status:** Approved design; Tasks 1–13 implemented; Task 14 live gate open
 
 **Date:** 2026-07-15
 
@@ -8,7 +8,7 @@
 
 This specification defines the approved product and architecture version. It supersedes conflicting product decisions in earlier MVP specifications about target arrival time, estimated recommendations, three result cities/cards, and explanation-only LLM use. Earlier specifications and plans remain unchanged as historical implementation records.
 
-Implementation progress is tracked exclusively in `.superpowers/sdd/progress.md`. Tasks 1–12 are implemented; Tasks 13–14 remain. The shared result is one city with saving/fast schemes, and private alternatives require requester-or-host reads plus host-only confirmation; legacy-path removal, PostgreSQL/Supabase migration smoke, supplier coverage, and real-device acceptance are not complete. Do not describe the full architecture as released before the Task 14 gate passes.
+Implementation progress is tracked exclusively in `.superpowers/sdd/progress.md`. Tasks 1–13 are implemented and Task 14 is partially complete. The shared result is one city with saving/fast schemes, private alternatives require requester-or-host reads plus host-only confirmation, and the legacy paths are removed. Do not describe the full architecture as released before the Task 14 gate passes; use `docs/acceptance/2026-07-15-multi-agent-live-acceptance.md` for current evidence and blockers.
 
 ## Product Goal
 
@@ -121,8 +121,8 @@ Query Agents execute bounded route tasks through ticket tools. They:
 
 The Calculation Agent replaces the proposed Recommendation Engine Tool. It:
 
-- reads verified quotes and coverage state;
-- requests targeted missing-route queries when required;
+- reads verified quotes and the controlled `missingTaskIds` coverage state;
+- returns deterministic `incomplete` without invoking the model when `missingTaskIds` is nonempty;
 - applies the direct-first, saving, fast, and unique-city policies;
 - returns a structured proposal containing one city, two schemes, selected quote IDs, comparison evidence, and reasons;
 - calls the arithmetic and evidence validators before submission;
@@ -196,13 +196,13 @@ Concurrency limits are code configuration informed by provider evidence. An LLM 
 
 The Calculation Agent receives:
 
-- plan and participant identifiers without unnecessary personal data;
+- participant identifiers without unnecessary personal data;
 - selected arrival date;
-- candidate cities;
-- accepted modes;
-- verified normalized quotes;
-- coverage and retry state;
+- candidate cities with verified normalized quotes;
+- controlled missing task identifiers, where an empty `missingTaskIds` array is the complete-coverage signal;
 - policy version.
+
+The model input contains no separate `coverageComplete` flag, `deterministicPolicyResult`, or other preselected winner. Calculation proposes from candidate facts; deterministic policy replay validates the proposal afterward.
 
 It returns strict structured output containing:
 
@@ -279,7 +279,7 @@ Recommendation cards and the shared result entry appear only for a `completed` r
 9. Alternative-city previews remain private until host confirmation.
 10. Identical verified quote fixtures and policy versions produce validator-equivalent published facts even if explanation wording differs.
 11. Root application and gateway lint, test, and build commands pass.
-12. Real-device acceptance verifies the remaining native date picker and the full create-to-result flow.
+12. Physical-phone acceptance verified the native date picker and core create-to-result flow. Automated browser evidence remains partial for native-picker interaction and the complete join flow, and post-publication result cards were not rerun in the automated browser.
 
 ## Out Of Scope
 
@@ -292,4 +292,4 @@ Recommendation cards and the shared result entry appear only for a `completed` r
 
 ## Implementation Authority
 
-The reviewed implementation sequence is `docs/superpowers/plans/2026-07-15-multi-agent-recommendation-implementation.md`; recovery status is `.superpowers/sdd/progress.md`. Complete Tasks 13–14 in order, and keep Task 14 as the release gate for PostgreSQL/Supabase migration smoke, supplier coverage, and real-device acceptance.
+The reviewed implementation sequence is `docs/superpowers/plans/2026-07-15-multi-agent-recommendation-implementation.md`; recovery status is `.superpowers/sdd/progress.md`. Task 13 is complete. Keep Task 14 as the release gate and use the canonical acceptance record for its current evidence and blockers.

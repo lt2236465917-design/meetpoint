@@ -63,11 +63,13 @@ function policyInput(snapshot: CalculationSnapshot, proposal: unknown): Validate
 }
 
 function modelInput(snapshot: CalculationSnapshot): Record<string, unknown> {
+  const missingTaskIds = [...snapshot.missingTaskIds];
   return {
     policyVersion: snapshot.policyVersion,
     arrivalDate: snapshot.arrivalDate,
     participantIds: snapshot.participantIds,
     correctionCodes: snapshot.correctionCodes ?? [],
+    missingTaskIds,
     candidates: snapshot.cityInputs.map((city) => ({
       cityCode: city.cityCode,
       quotes: city.quotes.map((quote) => ({

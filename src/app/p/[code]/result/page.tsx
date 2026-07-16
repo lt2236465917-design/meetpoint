@@ -88,7 +88,7 @@ export function ResultContent({
       <div className="space-y-4">
         {!progress ? <Notice>还没有计算结果。</Notice> : null}
         {progress && !completed ? (
-          <RefreshingResultNotice progress={progress} now={now} />
+          <RefreshingResultNotice code={code} progress={progress} now={now} />
         ) : null}
         {completed && result ? <SharedRecommendation result={result} /> : null}
         {completed && !result ? (

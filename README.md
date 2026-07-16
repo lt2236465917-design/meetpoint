@@ -4,7 +4,7 @@ Mobile-first H5 MVP for choosing a fair cross-city meeting city for 2-6 people i
 
 ## Multi-Agent Migration Status
 
-The approved [2026-07-15 Multi-Agent design](docs/superpowers/specs/2026-07-15-multi-agent-recommendation-design.md) is implemented through Task 13: plans use an arrival date and host credential, verified quote evidence and route tasks are persisted, deterministic saving/fast/unique-city policy and agent review exist, bounded runs publish through an atomic guard, the shared result renders one city with two persisted schemes, participants can create private one-city previews that only the host can confirm as the replacement, and the legacy estimate/three-city/explanation-only paths have been removed. Task 14 live acceptance remains open. Do not describe the target experience as released until the PostgreSQL/Supabase migration smoke, fixed supplier coverage plan, and device/browser acceptance are recorded in `docs/acceptance/2026-07-15-multi-agent-live-acceptance.md`.
+The approved [2026-07-15 Multi-Agent design](docs/superpowers/specs/2026-07-15-multi-agent-recommendation-design.md) is implemented through Task 13: plans use an arrival date and host credential, verified quote evidence and route tasks are persisted, deterministic saving/fast/unique-city policy and agent review exist, bounded runs publish through an atomic guard, the shared result renders one city with two persisted schemes, participants can create private one-city previews that only the host can confirm as the replacement, and the legacy estimate/three-city/explanation-only paths have been removed. Task 14 remains an open release gate; use the [canonical acceptance record](docs/acceptance/2026-07-15-multi-agent-live-acceptance.md) for current evidence and blockers.
 
 ## Scripts
 
@@ -47,7 +47,7 @@ The approved [2026-07-15 Multi-Agent design](docs/superpowers/specs/2026-07-15-m
 - `src/lib/agent/run-orchestrator.ts`: creates and incrementally advances durable runs with a persisted lease; it dispatches to the guarded in-memory fallback when Supabase is absent.
 - `src/lib/recommendation/alternative-preview.ts` and `src/lib/security/host-confirmation.ts`: bind a private run to one canonical city and requesting participant, authorize private reads, and pass the exact Supervisor-approved proposal to host-only atomic confirmation.
 - `src/components/result/SharedRecommendation.tsx` and `SchemeCard.tsx`: render the published city once and map persisted participant routes directly, including team totals, route facts, quote fingerprints, and China-time freshness; they never render booking links or client-side route selection.
-- `src/components/result/RefreshingResultNotice.tsx`: maps every run status to Chinese progress/retry guidance and uses bounded refresh backoff.
+- `src/components/result/RefreshingResultNotice.tsx`: maps every run status to Chinese progress/retry guidance and, when the device holds a local participant token, posts one bounded authenticated run advance before refreshing.
 - `src/lib/ui/meeting-history.ts`: browser-only local recent-record storage; it caches `useSyncExternalStore` snapshots so the homepage does not trigger React update loops.
 
 ## Environment
@@ -73,7 +73,7 @@ Supabase variables:
 - `TRAVEL_GATEWAY_TIMEOUT_MS`: optional main-app gateway request timeout; defaults to `30000` ms.
 - `AGENT_QUERY_CONCURRENCY`: optional logical QueryAgent worker count, clamped to `1..8`; defaults to `4` and does not change the gateway's physical supplier concurrency.
 
-The provider-neutral `AgentModel` uses DeepSeek for Calculation and Supervisor when Supabase-backed runs reach complete real-quote coverage. The adapter makes DeepSeek V4 JSON mode explicit, supplies format guidance, bounds output to 4096 tokens, and disables thinking for these structured turns. Missing, truncated, or invalid model output fails closed and cannot publish; deterministic policy replay and publication guards remain authoritative.
+The provider-neutral `AgentModel` uses DeepSeek for Calculation and Supervisor when Supabase-backed runs reach complete real-quote coverage. Calculation proposes one city and its saving/fast routes from verified candidate facts; independent deterministic policy replay rejects incorrect city selection, routes, totals, or comparison evidence before Supervisor approval or publication. The adapter makes DeepSeek V4 JSON mode explicit, supplies format guidance, bounds output to 4096 tokens, and disables thinking for these structured turns. Missing, truncated, altered, or invalid model output fails closed and cannot publish; deterministic policy replay and publication guards remain authoritative.
 
 For local real-ticket smoke tests, run the gateway separately and set `TRAVEL_GATEWAY_URL=http://127.0.0.1:8080` in `.env.local`. The `.env.local` `TRAVEL_GATEWAY_TOKEN` must match `services/travel-provider-gateway/.env`; otherwise QueryAgent records the gateway failure and the run cannot publish without complete verified coverage.
 
@@ -135,7 +135,7 @@ After the automated verification above, run this browser smoke for Task 14:
 5. Confirm the public plan page updates filling records without a manual browser refresh.
 6. After the participant limit is reached, start calculation from the public plan page on a device that has filled the plan.
 7. Confirm the calculate request returns a pending run and the progress route is reachable with the participant token.
-8. Do not use local fallback to claim a published target result: it has no supplier adapter and will finish as `incomplete` without injected verified quotes. Full PostgreSQL, supplier, and device acceptance remains Task 14.
+8. Do not use local fallback to claim a published target result: it has no supplier adapter and will finish as `incomplete` without injected verified quotes. Consult the canonical acceptance record for current Task 14 evidence and blockers.
 9. With a completed fixture or Supabase-backed run, confirm `/p/[code]/result` shows the city once, exactly “省钱方案” and “省时方案”, every participant route, quote freshness in China time, and no estimate, average-fare, three-city, or booking-link UI.
 10. From a completed result, open “换个城市看看”, select one supported city, and confirm the requester sees “仅你可见的预览” while the shared result remains unchanged.
-11. Open the preview URL in the host browser, confirm “确认替换共享结果” appears only there, then confirm once and repeat the request; both calls should end completed and the shared result should show the replacement city.
+11. Open the preview URL in the host browser, confirm “确认替换共享结果” appears only there, then confirm once; the shared result should show the replacement city. Repeated idempotent confirmation is covered by API/RPC tests rather than a second physical UI request in Task 14 acceptance.

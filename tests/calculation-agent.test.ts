@@ -143,6 +143,95 @@ describe("CalculationAgent", () => {
     expect(generate).not.toHaveBeenCalled();
   });
 
+  it("does not preselect the recommendation before the Calculation model proposes it", async () => {
+    const generate = vi.fn(async ({ outputSchema, input, system }) => {
+      expect(input).toMatchObject({
+        missingTaskIds: [],
+      });
+      expect(input).not.toHaveProperty("coverageComplete");
+      expect(input).not.toHaveProperty("deterministicPolicyResult");
+      expect(system).toMatch(/受控缺失任务为空|覆盖完整/);
+      expect(system).toMatch(/必须返回 proposal|不得返回 incomplete/);
+      expect(system).not.toMatch(/唯一结果|逐字段复制/);
+      return outputSchema.parse(validProposal);
+    });
+    const agent = new CalculationAgent({ provider: "fake", model: "fake", generate }, {
+      saveProposal: vi.fn(async () => undefined),
+      validatePolicy: () => ({ ok: true }),
+      validateExplanation: () => ({ ok: true }),
+    });
+
+    await expect(agent.propose(snapshot({ missingTaskIds: [] }))).resolves.toEqual(validProposal);
+    expect(generate).toHaveBeenCalledOnce();
+  });
+
+  it("preserves the stable policy-limit diagnostic after model proposal", async () => {
+    const p1Quotes = Array.from({ length: 256 }, (_, index) => quote(`p1-${index}`, "p1", {
+      priceCny: 1_000_000 + index,
+    }));
+    const p2Quotes = Array.from({ length: 256 }, (_, index) => quote(`p2-${index}`, "p2", {
+      priceCny: 1_000_000 + index * 256,
+    }));
+    const generate = vi.fn(async ({ outputSchema }) => outputSchema.parse(validProposal));
+    const saveProposal = vi.fn(async () => undefined);
+    const agent = new CalculationAgent({ provider: "fake", model: "fake", generate }, {
+      saveProposal,
+    });
+
+    await agent.propose(snapshot({
+      cityInputs: [{ cityCode: "wuhan", quotes: [...p1Quotes, ...p2Quotes] }],
+    }));
+
+    expect(generate).toHaveBeenCalledOnce();
+    expect(saveProposal).toHaveBeenCalledWith(expect.objectContaining({
+      status: "rejected",
+      validationDecision: {
+        ok: false,
+        codes: ["POLICY_INPUT_LIMIT_EXCEEDED"],
+      },
+    }));
+  });
+
+  it("passes malformed snapshots as untrusted candidates without contradictory policy output", async () => {
+    const generate = vi.fn(async ({ outputSchema, input }) => {
+      expect(input).toMatchObject({
+        missingTaskIds: [],
+      });
+      expect(input.candidates).toEqual([
+        expect.objectContaining({
+          cityCode: "wuhan",
+          quotes: expect.arrayContaining([
+            expect.objectContaining({ quoteId: "p1-saving" }),
+          ]),
+        }),
+      ]);
+      expect(input).not.toHaveProperty("coverageComplete");
+      expect(input).not.toHaveProperty("deterministicPolicyResult");
+      return outputSchema.parse(validProposal);
+    });
+    const saveProposal = vi.fn(async () => undefined);
+    const agent = new CalculationAgent({ provider: "fake", model: "fake", generate }, {
+      saveProposal,
+    });
+    const malformed = snapshot({
+      cityInputs: [{
+        cityCode: "wuhan",
+        quotes: snapshot().cityInputs[0]!.quotes.map((item, index) =>
+          index === 0 ? { ...item, source: "estimated" } : item
+        ),
+      }],
+    });
+
+    await agent.propose(malformed);
+
+    expect(saveProposal).toHaveBeenCalledWith(expect.objectContaining({
+      status: "rejected",
+      validationDecision: expect.objectContaining({
+        codes: expect.arrayContaining(["ESTIMATED_QUOTE"]),
+      }),
+    }));
+  });
+
   it("persists a model-invented incomplete output when controlled coverage is complete", async () => {
     const saveProposal = vi.fn(async () => undefined);
     const agent = new CalculationAgent(model({

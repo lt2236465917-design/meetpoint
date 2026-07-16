@@ -2,6 +2,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { ResultContent } from "@/app/p/[code]/result/page";
+import { advanceAutomaticRun } from "@/components/result/RefreshingResultNotice";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: vi.fn() }),
@@ -39,6 +40,24 @@ function renderStatus(
 }
 
 describe("result page public states", () => {
+  it("advances a nonterminal automatic run with the stored participant token", async () => {
+    const request = vi.fn(async () => new Response(null, { status: 200 }));
+
+    await expect(advanceAutomaticRun({
+      code: "ABC123",
+      runId: "run-12345678",
+      participantToken: "participant-token",
+      request,
+    })).resolves.toBe(true);
+    expect(request).toHaveBeenCalledWith(
+      "/api/plans/ABC123/runs/run-12345678/advance",
+      {
+        method: "POST",
+        headers: { "x-participant-token": "participant-token" },
+      },
+    );
+  });
+
   it.each(["pending", "collecting"] as const)(
     "shows remaining real-fare groups while %s",
     (status) => {

@@ -28,6 +28,16 @@ describe("agent prompts", () => {
     expect(prompt).toMatch(/不得.*(修改|发布)/);
   });
 
+  it("requires a proposal when controlled missing tasks are empty and keeps incomplete only for real gaps", () => {
+    const prompt = buildCalculationSystemPrompt({ quoteIds: ["q1"], policyVersion: "2026-07-15.v1" });
+    expect(prompt).toMatch(/受控缺失任务为空|覆盖完整/);
+    expect(prompt).toMatch(/必须返回 proposal|不得返回 incomplete/);
+    expect(prompt).toMatch(/覆盖不完整时返回 incomplete/);
+    expect(prompt).toMatch(/Calculation Agent.*(选择|提出)|自行.*(选择|构建)/);
+    expect(prompt).toMatch(/确定性.*校验/);
+    expect(prompt).not.toMatch(/唯一结果|逐字段复制/);
+  });
+
   it("makes Supervisor fail closed when deterministic validation is false", () => {
     const prompt = buildSupervisorSystemPrompt({ completeParticipantCount: 2, participantCount: 2, validationCodes: ["UNKNOWN_QUOTE_ID"] });
     expect(prompt).toContain("UNKNOWN_QUOTE_ID");

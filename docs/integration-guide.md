@@ -217,11 +217,11 @@ Terminal run progress may expose these `diagnosticCode` values without publishin
 3. Open `/p/[code]/join`, submit participants until the plan reaches its participant limit.
 4. After each participant submit, confirm the browser returns to `/p/[code]` and the filling records update without a manual refresh.
 5. When the participant limit is reached on a device that filled the plan, use the public plan page's direct "开始计算" action.
-6. Confirm the calculate request returns HTTP 202 and the advance endpoint reports a run ID and progress.
-7. Without Supabase and supplier-backed verified quotes, confirm the fallback run ends `incomplete` and exposes no shared result. The one-city/two-scheme and private alternative UI are implemented; PostgreSQL migration smoke, real supplier coverage, and device acceptance remain Task 14 work.
+6. Confirm the calculate request returns HTTP 202 and the advance endpoint reports a run ID and progress. On `/p/[code]/result` with a pending automatic run, confirm the page issues an authenticated bounded advance before refreshing; polling alone does not progress the run.
+7. Without Supabase and supplier-backed verified quotes, confirm the fallback run ends `incomplete` and exposes no shared result. Consult `docs/acceptance/2026-07-15-multi-agent-live-acceptance.md` for current Task 14 evidence and blockers.
 8. With a completed fixture or Supabase-backed run, confirm the result page shows one city, exactly saving/fast schemes, every persisted participant route, China-time quote freshness, and no estimate, average-fare, three-city, or booking-link UI.
 9. Create a preview with `POST /api/plans/[code]/previews` and `x-participant-token`; confirm its task matrix contains only the requested city. Read it with the requester token, then confirm another participant receives 404 for the same URL.
-10. Confirm the public result still shows the prior shared city while the preview is pending. Send the preview URL to the host browser, confirm it with `x-host-token`, and verify a repeated confirmation remains completed without creating another result.
+10. Confirm the public result still shows the prior shared city while the preview is pending. Send the preview URL to the host browser, confirm it once with `x-host-token`, and verify the replacement city appears. Treat repeated idempotency as an API/RPC test concern unless it is explicitly rerun on a device.
 
 ## Responsive UI Checks
 
