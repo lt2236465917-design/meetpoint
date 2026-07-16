@@ -1,6 +1,6 @@
 # Multi-Agent Unique-City Recommendation Implementation Plan
 
-**Execution status (2026-07-16):** Tasks 1–13 are implemented. Task 14 is partially complete; `docs/acceptance/2026-07-15-multi-agent-live-acceptance.md` records its current evidence and blockers. The checkboxes below preserve the original reviewed execution sequence rather than live completion status; `.superpowers/sdd/progress.md` is the recovery authority.
+**Execution status (2026-07-17):** Tasks 1–14 are complete. Task 14 closed with an operator waiver of exposed Supabase credential rotation; `docs/acceptance/2026-07-15-multi-agent-live-acceptance.md` is the canonical record. The checkboxes below preserve the original reviewed execution sequence rather than live completion status; `.superpowers/sdd/progress.md` is the recovery authority.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 

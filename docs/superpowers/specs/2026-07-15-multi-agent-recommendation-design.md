@@ -1,6 +1,6 @@
 # Multi-Agent Recommendation Product And Architecture Design
 
-**Status:** Approved design; Tasks 1–13 implemented; Task 14 live gate open
+**Status:** Approved design; Tasks 1–14 complete (Task 14 closed with operator-waived credential rotation)
 
 **Date:** 2026-07-15
 
@@ -8,7 +8,7 @@
 
 This specification defines the approved product and architecture version. It supersedes conflicting product decisions in earlier MVP specifications about target arrival time, estimated recommendations, three result cities/cards, and explanation-only LLM use. Earlier specifications and plans remain unchanged as historical implementation records.
 
-Implementation progress is tracked exclusively in `.superpowers/sdd/progress.md`. Tasks 1–13 are implemented and Task 14 is partially complete. The shared result is one city with saving/fast schemes, private alternatives require requester-or-host reads plus host-only confirmation, and the legacy paths are removed. Do not describe the full architecture as released before the Task 14 gate passes; use `docs/acceptance/2026-07-15-multi-agent-live-acceptance.md` for current evidence and blockers.
+Implementation progress is tracked exclusively in `.superpowers/sdd/progress.md`. Tasks 1–14 are complete. The shared result is one city with saving/fast schemes, private alternatives require requester-or-host reads plus host-only confirmation, and the legacy paths are removed. Task 14 closed with an operator waiver of exposed Supabase credential rotation on 2026-07-17; see `docs/acceptance/2026-07-15-multi-agent-live-acceptance.md`.
 
 ## Product Goal
 
@@ -292,4 +292,4 @@ Recommendation cards and the shared result entry appear only for a `completed` r
 
 ## Implementation Authority
 
-The reviewed implementation sequence is `docs/superpowers/plans/2026-07-15-multi-agent-recommendation-implementation.md`; recovery status is `.superpowers/sdd/progress.md`. Task 13 is complete. Keep Task 14 as the release gate and use the canonical acceptance record for its current evidence and blockers.
+The reviewed implementation sequence is `docs/superpowers/plans/2026-07-15-multi-agent-recommendation-implementation.md`; recovery status is `.superpowers/sdd/progress.md`. Tasks 1–14 are complete; use the canonical acceptance record for Task 14 evidence and the operator credential-rotation waiver.

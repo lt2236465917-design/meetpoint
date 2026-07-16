@@ -2,7 +2,7 @@
 
 This document is the stable technical map for the running system. Detailed task history lives in git commits and `docs/superpowers/plans/`.
 
-The approved product and Multi-Agent architecture is documented separately in `docs/superpowers/specs/2026-07-15-multi-agent-recommendation-design.md`. Tasks 1–13 are implemented. The shared result renders one city and persisted saving/fast schemes, private one-city previews require requester-or-host reads plus host-only atomic replacement, and the legacy estimate/three-city/explanation-only paths are removed. Task 14 remains an open release gate (credential rotation); canonical evidence and blockers live in `docs/acceptance/2026-07-15-multi-agent-live-acceptance.md`. Do not describe Multi-Agent as released while that gate remains open.
+The approved product and Multi-Agent architecture is documented separately in `docs/superpowers/specs/2026-07-15-multi-agent-recommendation-design.md`. Tasks 1–14 are complete. The shared result renders one city and persisted saving/fast schemes, private one-city previews require requester-or-host reads plus host-only atomic replacement, and the legacy estimate/three-city/explanation-only paths are removed. Task 14 closed with an operator waiver of exposed Supabase credential rotation on 2026-07-17; canonical evidence lives in `docs/acceptance/2026-07-15-multi-agent-live-acceptance.md`.
 
 ## Runtime Shape
 

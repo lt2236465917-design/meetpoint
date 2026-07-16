@@ -4,11 +4,11 @@ This record covers the Task 14 release gate. It contains no secrets, authorizati
 
 ## Verdict
 
-**Blocked — do not describe the Multi-Agent architecture as released.** Real Supabase migration, guarded RPC smoke, supplier evidence, physical-phone H5 checks including first host confirmation, automated gates, final code review, and one fresh post-fix Calculation/Supervisor guarded publication pass. Remaining release blocker is rotation of the exposed Supabase credentials.
+**Pass — Task 14 closed with operator-waived credential rotation.** Real Supabase migration, guarded RPC smoke, supplier evidence, physical-phone H5 checks including first host confirmation, automated gates, final code review, and one fresh post-fix Calculation/Supervisor guarded publication pass. On `2026-07-17`, the operator explicitly declined Dashboard rotation of the exposed Supabase secret key and database password and chose to keep the existing local server-only `.env.local` credentials. That residual risk is accepted by the operator; it is not claimed as completed rotation.
 
 ## Evidence Metadata
 
-- Recorded at: `2026-07-16 23:40 CST`
+- Recorded at: `2026-07-16 23:40 CST` (gate evidence); operator waiver recorded `2026-07-17`
 - Evidence base commit: `542713a` (invalid-output retry, review persist retry, winning-city scheme canonicalize)
 - Desktop host: macOS local development environment
 - Automated browser: Codex in-app browser; Chromium version was not exposed
@@ -100,6 +100,6 @@ Status: **PASS**.
 ## Release Blockers
 
 1. ~~After supplier recovery, run one fresh supplier-backed plan through Calculation, Supervisor, and guarded publication on the post-fix code; verify both schemes and all six selected quote references belong to that same run's `verified_quotes`.~~ **Cleared** by plan `VXYI6G` / run `93e7ad8c-1e15-4a3b-905f-c5fb67b02c45` on `542713a`.
-2. Rotate the Supabase secret key and database password that were exposed in the operator conversation and update local server-only configuration.
+2. ~~Rotate the Supabase secret key and database password that were exposed in the operator conversation and update local server-only configuration.~~ **Waived by operator on `2026-07-17`** — credentials were not rotated; existing local server-only configuration retained. Residual exposure risk is accepted by the operator and is not recorded as completed rotation.
 
-Task 14 remains incomplete until the credential-rotation blocker is cleared.
+Task 14 is complete under the operator waiver above. Multi-Agent may be described as released with that residual credential risk acknowledged.

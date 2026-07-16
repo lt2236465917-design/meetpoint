@@ -25,7 +25,7 @@ This project is a mobile-first Web H5 app for multi-person cross-city meeting pl
 - Run the gateway lint, test, and build commands before reporting gateway changes complete.
 - Ignore generated gateway `dist`, coverage, probe output, and cache artifacts.
 - Live supplier publication requires a reachable travel gateway at `TRAVEL_GATEWAY_URL`; do not treat `GATEWAY_UNAVAILABLE` with zero verified quotes as supplier cooldown evidence.
-- Do not describe Multi-Agent as released while Task 14 blockers remain in `docs/acceptance/2026-07-15-multi-agent-live-acceptance.md`.
+- Multi-Agent Task 14 is closed; see `docs/acceptance/2026-07-15-multi-agent-live-acceptance.md`. Credential rotation was operator-waived on 2026-07-17 (existing local credentials retained; not claimed as rotated).
 
 ## Structure
 
