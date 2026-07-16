@@ -4,12 +4,12 @@ This record covers the Task 14 release gate. It contains no secrets, authorizati
 
 ## Verdict
 
-**Blocked — do not describe the Multi-Agent architecture as released.** Real Supabase migration, guarded RPC smoke, supplier evidence, physical-phone H5 checks including first host confirmation, automated gates, and final code review pass. The remaining release blockers are one fresh Calculation/Supervisor publication using the final authority-compliant code and rotation of the exposed Supabase credentials.
+**Blocked — do not describe the Multi-Agent architecture as released.** Real Supabase migration, guarded RPC smoke, supplier evidence, physical-phone H5 checks including first host confirmation, automated gates, and final code review pass. The remaining release blockers are one fresh Calculation/Supervisor publication using the final authority-compliant code that reaches guarded publication, and rotation of the exposed Supabase credentials.
 
 ## Evidence Metadata
 
-- Recorded at: `2026-07-16 13:17 CST`
-- Evidence base commit: `456c481`; authority-boundary and result-page advance fixes were verified in the uncommitted working tree on `2026-07-16`
+- Recorded at: `2026-07-16 19:07 CST`
+- Evidence base commit: `8a06088`
 - Desktop host: macOS local development environment
 - Automated browser: Codex in-app browser; Chromium version was not exposed
 - Real phone/device: physical phone on the same LAN; browser/version was not exposed
@@ -50,7 +50,9 @@ Status: **PARTIAL PASS** — supplier matrix coverage, quote persistence, and on
 - The first two fresh runs after that wiring change did not reach Calculation. Run `b0f611b1-5ccb-4cd5-a535-83d9edc5765e` encountered four `PROVIDER_RATE_LIMITED` outcomes, stored 12 quotes for only two participants, and ended `incomplete`. After an additional two-minute wait, run `6d083b88-c1b1-4786-a1d7-d80404503d6d` again received four `PROVIDER_RATE_LIMITED` outcomes, stored no quotes, and ended `incomplete`. Both failed closed with `REAL_QUOTE_COVERAGE_INCOMPLETE`; repeated immediate supplier attempts stopped at this point.
 - After supplier recovery, run `c0b65e58-b6c7-4e2b-aea2-abfbb20dbe99` completed through Calculation, Supervisor, and guarded publication. It stored 95 verified quotes: 55 flight, 23 high-speed rail, and 17 normal train, including 22 previous-day and five overnight-arrival quotes. All three participants and one complete candidate city were covered. Task outcomes were 20 succeeded, 19 empty, nine terminal `PROVIDER_INVALID_RESPONSE`, and 36 not needed after complete coverage.
 - Proposal version 1 passed deterministic validation and Supervisor review. The shared result contains exactly two schemes (`saving`, `fast`) and exactly six route rows, three participants per scheme. Every `recommendation_scheme_routes.verified_quote_id` references a `verified_quotes.id` from this same run.
-- The required fresh attempt using the final authority-compliant Calculation code is run `30ab6641-a1a7-4bed-9360-492a5402f1f2`. Both local services were healthy before the persisted three-participant plan was created. Its 84-task matrix covered flight, high-speed rail, normal train, and 48 previous-day searches. The run stored 77 verified quotes across all three modes, including 23 previous-day and 23 overnight-arrival quotes, and reached all three participants, but no candidate city covered every participant. Four tasks ended `PROVIDER_RATE_LIMITED`; the bounded recovery entered cooldown and then terminated `incomplete` with `REAL_QUOTE_COVERAGE_INCOMPLETE`. No second plan or supplier attempt was made.
+- Final-code attempt `30ab6641-a1a7-4bed-9360-492a5402f1f2` stored 77 verified quotes across all three modes, including 23 previous-day and 23 overnight-arrival quotes, and reached all three participants, but no candidate city covered every participant. Four tasks ended `PROVIDER_RATE_LIMITED`; the bounded recovery entered cooldown and then terminated `incomplete` with `REAL_QUOTE_COVERAGE_INCOMPLETE`.
+- A later attempt that hit `GATEWAY_UNAVAILABLE` before any quotes were stored is not counted as supplier coverage: both the Next.js app and `services/travel-provider-gateway` on `TRAVEL_GATEWAY_URL` must be reachable before a live publication attempt.
+- After the gateway was confirmed healthy (`GET /healthz` → `{ "status": "ok" }`), final-code run `6802e82a-66d8-4ef1-8206-1da6eef56679` (plan `YESX56`) stored 94 verified quotes: 55 flight, 26 high-speed rail, and 13 normal train. All three participants and one complete candidate city were covered. Task outcomes were 20 succeeded, 9 empty, 7 terminal `PROVIDER_INVALID_RESPONSE`, and 48 not needed after complete coverage. The run entered `calculating`, recorded Calculation `model_failed` with `invalid_output`, persisted no proposal rows, and failed closed with `RUN_ADVANCE_FAILED`. No Supervisor approval or guarded publication occurred. Do not treat this run as a completed publication.
 
 ## Browser And Device Acceptance
 
@@ -93,7 +95,7 @@ Status: **PASS**.
 
 ## Release Blockers
 
-1. Run one fresh supplier-backed plan through Calculation, Supervisor, and guarded publication using the final authority-compliant code; verify both schemes and all selected quote references belong to that run.
+1. Diagnose and clear the final-code Calculation `invalid_output` / `RUN_ADVANCE_FAILED` path observed on run `6802e82a-66d8-4ef1-8206-1da6eef56679`, then run one fresh supplier-backed plan through Calculation, Supervisor, and guarded publication; verify both schemes and all six selected quote references belong to that same run's `verified_quotes`.
 2. Rotate the Supabase secret key and database password that were exposed in the operator conversation and update local server-only configuration.
 
 Task 14 remains incomplete until both blockers are cleared.

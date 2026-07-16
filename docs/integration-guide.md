@@ -277,7 +277,7 @@ PROBE_TRAVEL_DATE=2026-08-20 npm run probe:providers
 
 The probe outputs only redacted status/count/latency/field-name summaries. It is not supplier acceptance evidence: coverage remains unverified until a new full plan has produced route-fingerprint diagnostics after cooldown, and neither `/healthz` nor a single successful fare row proves supplier-wide authorization, quota recovery, or production readiness.
 
-After a supplier cooldown, use a new full plan for a live-ticket check. A completed shared result must contain verified FlyAI routes for every participant in both schemes; any coverage gap must remain unpublished and end with retry/diagnostic guidance.
+After a supplier cooldown, use a new full plan for a live-ticket check. Confirm both the Next.js app and `services/travel-provider-gateway` are reachable first (`GET /healthz` → `{ "status": "ok" }`); runs that end with `GATEWAY_UNAVAILABLE` and zero verified quotes are operator setup failures, not supplier-cooldown evidence. Prefer `npm run build && npm run start` for live publication when sandboxed `next dev` is unstable. A completed shared result must contain verified FlyAI routes for every participant in both schemes; any coverage gap must remain unpublished and end with retry/diagnostic guidance.
 
 Treat any future Fliggy/FlyAI MCP as a gateway-side provider adapter. Before enabling it for recommendation runs, compare it against FlyAI with the same fixed origin/candidate/mode probe set and verify stable price units, China-time timestamps, safe booking URLs, error classifications, and production authorization.
 
