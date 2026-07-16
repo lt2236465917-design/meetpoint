@@ -163,12 +163,21 @@ describe("SupabaseRecommendationRepository", () => {
   });
 
   it("uses a pending-only CAS review update so a concurrent reviewer cannot overwrite a decision", async () => {
+    const maybeSingle = vi.fn().mockResolvedValue({
+      data: { status: "pending", supervisor_approved_version: null },
+      error: null,
+    });
+    const selectAfter = vi.fn().mockReturnValue({
+      eq: vi.fn().mockReturnValue({
+        eq: vi.fn().mockReturnValue({ maybeSingle }),
+      }),
+    });
     const select = vi.fn().mockResolvedValue({ data: [], error: null });
     const statusEq = vi.fn().mockReturnValue({ select });
     const versionEq = vi.fn().mockReturnValue({ eq: statusEq });
     const runEq = vi.fn().mockReturnValue({ eq: versionEq });
     const update = vi.fn(() => ({ eq: runEq }));
-    mocks.from.mockReturnValue({ update });
+    mocks.from.mockReturnValue({ update, select: selectAfter });
 
     await expect(new SupabaseRecommendationRepository().reviewProposal({
       runId: "run-1",
@@ -180,6 +189,55 @@ describe("SupabaseRecommendationRepository", () => {
     expect(runEq).toHaveBeenCalledWith("run_id", "run-1");
     expect(versionEq).toHaveBeenCalledWith("version", 1);
     expect(statusEq).toHaveBeenCalledWith("status", "pending");
+    expect(update).toHaveBeenCalledTimes(1);
+  });
+
+  it("retries a transient Supervisor review transport error before succeeding", async () => {
+    const select = vi.fn()
+      .mockResolvedValueOnce({ data: null, error: { message: "upstream timeout" } })
+      .mockResolvedValueOnce({ data: [{ id: "proposal-1" }], error: null });
+    const statusEq = vi.fn().mockReturnValue({ select });
+    const versionEq = vi.fn().mockReturnValue({ eq: statusEq });
+    const runEq = vi.fn().mockReturnValue({ eq: versionEq });
+    const update = vi.fn(() => ({ eq: runEq }));
+    mocks.from.mockReturnValue({ update });
+
+    await expect(new SupabaseRecommendationRepository().reviewProposal({
+      runId: "run-1",
+      version: 2,
+      approved: true,
+      codes: [],
+    })).resolves.toBeUndefined();
+
+    expect(update).toHaveBeenCalledTimes(2);
+  });
+
+  it("treats an already-applied Supervisor approval as a successful idempotent review", async () => {
+    const maybeSingle = vi.fn().mockResolvedValue({
+      data: { status: "approved", supervisor_approved_version: 2 },
+      error: null,
+    });
+    const selectAfter = vi.fn().mockReturnValue({
+      eq: vi.fn().mockReturnValue({
+        eq: vi.fn().mockReturnValue({ maybeSingle }),
+      }),
+    });
+    const select = vi.fn().mockResolvedValue({ data: [], error: null });
+    const statusEq = vi.fn().mockReturnValue({ select });
+    const versionEq = vi.fn().mockReturnValue({ eq: statusEq });
+    const runEq = vi.fn().mockReturnValue({ eq: versionEq });
+    const update = vi.fn(() => ({ eq: runEq }));
+    mocks.from.mockReturnValue({ update, select: selectAfter });
+
+    await expect(new SupabaseRecommendationRepository().reviewProposal({
+      runId: "run-1",
+      version: 2,
+      approved: true,
+      codes: [],
+    })).resolves.toBeUndefined();
+
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(maybeSingle).toHaveBeenCalledOnce();
   });
 
   it("accepts the UUID returned by the atomic publication RPC", async () => {

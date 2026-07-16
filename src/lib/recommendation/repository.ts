@@ -608,21 +608,50 @@ export class SupabaseRecommendationRepository
   }
 
   async reviewProposal(input: ProposalReview): Promise<void> {
-    const { data, error } = await createServiceSupabaseClient()
-      .from("recommendation_proposals")
-      .update({
-        status: input.approved ? "approved" : "rejected",
-        supervisor_approved_version: input.approved ? input.version : null,
-        supervisor_codes: input.codes,
-        reviewed_at: new Date().toISOString(),
-      })
-      .eq("run_id", input.runId)
-      .eq("version", input.version)
-      .eq("status", "pending")
-      .select("id");
-    if (error || !Array.isArray(data) || data.length !== 1) {
-      throw new Error("Failed to persist Supervisor review");
+    let lastError: Error | null = null;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const supabase = createServiceSupabaseClient();
+      const { data, error } = await supabase
+        .from("recommendation_proposals")
+        .update({
+          status: input.approved ? "approved" : "rejected",
+          supervisor_approved_version: input.approved ? input.version : null,
+          supervisor_codes: input.codes,
+          reviewed_at: new Date().toISOString(),
+        })
+        .eq("run_id", input.runId)
+        .eq("version", input.version)
+        .eq("status", "pending")
+        .select("id");
+      if (!error && Array.isArray(data) && data.length === 1) return;
+
+      if (!error) {
+        const { data: current } = await supabase
+          .from("recommendation_proposals")
+          .select("status,supervisor_approved_version")
+          .eq("run_id", input.runId)
+          .eq("version", input.version)
+          .maybeSingle();
+        if (
+          current
+          && (
+            (input.approved
+              && current.status === "approved"
+              && current.supervisor_approved_version === input.version)
+            || (!input.approved && current.status === "rejected")
+          )
+        ) {
+          return;
+        }
+        throw new Error("Failed to persist Supervisor review");
+      }
+
+      lastError = new Error("Failed to persist Supervisor review");
+      if (attempt < 2) {
+        await new Promise((resolve) => setTimeout(resolve, 200 * (attempt + 1)));
+      }
     }
+    throw lastError ?? new Error("Failed to persist Supervisor review");
   }
 
   async markRunFailed(

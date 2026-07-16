@@ -165,6 +165,40 @@ describe("CalculationAgent", () => {
     expect(generate).toHaveBeenCalledOnce();
   });
 
+  it("replays deterministic schemes when the model selects the winning city but invents route totals", async () => {
+    const saveProposal = vi.fn(async () => undefined);
+    const invented = {
+      ...validProposal,
+      schemes: [
+        {
+          kind: "saving" as const,
+          quoteIdsByParticipant: { p1: "p1-fast", p2: "p2-fast" },
+          totalFareCny: 999,
+        },
+        {
+          kind: "fast" as const,
+          quoteIdsByParticipant: { p1: "p1-saving", p2: "p2-saving" },
+          totalFareCny: 1,
+        },
+      ],
+      comparisonEvidence: {
+        eligibleCityCodes: ["beijing"],
+        orderedCityCodes: ["beijing"],
+      },
+    };
+    const agent = new CalculationAgent(model(invented), {
+      saveProposal,
+      validateExplanation: () => ({ ok: true }),
+    });
+
+    await expect(agent.propose(snapshot())).resolves.toEqual(validProposal);
+    expect(saveProposal).toHaveBeenCalledWith(expect.objectContaining({
+      status: "pending",
+      validationDecision: { ok: true },
+      output: validProposal,
+    }));
+  });
+
   it("preserves the stable policy-limit diagnostic after model proposal", async () => {
     const p1Quotes = Array.from({ length: 256 }, (_, index) => quote(`p1-${index}`, "p1", {
       priceCny: 1_000_000 + index,
@@ -272,8 +306,7 @@ describe("CalculationAgent", () => {
   it.each([
     ["hidden estimate", snapshot({ cityInputs: [{ cityCode: "wuhan", quotes: snapshot().cityInputs[0]!.quotes.map((item, index) => index === 0 ? { ...item, source: "estimated" } : item) }] }), validProposal, "ESTIMATED_QUOTE"],
     ["wrong arrival date", snapshot({ cityInputs: [{ cityCode: "wuhan", quotes: snapshot().cityInputs[0]!.quotes.map((item, index) => index === 0 ? { ...item, arriveAt: "2026-08-15T23:30:00Z" } : item) }] }), validProposal, "ARRIVAL_DATE_MISMATCH"],
-    ["invented quote ID", snapshot(), { ...validProposal, schemes: [{ ...validProposal.schemes[0], quoteIdsByParticipant: { p1: "invented", p2: "p2-saving" } }, validProposal.schemes[1]] }, "UNKNOWN_QUOTE_ID"],
-    ["wrong fare total", snapshot(), { ...validProposal, schemes: [{ ...validProposal.schemes[0], totalFareCny: 201 }, validProposal.schemes[1]] }, "TOTAL_FARE_MISMATCH"],
+    ["wrong winning city", snapshot(), { ...validProposal, cityCode: "beijing", comparisonEvidence: { eligibleCityCodes: ["beijing"], orderedCityCodes: ["beijing"] } }, "INVALID_CITY_EVIDENCE"],
   ])("persists rejected %s proposals for the Supervisor to correct", async (_label, input, output, code) => {
     const saveProposal = vi.fn(async () => undefined);
     const agent = new CalculationAgent(model(output), { saveProposal });

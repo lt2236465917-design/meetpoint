@@ -5,6 +5,7 @@ import { QueryAgent } from "@/lib/agent/query-agent";
 import { queryConcurrencyFromEnv, runQueryPool } from "@/lib/agent/query-pool";
 import { SupervisorAgent } from "@/lib/agent/supervisor-agent";
 import type { RunStatus } from "@/lib/agent/contracts";
+import { AgentModelError } from "@/lib/agent/model";
 import {
   SupabaseRecommendationRepository,
   type RunOrchestratorRepository as Repository,
@@ -225,10 +226,23 @@ export class RunOrchestrator {
     let correctionCodes: readonly string[] = [];
     for (let attempt = 0; attempt < 2; attempt += 1) {
       const attemptSnapshot = { ...snapshot, proposalVersion: attempt + 1, correctionCodes };
-      const output = await calculation.propose(attemptSnapshot);
-      const decision = await supervisor.review(attemptSnapshot, output);
-      if (decision.decision === "approve") return this.transition(run, "validating");
-      correctionCodes = decision.codes;
+      try {
+        const output = await calculation.propose(attemptSnapshot);
+        const decision = await supervisor.review(attemptSnapshot, output);
+        if (decision.decision === "approve") return this.transition(run, "validating");
+        correctionCodes = decision.codes;
+      } catch (error) {
+        const retryableModel =
+          error instanceof AgentModelError
+          && (error.code === "MODEL_INVALID_OUTPUT"
+            || error.code === "MODEL_UNAVAILABLE"
+            || error.code === "MODEL_TIMEOUT");
+        const retryablePersist =
+          error instanceof Error
+          && /Supervisor review|agent proposal/i.test(error.message);
+        if (!retryableModel && !retryablePersist) throw error;
+        correctionCodes = ["INVALID_PROPOSAL"];
+      }
     }
     await this.repository.markRunFailed(run.id, "AGENT_PROPOSAL_INVALID");
     return "failed";

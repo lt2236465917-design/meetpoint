@@ -16,6 +16,10 @@ import {
   validateExplanationFacts,
 } from "@/lib/agent/prompts";
 import {
+  PolicyLimitExceededError,
+  rankEligibleCities,
+} from "@/lib/recommendation/policy";
+import {
   validateRecommendationPolicy,
   type ValidateRecommendationPolicyInput,
 } from "@/lib/recommendation/validators";
@@ -89,6 +93,36 @@ function modelInput(snapshot: CalculationSnapshot): Record<string, unknown> {
   };
 }
 
+function canonicalizeProposal(
+  snapshot: CalculationSnapshot,
+  output: CalculationOutput,
+): CalculationOutput {
+  if (output.status !== "proposal") return output;
+  let ranked;
+  try {
+    ranked = rankEligibleCities(snapshot.cityInputs.map((city) => ({
+      ...city,
+      participantIds: snapshot.participantIds,
+      arrivalDate: snapshot.arrivalDate,
+    })));
+  } catch (error) {
+    if (error instanceof PolicyLimitExceededError) return output;
+    throw error;
+  }
+  const winner = ranked[0];
+  if (!winner || winner.cityCode !== output.cityCode) return output;
+  return {
+    status: "proposal",
+    cityCode: winner.cityCode,
+    schemes: [winner.savingScheme, winner.fastScheme],
+    comparisonEvidence: {
+      eligibleCityCodes: [...ranked.map((city) => city.cityCode)].sort(),
+      orderedCityCodes: ranked.map((city) => city.cityCode),
+    },
+    explanationZh: output.explanationZh,
+  };
+}
+
 export class CalculationAgent {
   private readonly validatePolicy: (input: ValidateRecommendationPolicyInput) => ValidationDecision;
   private readonly validateExplanation: NonNullable<CalculationDependencies["validateExplanation"]>;
@@ -142,6 +176,7 @@ export class CalculationAgent {
       await this.record("agent_failed", "failed", snapshot);
       throw error;
     }
+    output = canonicalizeProposal(snapshot, output);
     const decision: ValidationDecision = output.status === "proposal"
       ? combineDecisions([
         this.validatePolicy(policyInput(snapshot, output)),

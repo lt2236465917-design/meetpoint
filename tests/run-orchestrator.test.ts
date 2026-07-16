@@ -1,7 +1,18 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("@/lib/agent/deepseek-model", () => ({
+  createAgentModel: vi.fn(() => null),
+}));
+
+vi.mock("@/lib/agent/trace", () => ({
+  isTrustedAgentModel: (value: string) => value === "deepseek-v4-flash",
+  recordAgentEvent: vi.fn(async () => undefined),
+}));
 
 import type { RunOrchestratorRepository, StoredRun } from "@/lib/agent/run-orchestrator";
 import { RunOrchestrator } from "@/lib/agent/run-orchestrator";
+import { createAgentModel } from "@/lib/agent/deepseek-model";
+import { AgentModelError } from "@/lib/agent/model";
 import type { VerifiedQuote } from "@/lib/agent/contracts";
 import type { StoredRouteTask } from "@/lib/recommendation/repository";
 
@@ -88,6 +99,11 @@ function repository(input: { current: StoredRun; tasks?: StoredRouteTask[]; quot
 }
 
 describe("RunOrchestrator", () => {
+  beforeEach(() => {
+    vi.mocked(createAgentModel).mockReset();
+    vi.mocked(createAgentModel).mockReturnValue(null);
+  });
+
   it("allows only the explicit pending-to-collecting transition", async () => {
     const store = repository({ current: run("pending") });
     const status = await new RunOrchestrator({ repository: store, query: { execute: async () => ({ status: "empty" }) } }).advanceRun("run-1");
@@ -214,6 +230,105 @@ describe("RunOrchestrator", () => {
     }).advanceRun("run-1")).resolves.toBe("failed");
 
     expect(store.current.status).toBe("failed");
+  });
+
+  it("marks repeated MODEL_INVALID_OUTPUT as AGENT_PROPOSAL_INVALID instead of RUN_ADVANCE_FAILED", async () => {
+    const store = repository({
+      current: run("calculating"),
+      tasks: [
+        task({ id: "wuhan-p1", participantId: "p1", cityCode: "wuhan", status: "succeeded" }),
+        task({ id: "wuhan-p2", participantId: "p2", cityCode: "wuhan", status: "succeeded" }),
+      ],
+      quotes: [quote("p1", "wuhan"), quote("p2", "wuhan")],
+    });
+    const markRunFailed = vi.fn(async (_runId: string, errorCode: string) => {
+      store.current = { ...store.current, status: "failed", errorCode };
+    });
+    const failAdvance = vi.fn(async () => {
+      store.current = { ...store.current, status: "failed", errorCode: "RUN_ADVANCE_FAILED" };
+      return true;
+    });
+    store.markRunFailed = markRunFailed;
+    store.failAdvance = failAdvance;
+    vi.mocked(createAgentModel).mockReturnValue({
+      provider: "fake",
+      model: "fake-model",
+      generate: async () => {
+        throw new AgentModelError("MODEL_INVALID_OUTPUT");
+      },
+    });
+
+    await expect(new RunOrchestrator({ repository: store }).advanceRun("run-1"))
+      .resolves.toBe("failed");
+
+    expect(markRunFailed).toHaveBeenCalledWith("run-1", "AGENT_PROPOSAL_INVALID");
+    expect(failAdvance).not.toHaveBeenCalled();
+    expect(store.current.errorCode).toBe("AGENT_PROPOSAL_INVALID");
+  });
+
+  it("continues the bounded calculation loop after a transient MODEL_INVALID_OUTPUT", async () => {
+    const store = repository({
+      current: run("calculating"),
+      tasks: [
+        task({ id: "wuhan-p1", participantId: "p1", cityCode: "wuhan", status: "succeeded" }),
+        task({ id: "wuhan-p2", participantId: "p2", cityCode: "wuhan", status: "succeeded" }),
+      ],
+      quotes: [quote("p1", "wuhan"), quote("p2", "wuhan")],
+    });
+    const failAdvance = vi.fn(async () => {
+      store.current = { ...store.current, status: "failed", errorCode: "RUN_ADVANCE_FAILED" };
+      return true;
+    });
+    store.failAdvance = failAdvance;
+    let calculationCalls = 0;
+    const proposal = {
+      status: "proposal" as const,
+      cityCode: "wuhan",
+      schemes: [
+        {
+          kind: "saving" as const,
+          quoteIdsByParticipant: {
+            p1: `flyai:${"a".repeat(64)}`,
+            p2: `flyai:${"a".repeat(64)}`,
+          },
+          totalFareCny: 200,
+        },
+        {
+          kind: "fast" as const,
+          quoteIdsByParticipant: {
+            p1: `flyai:${"a".repeat(64)}`,
+            p2: `flyai:${"a".repeat(64)}`,
+          },
+          totalFareCny: 200,
+        },
+      ],
+      comparisonEvidence: {
+        eligibleCityCodes: ["wuhan"],
+        orderedCityCodes: ["wuhan"],
+      },
+      explanationZh: "已依据已验证报价及既定规则生成推荐方案。",
+    };
+    vi.mocked(createAgentModel).mockReturnValue({
+      provider: "fake",
+      model: "deepseek-v4-flash",
+      generate: async (request) => {
+        if (request.agent === "calculation") {
+          calculationCalls += 1;
+          if (calculationCalls === 1) {
+            throw new AgentModelError("MODEL_INVALID_OUTPUT");
+          }
+          return request.outputSchema.parse(proposal);
+        }
+        return request.outputSchema.parse({ decision: "approve" });
+      },
+    });
+
+    await expect(new RunOrchestrator({ repository: store }).advanceRun("run-1"))
+      .resolves.toBe("validating");
+
+    expect(calculationCalls).toBe(2);
+    expect(failAdvance).not.toHaveBeenCalled();
+    expect(store.transitions).toEqual([["calculating", "validating"]]);
   });
 
   it("materializes an approved alternative privately without calling automatic publication", async () => {

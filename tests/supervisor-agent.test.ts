@@ -154,11 +154,15 @@ describe("SupervisorAgent", () => {
     const saveProposal = vi.fn(async () => undefined);
     const reviewProposal = vi.fn(async () => undefined);
     const markRunFailed = vi.fn(async () => undefined);
-    const calculation = new CalculationAgent(model({ ...proposal, schemes: [{ ...proposal.schemes[0], totalFareCny: 201 }, proposal.schemes[1]] }), { saveProposal });
+    const calculation = new CalculationAgent(model({
+      ...proposal,
+      cityCode: "beijing",
+      comparisonEvidence: { eligibleCityCodes: ["beijing"], orderedCityCodes: ["beijing"] },
+    }), { saveProposal });
     const supervisor = new SupervisorAgent(model({ decision: "approve" }), { reviewProposal });
 
     await expect(runProposalReviewLoop({ calculation, supervisor, snapshot, markRunFailed })).resolves.toEqual({
-      decision: "correct", codes: expect.arrayContaining(["TOTAL_FARE_MISMATCH"]),
+      decision: "correct", codes: expect.arrayContaining(["INVALID_CITY_EVIDENCE"]),
     });
     expect(saveProposal).toHaveBeenCalledTimes(2);
     expect(reviewProposal).not.toHaveBeenCalled();

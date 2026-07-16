@@ -96,6 +96,38 @@ describe("AgentModel", () => {
     }));
   });
 
+  it("retries once when the first completion returns unparseable JSON", async () => {
+    openAiSdk.create
+      .mockResolvedValueOnce({
+        id: "chatcmpl-bad-json",
+        choices: [{ message: { role: "assistant", content: "not-json{" } }],
+      })
+      .mockResolvedValueOnce({
+        id: "chatcmpl-recovered",
+        choices: [{ message: { role: "assistant", content: '{"cityCode":"420100"}' } }],
+      });
+
+    await expect(runDownstreamAgent(createAgentModel()!)).resolves.toEqual({
+      cityCode: "420100",
+    });
+    expect(openAiSdk.create).toHaveBeenCalledTimes(2);
+  });
+
+  it("gives up after one retry when completions stay invalid", async () => {
+    openAiSdk.create.mockResolvedValue({
+      id: "chatcmpl-still-bad",
+      choices: [{ message: { role: "assistant", content: "not-json{" } }],
+    });
+
+    const error = await runDownstreamAgent(createAgentModel()!).catch(
+      (caught: unknown) => caught,
+    );
+
+    expect(error).toBeInstanceOf(AgentModelError);
+    expect(error).toMatchObject({ code: "MODEL_INVALID_OUTPUT" });
+    expect(openAiSdk.create).toHaveBeenCalledTimes(2);
+  });
+
   it("rejects unknown model fields with a stable invalid-output error", async () => {
     openAiSdk.create.mockResolvedValue({
       id: "chatcmpl-2",
@@ -113,6 +145,7 @@ describe("AgentModel", () => {
 
     expect(error).toBeInstanceOf(AgentModelError);
     expect(error).toMatchObject({ code: "MODEL_INVALID_OUTPUT" });
+    expect(openAiSdk.create).toHaveBeenCalledTimes(2);
   });
 
   it("rejects stripped unknown fields even when the caller schema is not strict", async () => {
@@ -146,6 +179,7 @@ describe("AgentModel", () => {
 
     expect(error).toBeInstanceOf(AgentModelError);
     expect(error).toMatchObject({ code: "MODEL_INVALID_OUTPUT" });
+    expect(openAiSdk.create).toHaveBeenCalledTimes(2);
   });
 
   it("preserves valid Zod coercion while checking output structure", async () => {

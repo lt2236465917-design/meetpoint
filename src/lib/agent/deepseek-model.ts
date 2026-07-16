@@ -234,40 +234,50 @@ class DeepSeekAgentModel implements AgentModel {
       throw new AgentModelError("MODEL_INVALID_OUTPUT");
     }
 
-    try {
-      const response = await this.client.chat.completions.create({
-        model: this.model,
-        response_format: { type: "json_object" },
-        max_tokens: 4096,
-        ...({ thinking: { type: "disabled" } } as Record<string, unknown>),
-        messages: [
-          {
-            role: "system",
-            content: `${request.system}\n只输出 JSON 对象，不得输出 Markdown 或额外文字。`,
-          },
-          { role: "user", content: input },
-        ],
-      });
-      const content = response.choices[0]?.message?.content;
-      if (!content) throw new AgentModelError("MODEL_INVALID_OUTPUT");
-
-      let parsed: unknown;
+    let lastInvalid: AgentModelError | null = null;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
       try {
-        parsed = JSON.parse(content);
-      } catch {
-        throw new AgentModelError("MODEL_INVALID_OUTPUT");
-      }
+        const response = await this.client.chat.completions.create({
+          model: this.model,
+          response_format: { type: "json_object" },
+          max_tokens: 4096,
+          ...({ thinking: { type: "disabled" } } as Record<string, unknown>),
+          messages: [
+            {
+              role: "system",
+              content: `${request.system}\n只输出 JSON 对象，不得输出 Markdown 或额外文字。`,
+            },
+            { role: "user", content: input },
+          ],
+        });
+        const content = response.choices[0]?.message?.content;
+        if (!content) throw new AgentModelError("MODEL_INVALID_OUTPUT");
 
-      const result = request.outputSchema.safeParse(parsed);
-      if (!result.success || !preservesObjectKeys(parsed, result.data)) {
-        throw new AgentModelError("MODEL_INVALID_OUTPUT");
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(content);
+        } catch {
+          throw new AgentModelError("MODEL_INVALID_OUTPUT");
+        }
+
+        const result = request.outputSchema.safeParse(parsed);
+        if (!result.success || !preservesObjectKeys(parsed, result.data)) {
+          throw new AgentModelError("MODEL_INVALID_OUTPUT");
+        }
+        return result.data;
+      } catch (error) {
+        if (error instanceof AgentModelError) {
+          if (error.code === "MODEL_INVALID_OUTPUT") {
+            lastInvalid = error;
+            continue;
+          }
+          throw error;
+        }
+        if (isTimeoutError(error)) throw new AgentModelError("MODEL_TIMEOUT");
+        throw new AgentModelError("MODEL_UNAVAILABLE");
       }
-      return result.data;
-    } catch (error) {
-      if (error instanceof AgentModelError) throw error;
-      if (isTimeoutError(error)) throw new AgentModelError("MODEL_TIMEOUT");
-      throw new AgentModelError("MODEL_UNAVAILABLE");
     }
+    throw lastInvalid ?? new AgentModelError("MODEL_INVALID_OUTPUT");
   }
 }
 
