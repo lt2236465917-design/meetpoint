@@ -18,6 +18,13 @@ create table plan_credentials (
   updated_at timestamptz not null default now()
 );
 
+insert into plan_credentials (plan_id, host_token_hash)
+select plans.id, plans.management_token_hash
+from plans;
+
+alter table plans
+  drop column management_token_hash;
+
 drop index if exists recommendation_runs_one_running_per_plan;
 
 alter table recommendation_runs

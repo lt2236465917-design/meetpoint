@@ -87,8 +87,10 @@ describe("AgentModel", () => {
     expect(openAiSdk.create).toHaveBeenCalledWith(expect.objectContaining({
       model: "deepseek-v4-flash",
       response_format: { type: "json_object" },
+      max_tokens: 4096,
+      thinking: { type: "disabled" },
       messages: [
-        { role: "system", content: "Return one verified city code." },
+        { role: "system", content: expect.stringContaining("JSON") },
         { role: "user", content: '{"quoteIds":["quote-1"]}' },
       ],
     }));

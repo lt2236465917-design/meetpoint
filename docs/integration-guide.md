@@ -295,5 +295,6 @@ Use these checks after wiring FlyAI/Fliggy or another ticket source and Amap cit
 ## DeepSeek Acceptance
 
 1. Store a valid `DEEPSEEK_API_KEY` only in `.env.local` and optionally set `DEEPSEEK_MODEL`; never paste the key into commands, logs, or documentation.
-2. For the active Supabase-backed flow, advance a fully covered run through `calculating` and `validating`; confirm Calculation and Supervisor outputs reference only persisted verified quote IDs and the publication guard replays the proposal before `completed`.
-3. Remove or invalidate the key and repeat with a new run; confirm it fails closed with `AGENT_MODEL_UNAVAILABLE` or a model validation diagnostic and publishes no result.
+2. DeepSeek V4 JSON mode requires the prompt to name JSON and describe the expected object shape. The adapter enforces this, caps the response at 4096 tokens, and sends the top-level OpenAI-format `thinking: { type: "disabled" }` switch; do not move that switch into a nested `extra_body` field in the JavaScript SDK.
+3. For the active Supabase-backed flow, advance a fully covered run through `calculating` and `validating`; confirm Calculation and Supervisor outputs reference only persisted verified quote IDs and the publication guard replays the proposal before `completed`.
+4. Remove or invalidate the key and repeat with a new run; confirm it fails closed with `AGENT_MODEL_UNAVAILABLE` or a model validation diagnostic and publishes no result.

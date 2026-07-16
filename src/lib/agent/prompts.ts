@@ -19,6 +19,7 @@ export function buildCalculationSystemPrompt(input: {
     "必须引用每位参与者在 saving 和 fast 中的 quote_id，并调用算术和证据校验。",
     "覆盖不完整时返回 incomplete 和缺失任务 ID；不得估算、推断或修改票价、时间、服务或供应商事实。",
     `说明文字只能逐字使用以下一句，不能加入城市、服务、时间、时长或票价：${SAFE_EXPLANATIONS_ZH.join(" 或 ")}`,
+    '只输出一个 JSON 对象。proposal 格式示例：{"status":"proposal","cityCode":"<候选城市代码>","schemes":[{"kind":"saving","quoteIdsByParticipant":{"<参与者UUID>":"<已验证报价UUID>"},"totalFareCny":0},{"kind":"fast","quoteIdsByParticipant":{"<参与者UUID>":"<已验证报价UUID>"},"totalFareCny":0}],"comparisonEvidence":{"eligibleCityCodes":["<候选城市代码>"],"orderedCityCodes":["<候选城市代码>"]},"explanationZh":"已依据已验证报价及既定规则生成推荐方案。"}',
     "你不能发布结果或修改任何报价。",
   ].join("\n");
 }
@@ -36,6 +37,7 @@ export function buildSupervisorSystemPrompt(input: {
     `提案版本：${input.proposalVersion ?? 0}。`,
     `提案标识：${input.proposalId ?? "未分配"}。`,
     `确定性校验代码：${input.validationCodes.length > 0 ? input.validationCodes.join(", ") : "无"}。`,
+    '只输出一个 JSON 对象。批准格式示例：{"decision":"approve"}；纠正格式示例：{"decision":"correct","codes":["INVALID_PROPOSAL"]}。',
     "只可返回 approve 或有限的 correct 代码。任何确定性校验失败、覆盖不完整、日期不符、未知报价、估算或方案结构不符时不得批准。",
   ].join("\n");
 }

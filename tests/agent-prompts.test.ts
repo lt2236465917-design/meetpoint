@@ -23,12 +23,16 @@ describe("agent prompts", () => {
     expect(prompt).toContain("110%");
     expect(prompt).toContain("130%");
     expect(prompt).toContain("incomplete");
+    expect(prompt).toContain("JSON");
+    expect(prompt).toContain('"status":"proposal"');
     expect(prompt).toMatch(/不得.*(修改|发布)/);
   });
 
   it("makes Supervisor fail closed when deterministic validation is false", () => {
     const prompt = buildSupervisorSystemPrompt({ completeParticipantCount: 2, participantCount: 2, validationCodes: ["UNKNOWN_QUOTE_ID"] });
     expect(prompt).toContain("UNKNOWN_QUOTE_ID");
+    expect(prompt).toContain("JSON");
+    expect(prompt).toContain('"decision":"approve"');
     expect(prompt).toMatch(/不得批准/);
   });
 

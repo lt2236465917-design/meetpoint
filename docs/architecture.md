@@ -95,7 +95,7 @@ In fallback mode, the same logical records are kept in process memory instead of
 ## Agent Flow
 
 1. Manager and Query orchestration are deterministic. After complete verified-quote coverage, Calculation and Supervisor call the provider-neutral `AgentModel`; the current provider is DeepSeek using `DEEPSEEK_MODEL` or `deepseek-v4-flash`.
-2. The model receives bounded, sanitized inputs and strict closed output schemas. Calculation can reference only verified quote IDs; Supervisor returns an allowlisted decision/correction contract.
+2. The model receives bounded, sanitized inputs and strict closed output schemas. The DeepSeek V4 adapter explicitly requests JSON, provides format guidance, caps output at 4096 tokens, and disables thinking for deterministic structured turns. Calculation can reference only verified quote IDs; Supervisor returns an allowlisted decision/correction contract.
 3. Missing credentials, unavailable models, invalid output, or two rejected proposals fail the run closed. Deterministic validators recheck quote ownership, arrival dates, totals, scheme policy, and publication state before any shared result can become visible.
 
 ## Security Boundaries

@@ -4,12 +4,12 @@ This record covers the Task 14 release gate. It contains no secrets, authorizati
 
 ## Verdict
 
-**Blocked — do not describe the Multi-Agent architecture as released.** Automated root and gateway quality gates pass. Real PostgreSQL/Supabase migration smoke, a fresh persisted supplier-coverage plan, and real-device acceptance could not run in the available environment.
+**Blocked — do not describe the Multi-Agent architecture as released.** Real Supabase migration and guarded RPC smoke now pass. Two fresh persisted supplier runs produced complete real-quote coverage for one candidate city, but neither completed Calculation/Supervisor/publication; real-device acceptance also remains unavailable.
 
 ## Evidence Metadata
 
-- Recorded at: `2026-07-16 00:12:35 CST`
-- Build commit: `b9ce7ee932e789c505e4c88ed049e19bae789b08`
+- Recorded at: `2026-07-16 09:45 CST`
+- Evidence base commit: `473896c` (the migration-chain and DeepSeek protocol fixes were verified in the working tree before their handoff commit)
 - Desktop host: macOS local development environment
 - Automated browser: Codex in-app browser; Chromium version was not exposed
 - Real phone/device: unavailable
@@ -19,7 +19,7 @@ This record covers the Task 14 release gate. It contains no secrets, authorizati
 | Check | Result | Evidence |
 | --- | --- | --- |
 | Root lint | PASS | `npm run lint`, exit code 0 |
-| Root tests | PASS | 56 files, 318 tests |
+| Root tests | PASS | 57 files, 320 tests |
 | Root production build | PASS | The sandboxed attempt was blocked by Turbopack local-port permission; the identical command passed outside the sandbox, including TypeScript and static-page generation. The route manifest contains no legacy explain endpoint. |
 | Gateway lint | PASS | `npm run lint`, exit code 0 |
 | Gateway tests | PASS | 7 files, 90 tests |
@@ -28,22 +28,23 @@ This record covers the Task 14 release gate. It contains no secrets, authorizati
 
 ## PostgreSQL And Supabase Migration Smoke
 
-Status: **BLOCKED**.
+Status: **PASS**.
 
-- `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` are not configured in the root local environment.
-- `supabase`, `psql`, and `docker` are not installed or available on `PATH`.
-- The migration files and schema passed the repository's static/mock tests, but no claim is made that the migrations or RPCs executed successfully against PostgreSQL.
-- The new recommendation migration, arrival-date migration, route-task uniqueness, advance lease, publication RPC, private-preview read rules, and host-confirmation RPC remain unverified at database runtime.
+- An operator-approved Supabase project was configured locally without committing credentials. The empty test schema was explicitly reset, then all six repository migrations were executed in one SQL transaction through the Supabase SQL Editor.
+- The first live attempt exposed a fresh-install chain defect: the repository lacked its historical baseline migration and retained the legacy non-null host-token column. The chain now starts with `202607080001_initial_schema.sql`; the Multi-Agent migration copies legacy host hashes into `plan_credentials` before dropping the old column.
+- The corrected migration transaction completed successfully. A rollback-safe service-role RPC smoke returned `RPC_SMOKE_PASS`: public roles were rejected, automatic publication passed, an invalid host was rejected, valid host confirmation passed, and smoke data was rolled back.
+- A final read-only parity query passed all nine checks: required tables, removed legacy columns, both guarded RPCs, four Realtime publication tables, and RLS on all nine Multi-Agent tables.
 
 ## Fixed Supplier Coverage Plan
 
-Status: **BLOCKED**.
+Status: **BLOCKED AT CALCULATION/PUBLICATION**.
 
-- Operator-managed Amap, DeepSeek, gateway, and FlyAI configuration is present, but the missing Supabase environment prevents creating the required fresh persistent plan and tracing both published schemes back to stored `verified_quotes`.
-- No direct gateway probe was counted as acceptance evidence. `/healthz`, one successful quote, or an unpersisted route set would not satisfy the coverage gate.
-- Route fingerprints: none recorded.
-- Supplier task outcomes, quote counts, error codes, cooldown timestamps, and coverage totals: not produced because the required persisted plan could not start.
-- Required coverage still includes 2–6 participants, flight, high-speed rail, normal train, previous-day searches, an overnight arrival, and complete stored evidence for every selected participant route in both schemes.
+- No direct gateway probe was counted. Both runs used new three-participant plans persisted in Supabase, with flight, high-speed rail, and normal-train participants. Each matrix contained 84 route tasks: 24 flight, 24 high-speed rail, 36 normal train, including 48 previous-day tasks.
+- Run `a2197d4e-b3bb-457c-80d1-4839a73c8919` stored 85 verified quotes (26 flight, 44 high-speed rail, 15 normal train), including 20 previous-day and 20 overnight-arrival quotes. All three participants and one complete candidate city were covered. Task outcomes were 18 succeeded, 12 empty, 10 terminal `PROVIDER_INVALID_RESPONSE`, and 44 not needed after complete coverage; no cooldown timestamps occurred. Calculation then failed because the DeepSeek JSON-output request omitted the required JSON instruction.
+- The adapter now supplies an explicit JSON instruction and format examples, sets a 4096-token response budget, and disables DeepSeek V4 thinking through the top-level OpenAI-format `thinking` field. A redacted diagnostic against the persisted quote shape returned `finish_reason=stop`, parseable JSON, and a schema-valid five-field Calculation result.
+- Run `e1c5009b-d4f3-4151-a674-b181a0d6e7f5` stored 50 verified quotes (25 flight, 11 high-speed rail, 14 normal train), including 14 previous-day and 14 overnight-arrival quotes. All three participants and one complete candidate city were covered. Task outcomes were 12 succeeded, 11 empty, 9 terminal `PROVIDER_INVALID_RESPONSE`, and 52 not needed after complete coverage; no cooldown timestamps occurred.
+- The second run reached Calculation and completed its first model request, but the model returned an `incomplete` proposal despite controlled complete coverage. Deterministic validation rejected it with `INVALID_PROPOSAL`; the correction attempt produced invalid output and the run failed closed with `RUN_ADVANCE_FAILED`.
+- Neither run created a recommendation result or scheme route. Therefore no claim is made that both saving/fast schemes trace every participant route to stored `verified_quotes`; this remains the supplier/publication gate blocker.
 
 ## Browser And Device Acceptance
 
@@ -69,8 +70,8 @@ Status: **BLOCKED**. No physical phone was available. Native picker behavior, to
 
 ## Release Blockers
 
-1. Provision a disposable or operator-approved PostgreSQL/Supabase target and run all repository migrations plus the publication/confirmation RPC smoke without exposing credentials.
-2. After supplier cooldown, create a fresh persistent 2–6 participant plan that satisfies the fixed mode/date coverage matrix and record only redacted route fingerprints, outcomes, counts, cooldown timestamps, coverage totals, and stable error codes.
-3. Run the full H5 flow on a physical phone and repeat the layout check at approximately 390×844 and 1440×1000, including native date selection, completed one-city/two-scheme details, incomplete recovery, private preview privacy, and host-only idempotent confirmation.
+1. Make controlled complete coverage explicit to Calculation, retain fail-closed validation, then run a third fresh persistent plan through Supervisor and guarded publication. Verify exactly two schemes and six selected participant routes, all referencing stored verified quotes.
+2. Run the full H5 flow on a physical phone and repeat the layout check at approximately 390×844 and 1440×1000, including native date selection, completed one-city/two-scheme details, incomplete recovery, private preview privacy, and host-only idempotent confirmation.
+3. Rotate the Supabase secret key and database password that were exposed in the operator conversation, update local server-only configuration, and rerun the final root and gateway quality gates.
 
 Task 14 remains incomplete until all three blockers are cleared.

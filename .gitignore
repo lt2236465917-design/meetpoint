@@ -49,3 +49,6 @@ next-env.d.ts
 
 # local brainstorming previews
 /.superpowers/
+
+# local Supabase CLI state
+/supabase/.temp/

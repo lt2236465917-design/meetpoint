@@ -238,8 +238,13 @@ class DeepSeekAgentModel implements AgentModel {
       const response = await this.client.chat.completions.create({
         model: this.model,
         response_format: { type: "json_object" },
+        max_tokens: 4096,
+        ...({ thinking: { type: "disabled" } } as Record<string, unknown>),
         messages: [
-          { role: "system", content: request.system },
+          {
+            role: "system",
+            content: `${request.system}\n只输出 JSON 对象，不得输出 Markdown 或额外文字。`,
+          },
           { role: "user", content: input },
         ],
       });

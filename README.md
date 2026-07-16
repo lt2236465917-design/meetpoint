@@ -73,7 +73,7 @@ Supabase variables:
 - `TRAVEL_GATEWAY_TIMEOUT_MS`: optional main-app gateway request timeout; defaults to `30000` ms.
 - `AGENT_QUERY_CONCURRENCY`: optional logical QueryAgent worker count, clamped to `1..8`; defaults to `4` and does not change the gateway's physical supplier concurrency.
 
-The provider-neutral `AgentModel` uses DeepSeek for Calculation and Supervisor when Supabase-backed runs reach complete real-quote coverage. Missing or invalid model output fails closed and cannot publish; deterministic policy replay and publication guards remain authoritative.
+The provider-neutral `AgentModel` uses DeepSeek for Calculation and Supervisor when Supabase-backed runs reach complete real-quote coverage. The adapter makes DeepSeek V4 JSON mode explicit, supplies format guidance, bounds output to 4096 tokens, and disables thinking for these structured turns. Missing, truncated, or invalid model output fails closed and cannot publish; deterministic policy replay and publication guards remain authoritative.
 
 For local real-ticket smoke tests, run the gateway separately and set `TRAVEL_GATEWAY_URL=http://127.0.0.1:8080` in `.env.local`. The `.env.local` `TRAVEL_GATEWAY_TOKEN` must match `services/travel-provider-gateway/.env`; otherwise QueryAgent records the gateway failure and the run cannot publish without complete verified coverage.
 

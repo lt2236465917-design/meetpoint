@@ -10,4 +10,4 @@ Use this order when documents disagree:
 
 All earlier dated plans and specifications are historical implementation records. They intentionally preserve the target-time, estimated-fare, three-city, and explanation-only designs that existed when authored; they are not the current backlog or publication contract. Do not update their original checklists to represent current progress.
 
-As of 2026-07-16, Multi-Agent Tasks 1–13 are implemented. Task 14 remains blocked at the release gate for real PostgreSQL/Supabase migration smoke, a fresh persisted supplier coverage plan, and real-device acceptance; see `docs/acceptance/2026-07-15-multi-agent-live-acceptance.md`.
+As of 2026-07-16, Multi-Agent Tasks 1–13 are implemented. Task 14's real Supabase migration and guarded RPC smoke pass, and two fresh persisted supplier runs proved three-mode, previous-day, overnight, and one-city complete quote coverage. Task 14 remains blocked because Calculation did not publish a completed one-city/two-scheme result and real-device acceptance is still outstanding; see `docs/acceptance/2026-07-15-multi-agent-live-acceptance.md`.
