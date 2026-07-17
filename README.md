@@ -4,7 +4,7 @@ Mobile-first H5 MVP for choosing a fair cross-city meeting city for 2-6 people i
 
 ## Multi-Agent Migration Status
 
-The approved [2026-07-15 Multi-Agent design](docs/superpowers/specs/2026-07-15-multi-agent-recommendation-design.md) is implemented through Task 14: plans use an arrival date and host credential, verified quote evidence and route tasks are persisted, deterministic saving/fast/unique-city policy and agent review exist, bounded runs publish through an atomic guard, the shared result renders one city with two persisted schemes, participants can create private one-city previews that only the host can confirm as the replacement, and the legacy estimate/three-city/explanation-only paths have been removed. Task 14 closed with an operator waiver of exposed Supabase credential rotation on 2026-07-17; see the [canonical acceptance record](docs/acceptance/2026-07-15-multi-agent-live-acceptance.md).
+Tasks 1–14 are complete against the [2026-07-15 Multi-Agent design](docs/superpowers/specs/2026-07-15-multi-agent-recommendation-design.md): one city, saving/fast schemes from verified quotes, private host-confirmed alternatives, and no estimate/three-city/explanation-only paths. Canonical evidence and non-blocking residual hygiene live in the [acceptance record](docs/acceptance/2026-07-15-multi-agent-live-acceptance.md) (credential rotation operator-waived on 2026-07-17).
 
 ## Scripts
 

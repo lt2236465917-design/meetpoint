@@ -2,7 +2,7 @@
 
 This document is the stable technical map for the running system. Detailed task history lives in git commits and `docs/superpowers/plans/`.
 
-The approved product and Multi-Agent architecture is documented separately in `docs/superpowers/specs/2026-07-15-multi-agent-recommendation-design.md`. Tasks 1–14 are complete. The shared result renders one city and persisted saving/fast schemes, private one-city previews require requester-or-host reads plus host-only atomic replacement, and the legacy estimate/three-city/explanation-only paths are removed. Task 14 closed with an operator waiver of exposed Supabase credential rotation on 2026-07-17; canonical evidence lives in `docs/acceptance/2026-07-15-multi-agent-live-acceptance.md`.
+The approved product and Multi-Agent architecture is documented separately in `docs/superpowers/specs/2026-07-15-multi-agent-recommendation-design.md`. Tasks 1–14 are complete: one city with persisted saving/fast schemes, private requester-or-host previews with host-only atomic replacement, and no estimate/three-city/explanation-only paths. Canonical acceptance evidence and non-blocking residual hygiene: `docs/acceptance/2026-07-15-multi-agent-live-acceptance.md`.
 
 ## Runtime Shape
 
@@ -133,6 +133,6 @@ npm run test
 npm run build
 ```
 
-For the isolated gateway, run the same three commands from `services/travel-provider-gateway/`. The current Dockerfile is a Node 20 multi-stage, non-root image; it receives secrets only at runtime.
+For the isolated gateway, run the same three commands from `services/travel-provider-gateway/`. The current Dockerfile is a Node 20 multi-stage, non-root image; it receives secrets only at runtime. Image build and container `/healthz` smoke remain unverified when the host Docker daemon is unavailable; that is non-blocking residual hygiene, not a Multi-Agent release gate.
 
 In managed sandboxes, `npm run build` can fail if Turbopack cannot create a process and bind a local port. Re-run the same command in an environment that permits local port binding before release.

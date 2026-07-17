@@ -103,3 +103,11 @@ Status: **PASS**.
 2. ~~Rotate the Supabase secret key and database password that were exposed in the operator conversation and update local server-only configuration.~~ **Waived by operator on `2026-07-17`** — credentials were not rotated; existing local server-only configuration retained. Residual exposure risk is accepted by the operator and is not recorded as completed rotation.
 
 Task 14 is complete under the operator waiver above. Multi-Agent may be described as released with that residual credential risk acknowledged.
+
+## Non-blocking Residual Hygiene
+
+These items are outside the Task 14 release gate. They do not reopen Multi-Agent acceptance.
+
+1. **Gateway Docker image smoke** — Dockerfile exists under `services/travel-provider-gateway/`, but historical ledger entries record Docker daemon unavailable on 2026-07-12/13, so image build and in-container `GET /healthz` plus authenticated `POST /v1/search` rejection/routing were never verified on this host.
+2. **Automated browser PARTIAL criteria** — physical-phone acceptance already passed; automated browser still has PARTIAL for native date-picker interaction, complete join flow, and post-publication result-card rerun (see Browser And Device Acceptance above).
+3. **Optional Supabase credential rotation** — waived on 2026-07-17; may be done later as hygiene without changing the Task 14 verdict.

@@ -25,7 +25,7 @@ This project is a mobile-first Web H5 app for multi-person cross-city meeting pl
 - Run the gateway lint, test, and build commands before reporting gateway changes complete.
 - Ignore generated gateway `dist`, coverage, probe output, and cache artifacts.
 - Live supplier publication requires a reachable travel gateway at `TRAVEL_GATEWAY_URL`; do not treat `GATEWAY_UNAVAILABLE` with zero verified quotes as supplier cooldown evidence.
-- Multi-Agent Task 14 is closed; see `docs/acceptance/2026-07-15-multi-agent-live-acceptance.md`. Credential rotation was operator-waived on 2026-07-17 (existing local credentials retained; not claimed as rotated).
+- Multi-Agent Tasks 1–14 are complete. Canonical evidence: `docs/acceptance/2026-07-15-multi-agent-live-acceptance.md`. Do not claim Supabase credentials were rotated; the operator waived rotation on 2026-07-17.
 
 ## Structure
 
@@ -43,6 +43,7 @@ This project is a mobile-first Web H5 app for multi-person cross-city meeting pl
 - `src/components/result/`: shared one-city/two-scheme rendering and bounded run-progress feedback; render persisted scheme routes directly, never reselect routes client-side, and let a nonterminal automatic result page post one bounded authenticated advance before refresh when the device has a local participant token.
 - `docs/architecture.md`: stable technical map for routes, data flow, modules, and security boundaries.
 - `docs/integration-guide.md`: stable setup, API, error-code, and smoke-test reference for handoff.
+- `docs/acceptance/`: Multi-Agent live acceptance record, including non-blocking residual hygiene.
 - `docs/superpowers/README.md`: authority order for current specifications, plans, the recovery ledger, and historical records.
 - `docs/superpowers/specs/`: approved product and technical design specs.
 - `docs/superpowers/plans/`: implementation plans derived from approved specs.
