@@ -153,7 +153,7 @@ export function PublicPlanContent({
             className="rounded-lg bg-black py-3 text-center font-medium text-white"
             href={`/p/${code}/join`}
           >
-            填写我的信息
+            加入这场见面
           </Link>
           {hasCompletedResult ? (
             <Link
@@ -182,7 +182,7 @@ export function PublicPlanContent({
         {canCalculateHere ? (
           <div className="mt-4">
             <Notice>
-              {data.participants.length} 人已填满，可以开始计算。
+              人齐了！{data.participants.length} 位朋友都填好了，可以开始算这次去哪座城。
             </Notice>
             <button
               className="mt-3 w-full rounded-lg bg-black py-3 text-center font-medium text-white disabled:opacity-60"
@@ -190,7 +190,7 @@ export function PublicPlanContent({
               onClick={calculate}
               type="button"
             >
-              {calculating ? "计算中" : "开始计算"}
+              {calculating ? "计算中" : "算出见面城市"}
             </button>
             {calculateMessage && (
               <p className="mt-2 text-xs leading-5 text-gray-500">
@@ -206,8 +206,8 @@ export function PublicPlanContent({
           <div className="mt-4">
             <Notice>
               {participantsFull
-                ? "已填满，只有填写过这份计划的人可以开始计算。"
-                : `还差 ${missingParticipants} 人，填满后已填写者可发起。`}
+                ? "人齐了，等一位填写过的朋友来发起计算。"
+                : `还差 ${missingParticipants} 位朋友。人齐之后，填过的人都能发起计算。`}
             </Notice>
           </div>
         ) : null}
@@ -218,7 +218,7 @@ export function PublicPlanContent({
         {data.participants.length ? (
           <ParticipantList participants={data.participants} />
         ) : (
-          <Notice>还没有人填写。</Notice>
+          <Notice>还没有人填，把链接发到群里吧。</Notice>
         )}
       </section>
 
@@ -228,7 +228,7 @@ export function PublicPlanContent({
           ? "正在生成结果"
           : hasCompletedResult
             ? "已有结果"
-            : "等待发起人计算"}
+            : "就等一声开算了"}
       </p>
     </div>
   );

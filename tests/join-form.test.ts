@@ -55,7 +55,7 @@ describe("JoinParticipantForm", () => {
         acceptedModes: ["high_speed_rail"],
         loading: false,
         submitted: true,
-        message: "已提交成功，正在返回计划页。",
+        message: "你已加入这场见面！正在回到计划页，看看还差谁。",
         onNameChange: vi.fn(),
         onCityChange: vi.fn(),
         onAcceptedModesChange: vi.fn(),
@@ -63,8 +63,8 @@ describe("JoinParticipantForm", () => {
       }),
     );
 
-    expect(html).toContain("已提交成功");
-    expect(html).toContain("正在返回计划页");
+    expect(html).toContain("你已加入这场见面");
+    expect(html).toContain("正在回到计划页");
   });
 
   it("returns to the public plan automatically after a successful submission", () => {

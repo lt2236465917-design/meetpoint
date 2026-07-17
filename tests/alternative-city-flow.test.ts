@@ -30,7 +30,7 @@ describe("alternative city mobile flow", () => {
     }));
 
     expect(html).toContain("仅你可见的预览");
-    expect(html).toContain("换个城市看看");
+    expect(html).toContain("挑一座想去的城市");
     expect(html).toContain("请发起人确认替换");
     expect(html).not.toContain("确认替换共享结果");
   });

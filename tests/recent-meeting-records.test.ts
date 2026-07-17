@@ -14,7 +14,7 @@ describe("RecentMeetingRecords", () => {
     const html = renderToStaticMarkup(createElement(RecentMeetingRecords));
 
     expect(html).toContain("最近见面记录");
-    expect(html).toContain("这台设备还没有保存见面记录");
+    expect(html).toContain("还没有见面记录");
   });
 
   it("links each local meeting record back to its public plan page", () => {

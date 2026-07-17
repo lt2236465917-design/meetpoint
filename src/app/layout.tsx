@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Cross-City MeetPoint",
-  description: "Mobile-first H5 app for cross-city meeting planning.",
+  title: "跨城见面计划：先算好在哪座城见",
+  description: "每个人填一座出发城市，用真实票价为全员选出一座见面城市。",
   formatDetection: {
     telephone: false,
     date: false,

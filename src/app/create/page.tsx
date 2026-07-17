@@ -80,7 +80,7 @@ export default function CreatePlanPage() {
     const copied = await copyTextToClipboard(publicLink);
     setCopyMessage(
       copied
-        ? "公开链接已复制，可以直接发给朋友填写。"
+        ? "链接已复制，去群里喊人吧。"
         : "复制失败，请长按链接手动复制。",
     );
   }
@@ -90,11 +90,11 @@ export default function CreatePlanPage() {
   return (
     <ResponsiveShell
       title="创建见面计划"
-      description="先填最少信息，发给朋友后再一起补全。"
+      description="三十秒填完，剩下的交给朋友们。"
       backHref="/"
       aside={
         <p className="text-center text-xs leading-5 text-gray-500">
-          创建后复制链接发给朋友，大家填满后就能一起计算。
+          建好后把链接发到群里，人到齐就能开算。
         </p>
       }
     >
@@ -109,7 +109,7 @@ export default function CreatePlanPage() {
             <input
               className="w-full rounded-lg border px-4 py-3 font-normal text-gray-950"
               name="title"
-              placeholder="例如：上海周末见面"
+              placeholder="例如：老友五月见面局"
               value={title}
               onChange={(event) => setTitle(event.target.value)}
             />
@@ -186,7 +186,7 @@ export default function CreatePlanPage() {
             disabled={loading}
             type="submit"
           >
-            {loading ? "创建中" : "创建并生成链接"}
+            {loading ? "创建中" : "生成邀请链接"}
           </button>
         </form>
       ) : (

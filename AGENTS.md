@@ -7,6 +7,8 @@ This project is a mobile-first Web H5 app for multi-person cross-city meeting pl
 ## Development
 
 - Use Chinese for user-facing copy.
+- User-facing flow and marketing copy should feel like friends arranging a meetup, not a fare calculator. Avoid `开算` / calculator framing on primary CTAs; keep result/progress trust language (real fares, no estimates) intact. Canonical direction: `docs/superpowers/specs/2026-07-17-ui-copy-and-visual-direction.md`.
+- Recommended Chinese explanations must be exact members of `SAFE_EXPLANATIONS_ZH` in `src/lib/agent/prompts.ts`; update whitelist, prompt example, fallback store, and tests together.
 - Use English for code, files, variables, and commit messages.
 - Keep supplier facts, fare arithmetic, date filtering, evidence validation, and publication guardrails deterministic. The Calculation Agent may choose the winning city only from verified quote IDs; see `docs/superpowers/specs/2026-07-15-multi-agent-recommendation-design.md`.
 - Calculation model input must not include `coverageComplete`, `deterministicPolicyResult`, or any other preselected winner. When the model selects the deterministic winning city, canonicalize schemes, totals, and comparison evidence from `rankEligibleCities` before validation; never invent or mutate supplier quote facts.

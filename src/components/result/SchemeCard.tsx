@@ -34,9 +34,14 @@ export function SchemeCard({ scheme }: { scheme: SharedScheme }) {
     <article className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h3 className="text-lg font-semibold text-gray-950">
-            {scheme.kind === "saving" ? "省钱方案" : "省时方案"}
-          </h3>
+          <div className="flex items-baseline gap-2">
+            <h3 className="text-lg font-semibold text-gray-950">
+              {scheme.kind === "saving" ? "省钱方案" : "省时方案"}
+            </h3>
+            <span className="text-xs text-gray-400">
+              {scheme.kind === "saving" ? "给钱包省一点" : "早一点见到面"}
+            </span>
+          </div>
           <p className="mt-1 text-xs text-gray-500">
             最晚到达 {formatChinaDateTime(scheme.latestArrivalAt)}
           </p>
@@ -75,10 +80,14 @@ export function SchemeCard({ scheme }: { scheme: SharedScheme }) {
               {formatClock(route.departAt)}–{formatClock(route.arriveAt)} ·{" "}
               {formatDuration(route.durationMinutes)} · 中转 {route.transferCount} 次
             </p>
-            <p className="mt-1 text-gray-500">
-              {providerLabel(route.provider)} · 报价 {quoteFingerprint(route.quoteId)} · 查询于{" "}
-              {formatChinaDateTime(route.queriedAt)}
-            </p>
+            <details className="mt-1 text-gray-500">
+              <summary className="cursor-pointer list-none">
+                票价查证于 {formatChinaDateTime(route.queriedAt)} · 数据来源
+              </summary>
+              <p className="mt-1">
+                {providerLabel(route.provider)} · 报价编号 {quoteFingerprint(route.quoteId)}
+              </p>
+            </details>
           </div>
         ))}
       </div>

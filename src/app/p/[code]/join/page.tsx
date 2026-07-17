@@ -88,7 +88,7 @@ export default function JoinPlanPage({ params }: JoinPlanPageProps) {
           latestRun: false,
           lastVisitedAt: new Date().toISOString(),
         });
-        setMessage("已提交成功，正在返回计划页。");
+        setMessage("你已加入这场见面！正在回到计划页，看看还差谁。");
         setSubmitted(true);
         router.replace(`/p/${code}`);
         return;
@@ -104,8 +104,8 @@ export default function JoinPlanPage({ params }: JoinPlanPageProps) {
 
   return (
     <ResponsiveShell
-      title="填写出发信息"
-      description="只需要你的出发城市和可接受交通方式，用来一起计算合适的见面城市。"
+      title="告诉大家你从哪儿出发"
+      description="只用填出发城市和能接受的交通方式，比价查票的活我们来干。"
       backHref={`/p/${code}`}
       backLabel="返回计划页"
       aside={

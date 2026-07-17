@@ -116,7 +116,7 @@ export function AlternativeCityFlow({
         return;
       }
       setPreview((value) => value ? { ...value, status: "completed" } : value);
-      setMessage("已替换共享结果，所有人现在看到这个城市。");
+      setMessage("换好了！大家现在看到的就是这座城。");
     } catch {
       setMessage("确认失败，请稍后重试");
     } finally {
@@ -128,7 +128,7 @@ export function AlternativeCityFlow({
     <div className="space-y-4">
       <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
         <p className="text-xs font-medium text-gray-500">仅你可见的预览</p>
-        <h2 className="mt-1 text-lg font-semibold text-gray-950">换个城市看看</h2>
+        <h2 className="mt-1 text-lg font-semibold text-gray-950">挑一座想去的城市</h2>
         <p className="mt-2 text-sm leading-6 text-gray-600">
           先核算真实票价，不会立刻改变大家看到的结果。
         </p>
@@ -140,7 +140,7 @@ export function AlternativeCityFlow({
             onClick={createPreview}
             type="button"
           >
-            {busy ? "处理中" : "生成私有预览"}
+            {busy ? "处理中" : "先算给我看"}
           </button>
           {!participantToken ? <Notice>请在填写过这份计划的浏览器中打开。</Notice> : null}
         </div>

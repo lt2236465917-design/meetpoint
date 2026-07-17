@@ -29,7 +29,7 @@ const proposal: RecommendationProposal = {
     { kind: "fast", quoteIdsByParticipant: { p1: "p1-fast", p2: "p2-fast" }, totalFareCny: 240 },
   ],
   comparisonEvidence: { eligibleCityCodes: ["wuhan"], orderedCityCodes: ["wuhan"] },
-  explanationZh: "已依据已验证报价及既定规则生成推荐方案。",
+  explanationZh: "这座城市按真实票价和统一规则为全员选出，每一程都有据可查。",
 };
 
 const snapshot: CalculationSnapshot = {

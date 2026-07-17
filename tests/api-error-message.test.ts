@@ -13,7 +13,7 @@ describe("getApiErrorMessage", () => {
       "人数填满后才能开始计算",
     );
     expect(getApiErrorMessage("CALCULATION_IN_PROGRESS", "计算失败")).toBe(
-      "正在查询票价并生成结果，请稍后自动刷新。",
+      "正在查票和算方案，页面稍后会自动刷新。",
     );
   });
 

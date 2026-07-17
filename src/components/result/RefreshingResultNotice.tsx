@@ -98,27 +98,27 @@ export function getRunProgressMessage(progress: PublicRunProgress, now = new Dat
   switch (progress.status) {
     case "pending":
     case "collecting":
-      return `正在查询 ${progress.pendingGroups} 组真实票价`;
+      return `正在替大家查 ${progress.pendingGroups} 组真实车票和机票`;
     case "cooling_down": {
       const seconds = progress.retryAt
         ? Math.max(0, Math.ceil((new Date(progress.retryAt).getTime() - now.getTime()) / 1000))
         : 0;
       return seconds > 0
-        ? `供应商限流，${seconds} 秒后自动重试`
-        : "供应商限流，正在自动重试";
+        ? `票务平台有点忙，${seconds} 秒后自动再试`
+        : "票务平台有点忙，正在自动再试";
     }
     case "calculating":
-      return "正在计算一城两方案";
+      return "正在挑一座对每个人都公平的城市";
     case "validating":
-      return "正在核验全员路线";
+      return "正在逐条确认每个人的路线真实可订";
     case "awaiting_host_confirmation":
       return "替代城市正在等待发起人确认，共享结果暂不变更";
     case "incomplete":
-      return "未生成推荐：真实票价覆盖不完整，尚未生成推荐。可以重新计算。";
+      return "有几位朋友的票价这次没查全，所以先不出结论。再算一次试试。";
     case "failed":
-      return "生成失败，请返回计划页重新计算；如仍失败，请提供诊断编号。";
+      return "这次没算成，回计划页再试一次。如果反复失败，把下面这串编号发给发起人。";
     case "completed":
-      return "推荐已生成";
+      return "选好了！去看看这次在哪儿见";
   }
 }
 

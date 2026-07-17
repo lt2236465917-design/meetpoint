@@ -68,7 +68,7 @@ export function RecentMeetingRecordsView({
 
       {records.length === 0 ? (
         <p className="mt-3 text-sm leading-6 text-gray-600">
-          这台设备还没有保存见面记录。创建或打开计划后，会出现在这里。
+          还没有见面记录。发起或加入一场见面后，它会在这里等你。
         </p>
       ) : (
         <div className="mt-4 grid gap-2">

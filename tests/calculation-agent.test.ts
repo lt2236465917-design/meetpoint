@@ -48,7 +48,7 @@ const validProposal: RecommendationProposal = {
     { kind: "fast", quoteIdsByParticipant: { p1: "p1-fast", p2: "p2-fast" }, totalFareCny: 240 },
   ],
   comparisonEvidence: { eligibleCityCodes: ["wuhan"], orderedCityCodes: ["wuhan"] },
-  explanationZh: "已依据已验证报价及既定规则生成推荐方案。",
+  explanationZh: "这座城市按真实票价和统一规则为全员选出，每一程都有据可查。",
 };
 
 function snapshot(overrides: Partial<CalculationSnapshot> = {}): CalculationSnapshot {
@@ -289,7 +289,7 @@ describe("CalculationAgent", () => {
     const first = new CalculationAgent(model(validProposal), { saveProposal: firstSave });
     const second = new CalculationAgent(model({
       ...validProposal,
-      explanationZh: "推荐方案仅使用已验证报价，并遵循既定规则。",
+      explanationZh: "方案由真实票价和统一规则算出，未采用任何估算票价。",
     }), { saveProposal: secondSave });
 
     await first.propose(snapshot());

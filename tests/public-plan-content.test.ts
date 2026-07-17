@@ -60,8 +60,8 @@ describe("PublicPlanContent", () => {
       }),
     );
 
-    expect(html).toContain("还差 1 人，填满后已填写者可发起。");
-    expect(html).not.toContain("开始计算");
+    expect(html).toContain("还差 1 位朋友。人齐之后，填过的人都能发起计算。");
+    expect(html).not.toContain("算出见面城市");
   });
 
   it("does not render the result action as a link before a run exists", () => {
@@ -109,7 +109,7 @@ describe("PublicPlanContent", () => {
       }),
     );
 
-    expect(html).toContain("正在查询 6 组真实票价");
+    expect(html).toContain("正在替大家查 6 组真实车票和机票");
     expect(html).toContain("结果生成中");
     expect(html).toContain("正在生成结果");
     expect(html).not.toContain('href="/p/ABC123/result"');
@@ -134,7 +134,7 @@ describe("PublicPlanContent", () => {
       }),
     );
 
-    expect(html).toContain("正在核验全员路线");
+    expect(html).toContain("正在逐条确认每个人的路线真实可订");
     expect(html).not.toContain('href="/p/ABC123/result"');
     expect(html).not.toContain("省钱方案");
   });
@@ -159,8 +159,8 @@ describe("PublicPlanContent", () => {
       }),
     );
 
-    expect(html).toContain("人已填满，可以开始计算");
-    expect(html).toContain("开始计算");
+    expect(html).toContain("位朋友都填好了，可以开始算这次去哪座城");
+    expect(html).toContain("算出见面城市");
     expect(html).not.toContain("发起人还没有开始计算。");
   });
 });

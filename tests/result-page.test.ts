@@ -63,7 +63,7 @@ describe("result page public states", () => {
     (status) => {
       const html = renderStatus(status);
 
-      expect(html).toContain("正在查询 8 组真实票价");
+      expect(html).toContain("正在替大家查 8 组真实车票和机票");
       expect(html).toContain("刷新结果");
       expect(html).not.toContain("省钱方案");
       expect(html).not.toContain("省时方案");
@@ -75,21 +75,21 @@ describe("result page public states", () => {
       retryAt: "2026-07-15T10:00:12.000Z",
     });
 
-    expect(html).toContain("供应商限流，12 秒后自动重试");
+    expect(html).toContain("票务平台有点忙，12 秒后自动再试");
     expect(html).not.toContain("省钱方案");
   });
 
   it("shows calculation progress without result cards", () => {
     const html = renderStatus("calculating");
 
-    expect(html).toContain("正在计算一城两方案");
+    expect(html).toContain("正在挑一座对每个人都公平的城市");
     expect(html).not.toContain("省钱方案");
   });
 
   it("shows validation progress without result cards", () => {
     const html = renderStatus("validating");
 
-    expect(html).toContain("正在核验全员路线");
+    expect(html).toContain("正在逐条确认每个人的路线真实可订");
     expect(html).not.toContain("省时方案");
   });
 
@@ -106,9 +106,8 @@ describe("result page public states", () => {
       diagnosticCode: "REAL_QUOTE_COVERAGE_INCOMPLETE",
     });
 
-    expect(html).toContain("未生成推荐");
-    expect(html).toContain("真实票价覆盖不完整，尚未生成推荐");
-    expect(html).toContain("可以重新计算");
+    expect(html).toContain("有几位朋友的票价这次没查全，所以先不出结论");
+    expect(html).toContain("再算一次试试");
     expect(html).toContain("诊断编号 RUN-12345678");
     expect(html).not.toContain("省钱方案");
   });
@@ -118,8 +117,8 @@ describe("result page public states", () => {
       diagnosticCode: "AGENT_PROPOSAL_INVALID",
     });
 
-    expect(html).toContain("生成失败");
-    expect(html).toContain("请返回计划页重新计算");
+    expect(html).toContain("这次没算成，回计划页再试一次");
+    expect(html).toContain("把下面这串编号发给发起人");
     expect(html).toContain("诊断编号 RUN-12345678");
     expect(html).not.toContain("省钱方案");
   });

@@ -306,7 +306,7 @@ describe("RunOrchestrator", () => {
         eligibleCityCodes: ["wuhan"],
         orderedCityCodes: ["wuhan"],
       },
-      explanationZh: "已依据已验证报价及既定规则生成推荐方案。",
+      explanationZh: "这座城市按真实票价和统一规则为全员选出，每一程都有据可查。",
     };
     vi.mocked(createAgentModel).mockReturnValue({
       provider: "fake",

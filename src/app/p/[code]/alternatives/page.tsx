@@ -12,8 +12,8 @@ export default async function AlternativesPage({
   const runId = typeof query.runId === "string" ? query.runId : "";
   return (
     <ResponsiveShell
-      title="替代城市预览"
-      description="先私下比较真实出行方案，再由发起人决定是否替换。"
+      title="换个城市看看"
+      description="先悄悄算一版只有你和发起人能看的方案，满意再让发起人替换给大家。"
       backHref={`/p/${code}/result`}
       backLabel="返回共享结果"
     >

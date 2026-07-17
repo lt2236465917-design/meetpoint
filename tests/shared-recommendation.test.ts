@@ -133,8 +133,8 @@ describe("SharedRecommendation", () => {
     expect(html).toContain("中转 1 次");
     expect(html).toContain("¥960");
     expect(html).toContain("飞猪");
-    expect(html).toContain("报价 quote-fa");
-    expect(html).toContain("查询于 2026/07/15 15:32");
+    expect(html).toContain("报价编号 quote-fa");
+    expect(html).toContain("票价查证于 2026/07/15 15:32");
   });
 
   it("never renders legacy ranking, estimate, average-fare, or booking UI", () => {

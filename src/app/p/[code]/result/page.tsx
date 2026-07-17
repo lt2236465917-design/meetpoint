@@ -76,7 +76,7 @@ export function ResultContent({
   return (
     <ResponsiveShell
       title={title}
-      description="一个推荐城市，两套全员可核验的出行方案。"
+      description="一座城市，两套走法，每一程都查得到真实票价。"
       backHref={`/p/${code}`}
       backLabel="返回计划页"
       aside={

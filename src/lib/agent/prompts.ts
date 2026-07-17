@@ -1,8 +1,8 @@
 import type { ValidationDecision, VerifiedQuote } from "@/lib/agent/contracts";
 
 export const SAFE_EXPLANATIONS_ZH = [
-  "已依据已验证报价及既定规则生成推荐方案。",
-  "推荐方案仅使用已验证报价，并遵循既定规则。",
+  "这座城市按真实票价和统一规则为全员选出，每一程都有据可查。",
+  "方案由真实票价和统一规则算出，未采用任何估算票价。",
 ] as const;
 
 export function buildCalculationSystemPrompt(input: {
@@ -21,7 +21,7 @@ export function buildCalculationSystemPrompt(input: {
     "当受控缺失任务为空（missingTaskIds=[]）时，覆盖完整，必须返回 proposal，不得返回 incomplete。",
     "覆盖不完整时返回 incomplete 和缺失任务 ID；仅可使用输入中明确给出的非空 missingTaskIds；不得估算、推断或修改票价、时间、服务或供应商事实。",
     `说明文字只能逐字使用以下一句，不能加入城市、服务、时间、时长或票价：${SAFE_EXPLANATIONS_ZH.join(" 或 ")}`,
-    '只输出一个 JSON 对象。proposal 格式示例：{"status":"proposal","cityCode":"<候选城市代码>","schemes":[{"kind":"saving","quoteIdsByParticipant":{"<参与者UUID>":"<已验证报价UUID>"},"totalFareCny":0},{"kind":"fast","quoteIdsByParticipant":{"<参与者UUID>":"<已验证报价UUID>"},"totalFareCny":0}],"comparisonEvidence":{"eligibleCityCodes":["<候选城市代码>"],"orderedCityCodes":["<候选城市代码>"]},"explanationZh":"已依据已验证报价及既定规则生成推荐方案。"}',
+    '只输出一个 JSON 对象。proposal 格式示例：{"status":"proposal","cityCode":"<候选城市代码>","schemes":[{"kind":"saving","quoteIdsByParticipant":{"<参与者UUID>":"<已验证报价UUID>"},"totalFareCny":0},{"kind":"fast","quoteIdsByParticipant":{"<参与者UUID>":"<已验证报价UUID>"},"totalFareCny":0}],"comparisonEvidence":{"eligibleCityCodes":["<候选城市代码>"],"orderedCityCodes":["<候选城市代码>"]},"explanationZh":"这座城市按真实票价和统一规则为全员选出，每一程都有据可查。"}',
     "你不能发布结果或修改任何报价。",
   ].join("\n");
 }

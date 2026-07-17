@@ -324,7 +324,7 @@ function deterministicProposal(run: RunRow): RecommendationProposal | null {
     status: "proposal", cityCode: selected.cityCode,
     schemes: [selected.savingScheme, selected.fastScheme],
     comparisonEvidence: { eligibleCityCodes: ranked.map((item) => item.cityCode).sort(), orderedCityCodes: ranked.map((item) => item.cityCode) },
-    explanationZh: "已按已验证票价生成方案。",
+    explanationZh: "这座城市按真实票价和统一规则为全员选出，每一程都有据可查。",
   };
 }
 
