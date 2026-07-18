@@ -67,3 +67,15 @@ Plan: `docs/superpowers/plans/2026-07-15-multi-agent-recommendation-implementati
 - Final gates pass: root lint, 57-file/331-test suite, and production build; gateway lint, 7-file/90-test suite, and build.
 - Final review has no unresolved Critical or Important finding. Three valid Important findings were fixed with failing-first regressions by removing the preselected deterministic winner from model input and retaining deterministic policy as post-proposal validation; policy-limit diagnostics and malformed snapshot handling are covered.
 - Next (non-blocking residual hygiene; does not reopen Task 14): (1) with Docker daemon available, build `services/travel-provider-gateway` image and smoke container `/healthz` plus unauthenticated reject / authenticated search routing; (2) optionally close automated-browser PARTIAL criteria (native date picker interaction, full join flow, post-publication result cards) or leave phone evidence as authority; (3) optionally rotate waived Supabase credentials. Details: `docs/acceptance/2026-07-15-multi-agent-live-acceptance.md` § Non-blocking Residual Hygiene.
+
+# UI Copy And Visual Direction Progress
+
+Branch: `task-1-scaffold` (uncommitted product UI work may sit on this branch)
+
+- Phase 1 home hero: shipped (`HomeHero` on `/`).
+- Phase 2 atmosphere tokens → `ResponsiveShell` / create / join / plan: shipped.
+- Phase 3 plan/result IA: **shipped** 2026-07-17 (StatusLane on `PublicPlanContent`; glass `SharedRecommendation` / `SchemeCard` / `RefreshingResultNotice`). Spec: `docs/superpowers/specs/2026-07-17-plan-result-ia-design.md`.
+- Phase 4 optional wait/reveal video: **shipped** (`PeakScenicAccent` on wait/reveal peaks only).
+- Adaptive shell (去画框): **shipped** 2026-07-18 — full-bleed zero-scroll `/`, `ResponsiveShell` `max-w-2xl`, `/records` for 最近见面记录; AGENTS/architecture/integration-guide/README collapsed to shipped wording (neat-freak 2026-07-18). Spec: `docs/superpowers/specs/2026-07-17-desktop-adaptive-shell-design.md`. Gates: lint / 343 tests / build green. Desktop+mobile visual smoke done 2026-07-18; Phase 1–4 + adaptive shell still **uncommitted** on `task-1-scaffold`.
+- Inner atmosphere + meetup copy: **approved design + plan** 2026-07-18, **not shipped**. Spec: `docs/superpowers/specs/2026-07-18-inner-atmosphere-meetup-copy-design.md`. Plan (Tasks 1–7): `docs/superpowers/plans/2026-07-18-inner-atmosphere-meetup-copy.md`. Execution mode: Subagent-Driven. Alternatives/manage deep IA still out of scope.
+- Recovery Next (product UI): (1) Subagent-Driven execute plan Tasks 1–7 (scenic preference → shell scenic → static deepen →「开始见面」copy → city search merge → upward participant dropdown → docs + lint/test/build); (2) optional commit of prior uncommitted adaptive-shell bundle before or with this pass; (3) alternatives/manage remain shell-only unless a later IA pass is approved.

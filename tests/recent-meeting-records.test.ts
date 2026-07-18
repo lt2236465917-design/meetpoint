@@ -10,11 +10,20 @@ import {
 import { meetingHistoryUpdatedEvent } from "@/lib/ui/meeting-history";
 
 describe("RecentMeetingRecords", () => {
-  it("renders an empty local-history state on the home page", () => {
+  it("renders an empty local-history state", () => {
     const html = renderToStaticMarkup(createElement(RecentMeetingRecords));
 
     expect(html).toContain("最近见面记录");
     expect(html).toContain("还没有见面记录");
+  });
+
+  it("uses atmosphere glass chrome instead of a white card slab", () => {
+    const html = renderToStaticMarkup(createElement(RecentMeetingRecords));
+
+    expect(html).toContain("atmosphere-panel");
+    expect(html).not.toContain("bg-white");
+    expect(html).not.toContain("border-gray-200");
+    expect(html).not.toContain("text-gray-950");
   });
 
   it("links each local meeting record back to its public plan page", () => {
@@ -80,7 +89,7 @@ describe("RecentMeetingRecords", () => {
     expect(html).toContain('aria-label="复制上海周末见面邀请链接"');
   });
 
-  it("keeps the home page compact and moves older records behind a more-records entry", () => {
+  it("keeps the list compact and moves older records behind a more-records entry", () => {
     const html = renderToStaticMarkup(
       createElement(RecentMeetingRecordsView, {
         records: Array.from({ length: 5 }, (_, index) => ({
@@ -108,7 +117,7 @@ describe("RecentMeetingRecords", () => {
     );
   });
 
-  it("refreshes local meeting records when returning to a cached home page", () => {
+  it("refreshes local meeting records when returning to a cached page", () => {
     const originalWindow = globalThis.window;
     const target = new EventTarget();
     Object.defineProperty(globalThis, "window", {

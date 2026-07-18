@@ -17,11 +17,13 @@ export function ParticipantList({
     <div className="grid gap-2">
       {participants.map((participant) => (
         <div
-          className="rounded-lg border border-gray-200 p-3"
+          className="rounded-lg border border-white/10 bg-black/20 p-3"
           key={participant.id}
         >
-          <div className="font-medium text-gray-950">{participant.name}</div>
-          <div className="mt-1 text-sm text-gray-500">
+          <div className="font-medium text-[var(--atmosphere-ink)]">
+            {participant.name}
+          </div>
+          <div className="mt-1 text-sm text-[var(--atmosphere-muted)]">
             {participant.departure_city_name} ·{" "}
             {formatTransportModes(participant.accepted_modes)}
           </div>

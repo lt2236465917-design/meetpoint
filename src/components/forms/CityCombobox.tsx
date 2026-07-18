@@ -9,15 +9,18 @@ export function CityCombobox({
   onChange,
   label,
   placeholder = "选择城市",
+  tone = "atmosphere",
 }: {
   value: { code: string; name: string } | null;
   onChange: (city: { code: string; name: string } | null) => void;
   label?: string;
   placeholder?: string;
+  tone?: "default" | "atmosphere";
 }) {
   const [query, setQuery] = useState(value?.name ?? "");
   const [results, setResults] = useState<CityOption[]>([]);
   const showResults = results.length > 0 && query.trim() !== value?.name;
+  const isAtmosphere = tone === "atmosphere";
 
   useEffect(() => {
     const normalized = query.trim();
@@ -31,7 +34,7 @@ export function CityCombobox({
           { signal: controller.signal },
         );
         if (!response.ok) return;
-        const json = await response.json() as { cities?: CityOption[] };
+        const json = (await response.json()) as { cities?: CityOption[] };
         if (!Array.isArray(json.cities)) return;
         setResults(json.cities);
       } catch {
@@ -52,7 +55,11 @@ export function CityCombobox({
   return (
     <div className="space-y-1.5">
       <input
-        className="w-full rounded-lg border px-4 py-3"
+        className={
+          isAtmosphere
+            ? "atmosphere-field w-full rounded-lg px-4 py-3"
+            : "w-full rounded-lg border px-4 py-3"
+        }
         aria-label={label ?? placeholder}
         placeholder={placeholder}
         value={query}
@@ -64,11 +71,21 @@ export function CityCombobox({
         }}
       />
       {showResults && (
-        <div className="max-h-48 w-full overflow-auto rounded-lg border bg-white shadow-sm">
+        <div
+          className={
+            isAtmosphere
+              ? "atmosphere-panel max-h-48 w-full overflow-auto rounded-lg"
+              : "max-h-48 w-full overflow-auto rounded-lg border bg-white shadow-sm"
+          }
+        >
           {results.map((city) => (
             <button
               type="button"
-              className="block w-full px-4 py-3 text-left text-sm hover:bg-gray-50"
+              className={
+                isAtmosphere
+                  ? "block w-full px-4 py-3 text-left text-sm text-[var(--atmosphere-ink)] hover:bg-white/10"
+                  : "block w-full px-4 py-3 text-left text-sm hover:bg-gray-50"
+              }
               key={city.code}
               onClick={() => {
                 setQuery(city.name);

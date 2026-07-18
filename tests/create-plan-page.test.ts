@@ -17,7 +17,8 @@ describe("CreatePlanPage native input controls", () => {
     expect(pageSource).not.toContain("目标到达时间");
     expect(pageSource).toContain("计划到达日期");
     expect(pageSource).not.toContain("grid-cols-2");
-    expect(pageSource).toContain('className="native-picker-hit-area w-full rounded-lg border px-4 py-3 pr-12 font-normal text-gray-950"');
+    expect(pageSource).toContain("native-picker-hit-area");
+    expect(pageSource).toContain("atmosphere-field");
     expect(pageSource).not.toContain("openNativePicker");
     expect(pageSource).toContain("participantLimitOpen");
     expect(pageSource).toContain('role="listbox"');

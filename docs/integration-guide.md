@@ -9,7 +9,7 @@ This guide is the quick reference for running and calling the MVP locally.
 3. Fill Supabase variables for persistent Supabase-backed runs. Without Supabase variables, the app uses an in-memory fallback store for local smoke testing.
 4. Run the app with `npm run dev`.
 
-The same user-facing routes are mobile-first and desktop responsive. On desktop, they should open as a centered phone-sized H5 canvas, not as a wide document page.
+The same user-facing routes must remain usable on phones (shareable plan links) and on desktop. Shipped UI uses a true adaptive layout without fake phone chrome — see `docs/superpowers/specs/2026-07-17-desktop-adaptive-shell-design.md`.
 
 For local browser testing, open `http://127.0.0.1:<port>`; for real-phone testing, open the Network URL printed by `npm run dev`, for example `http://192.168.31.69:3000`. Both origins are allowed in `next.config.ts` so the browser can load Next.js development resources and keep client-side form submission behavior.
 
@@ -20,7 +20,7 @@ If `NEXT_PUBLIC_SUPABASE_URL` or `SUPABASE_SERVICE_ROLE_KEY` is missing, create,
 Use this mode to test creation, participation, authorization, and run-progress handling before provisioning Supabase:
 
 1. Open `/create` and create a plan.
-2. Return to `/` and confirm the plan appears in recent meeting records on the same device.
+2. Open `/records` (from the home hero “最近记录” entry or directly) and confirm the plan appears in recent meeting records on the same device.
 3. Use the public link to submit participants until the plan reaches its participant limit.
 4. Keep `/p/[code]` open and confirm the filling records refresh without manually reloading the browser.
 5. On a device that filled the plan, use `/p/[code]` to calculate after the plan is full.
@@ -28,7 +28,7 @@ Use this mode to test creation, participation, authorization, and run-progress h
 
 Fallback data is cleared when the dev server restarts. Use Supabase variables for persistent handoff or deployment testing.
 
-Recent meeting records are browser-local convenience data stored in `localStorage`. They help the same device return to plans that were created, opened, or joined, refresh when the user returns to a cached homepage tab, and are not shared across devices or treated as a security boundary.
+Recent meeting records are browser-local convenience data stored in `localStorage` and shown on `/records`. They help the same device return to plans that were created, opened, or joined, refresh on same-tab updates / `storage` / `pageshow` / focus, and are not shared across devices or treated as a security boundary.
 
 Pre-migration `city_recommendations` and `travel_options` are historical read-only data. They cannot become new published results. A pre-migration plan without a stored host credential may still view history but must create a new plan to use private previews and host confirmation.
 
@@ -95,7 +95,7 @@ Returns:
 
 `GET /api/cities/search?q=上海`
 
-Returns `{ "cities": [] }`. Built-in city matches return immediately. On a local miss and with `AMAP_API_KEY` configured, the server requests Amap input tips with a 3-second timeout, then returns normalized prefecture-level or municipality city matches such as `{ "code": "amap-440800", "name": "湛江", "province": "广东" }`. Amap failure, invalid data, missing credentials, and non-city locations safely return no remote selectable city.
+Returns `{ "cities": [] }`. Today, built-in hub matches return immediately (local short-circuit). On a local miss and with `AMAP_API_KEY` configured, the server requests Amap input tips with a 3-second timeout, then returns normalized prefecture-level or municipality city matches such as `{ "code": "amap-440800", "name": "湛江", "province": "广东" }`. Amap failure, invalid data, missing credentials, and non-city locations safely return no remote selectable city. Approved next (not shipped): merge local hubs with Amap prefecture hits for the same query — `docs/superpowers/specs/2026-07-18-inner-atmosphere-meetup-copy-design.md`.
 
 ### Submit Participant
 
@@ -227,13 +227,14 @@ Terminal run progress may expose these `diagnosticCode` values without publishin
 
 Use these checks after layout or component changes:
 
-1. Open `/` at a desktop viewport around `1440x1000`; confirm the page appears as a centered phone-sized H5 canvas and no bottom-left Next.js `N` indicator appears.
-2. Open `/create` at a mobile viewport around `390x844`; confirm the shell fills the visible screen height and the form remains a single-column H5 workflow.
-3. Open `/p/[code]`, `/p/[code]/join`, and `/p/[code]/result` on desktop; confirm each route stays in the centered H5 canvas and does not switch to multi-column desktop layout.
-4. On `/p/[code]/join`, type a departure city, confirm city candidates do not cover the transport-mode buttons, then select a city and confirm the candidates disappear.
-5. Confirm no browser or framework overlay visually covers the right side of the app. If a red overlay appears while the DOM has no app-level fixed red element, check browser extensions before changing app CSS.
-6. On `/create` in a WebKit/Chrome browser, click the middle of the “计划到达日期” field, then confirm the platform-native date picker opens and the selected value appears. The native picker controls its own closing behavior.
-7. On `/create`, click "参与人数上限". Confirm the app-styled 2–6 person panel opens, and selecting one option updates the field and closes the panel.
+1. Open `/` at a desktop viewport around `1440x1000`; confirm a full-bleed train-window hero (no fake phone chrome), zero-scroll opening with “发起见面计划” → `/create` and “最近记录” → `/records`, and no bottom-left Next.js `N` indicator.
+2. Open `/create` at a mobile viewport around `390x844`; confirm the `ResponsiveShell` fills the visible screen height with the dark scenic-gradient canvas (not a white card shell), glass form panels, a usable single-column workflow, and no looping scenic video behind the form.
+3. Open `/p/[code]`, `/p/[code]/join`, and `/p/[code]/result` on desktop; confirm each route uses the adaptive atmosphere shell (`max-w-2xl`, not a multi-column desktop dashboard or fake phone frame). On the public plan page expect one StatusLane panel (status + one primary CTA + `已填写` list). On the result page expect glass `.atmosphere-panel` scheme cards (no nested white route cards); while calculating or on city reveal, expect light `PeakScenicAccent` video (not behind create/join forms). Contracts: `docs/superpowers/specs/2026-07-17-plan-result-ia-design.md`, phase 4 in `docs/superpowers/specs/2026-07-17-ui-copy-and-visual-direction.md`, adaptive shell in `docs/superpowers/specs/2026-07-17-desktop-adaptive-shell-design.md`.
+4. Open `/records` and confirm recent meeting records render in the adaptive shell with a back link to `/`.
+5. On `/p/[code]/join`, type a departure city, confirm city candidates do not cover the transport-mode buttons, then select a city and confirm the candidates disappear.
+6. Confirm no browser or framework overlay visually covers the right side of the app. If a red overlay appears while the DOM has no app-level fixed red element, check browser extensions before changing app CSS.
+7. On `/create` in a WebKit/Chrome browser, click the middle of the “计划到达日期” field, then confirm the platform-native date picker opens and the selected value appears. The native picker controls its own closing behavior.
+8. On `/create`, click "参与人数上限". Confirm the app-styled 2–6 person panel opens, and selecting one option updates the field and closes the panel.
 
 ## Gateway Setup And Contract (internal service)
 

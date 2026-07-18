@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { ResponsiveShell } from "@/components/layout/ResponsiveShell";
 
 describe("ResponsiveShell", () => {
-  it("renders a mobile-first page as a centered H5 canvas on desktop", () => {
+  it("renders an adaptive atmosphere shell without fake phone chrome", () => {
     const html = renderToStaticMarkup(
       createElement(
         ResponsiveShell,
@@ -22,15 +22,21 @@ describe("ResponsiveShell", () => {
     expect(html).toContain("创建见面计划");
     expect(html).toContain("计划表单");
     expect(html).toContain("协作状态");
-    expect(html).toContain("items-center");
-    expect(html).toContain("justify-center");
-    expect(html).toContain("h-svh");
-    expect(html).toContain("max-w-md");
+    expect(html).toContain("atmosphere-shell");
+    expect(html).toContain("atmosphere-canvas");
+    expect(html).toContain("font-display");
+    expect(html).toContain("min-h-svh");
+    expect(html).toContain("max-w-2xl");
     expect(html).toContain("scrollbar-none");
     expect(html).toContain("overflow-y-auto");
     expect(html).toContain('href="/"');
     expect(html).toContain("返回上一页");
     expect(html).toContain("aria-label");
+    expect(html).not.toContain("max-w-md");
+    expect(html).not.toContain("sm:rounded-3xl");
+    expect(html).not.toContain("sm:h-[min(860px,calc(100svh-3rem))]");
+    expect(html).not.toContain("bg-slate-100");
+    expect(html).not.toContain("bg-white shadow-sm");
     expect(html).not.toContain("lg:grid-cols");
     expect(html).not.toContain("lg:sticky");
   });

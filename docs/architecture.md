@@ -6,7 +6,7 @@ The approved product and Multi-Agent architecture is documented separately in `d
 
 ## Runtime Shape
 
-- Next.js App Router renders the responsive H5 pages under `src/app/`; desktop viewports show the same H5 workflow in a centered phone-sized canvas.
+- Next.js App Router renders user-facing pages under `src/app/`. Shipped presentation: adaptive layout without fake phone chrome — full-bleed `/`, `ResponsiveShell` with fluid `max-w-2xl` content width (`docs/superpowers/specs/2026-07-17-desktop-adaptive-shell-design.md`).
 - Route handlers under `src/app/api/` use the server-side Supabase service-role client.
 - When Supabase server variables are missing, route handlers use the server-side in-memory fallback store in `src/lib/fallback/mvp-store.ts`. It preserves run states and publication guards for local smoke tests but has no supplier adapter and never publishes estimates.
 - Browser-side Supabase access must use only the anon client from `src/lib/supabase/client.ts`.
@@ -17,9 +17,10 @@ The approved product and Multi-Agent architecture is documented separately in `d
 
 | Route | Purpose |
 | --- | --- |
-| `/` | Focused creation entry plus browser-local recent meeting records for plans opened on this device. |
+| `/` | Full-bleed train-window home hero (`HomeHero`): zero-scroll opening, CTA to `/create`, “最近记录” entry to `/records`. |
+| `/records` | Browser-local recent meeting records (`RecentMeetingRecords`) in `ResponsiveShell`. |
 | `/create` | Host creates a plan, receives a phone-openable public link, and saves the plan to local recent records. |
-| `/p/[code]` | Public plan summary, auto-refreshed participant completion state, filling records, join entry, result entry, and direct calculation for local participants once the participant limit is reached. |
+| `/p/[code]` | Public plan StatusLane (status, one primary CTA, `已填写` list), auto-refreshed participant completion, join/calculate/result entry, and direct calculation for local participants once the participant limit is reached. |
 | `/p/[code]/join` | Participant submits name, departure city, and accepted transport modes, then returns to the public plan page automatically. |
 | `/p/[code]/manage` | Legacy route that points users back to the public plan page. |
 | `/p/[code]/result` | Shows one published city and exactly saving/fast schemes from persisted scheme routes after completion; all other run states show progress, retry, or diagnostic guidance without result cards. |
@@ -50,7 +51,7 @@ The approved product and Multi-Agent architecture is documented separately in `d
 5. After a completed shared result, any participant may create an `alternative` run bound to exactly one requested city and their participant identity. The same Manager/Query/Calculation/Supervisor pipeline materializes it privately and stops at `awaiting_host_confirmation`. The requesting participant and host may read it; other participants receive 404. Only `x-host-token` can invoke the confirmation boundary, which passes the exact approved proposal and stored verified credential hash to `confirm_alternative_result`.
 6. `GET /api/plans/[code]` and `/result` anchor public state to the current non-superseded shared result, so a pending private preview never hides or replaces the prior city. The result screen loads the shared `recommendation_results` row, its two `recommendation_schemes`, and each persisted `recommendation_scheme_routes` selection joined to the participant and verified quote. It renders those stored selections directly and never reselects a route in the browser. While a nonterminal automatic run is shown, `RefreshingResultNotice` posts one bounded authenticated advance using the device's cached participant edit token before refreshing.
 7. Pre-migration `city_recommendations` and `travel_options` are historical read-only rows and can never be promoted into a new shared result. A pre-migration plan without a stored host credential may view its history but must create a new plan to use host confirmation.
-8. The browser stores local recent meeting records in `localStorage` when a plan is created, opened, or joined. Participant records keep the participant edit token on the filling device so the public plan page can show direct calculation after the plan is full. The homepage recent-record store refreshes on same-tab updates, `storage`, `pageshow`, and window focus so plans created on another route still appear after returning to `/`. This is a convenience layer only and is not a server-side history.
+8. The browser stores local recent meeting records in `localStorage` when a plan is created, opened, or joined. Participant records keep the participant edit token on the filling device so the public plan page can show direct calculation after the plan is full. The `/records` recent-record store refreshes on same-tab updates, `storage`, `pageshow`, and window focus so plans created on another route still appear after opening `/records`. This is a convenience layer only and is not a server-side history.
 
 In fallback mode, the same logical records are kept in process memory instead of Supabase. Tests may inject validated quotes, but the running app does not call suppliers in this mode; missing coverage ends the run as `incomplete` and no estimate or shared result is synthesized.
 
@@ -68,15 +69,19 @@ In fallback mode, the same logical records are kept in process memory instead of
 
 | Module | Responsibility |
 | --- | --- |
-| `src/components/layout/ResponsiveShell.tsx` | Shared mobile-first page shell with a viewport-height H5 canvas, centered on desktop. |
-| `src/components/plan/PublicPlanContent.tsx` | Client public-plan content that keeps participant status fresh by polling the read-plan API. |
+| `src/components/home/HomeHero.tsx` | Product `/` train-window hero: scenic video, train overlay, text-shadow copy, glass CTA to `/create`. |
+| `src/lib/ui/scenic-videos.ts` | Shared CloudFront scenic clip catalog for home + phase-4 peaks. |
+| `src/components/result/PeakScenicAccent.tsx` | Light muted looping scenic accent for wait/reveal peaks only; reduced-motion falls back to `.scenic-fallback`. |
+| `src/components/layout/ResponsiveShell.tsx` | Shared page shell: cold scenic-gradient canvas via `.atmosphere-*` tokens, glass back/header/footer; used by create/join/plan/result/records. Fluid adaptive `max-w-2xl` content width — no fake phone chrome. Create/join: no looping video. Approved next: optional muted shell scenic on plan/result/records only (`docs/superpowers/specs/2026-07-18-inner-atmosphere-meetup-copy-design.md`). |
+| `src/app/globals.css` | Home hero tokens (`.readable-*`, `.hero-cta`, `.scenic-fallback`) plus shared atmosphere tokens (`.atmosphere-shell/canvas/panel/field/cta/ghost/notice`, `.font-display` / `.font-sans-sc`). |
+| `src/components/plan/PublicPlanContent.tsx` | Client public-plan content that keeps participant status fresh by polling the read-plan API. Single StatusLane `.atmosphere-panel`: status band + one state-driven primary CTA + light `已填写` list (no footer status echo); see `docs/superpowers/specs/2026-07-17-plan-result-ia-design.md`. |
 | `src/components/plan/JoinParticipantForm.tsx` | Participant submission form with labeled controls and a post-submit return action. |
-| `src/components/plan/RecentMeetingRecords.tsx` | Homepage local recent-record list backed by `useSyncExternalStore` and cached snapshots. |
-| `src/components/result/SharedRecommendation.tsx`, `SchemeCard.tsx` | One-city/two-scheme shared result that renders persisted scheme-route rows, team totals, quote fingerprints, and China-time freshness without booking links or client-side route selection. |
-| `src/components/result/RefreshingResultNotice.tsx` | Chinese progress, cooldown, retry, and diagnostic feedback; for nonterminal automatic runs, it posts one bounded authenticated advance before refreshing when a local participant token is available. |
+| `src/components/plan/RecentMeetingRecords.tsx` | `/records` local recent-record list backed by `useSyncExternalStore` and cached snapshots. |
+| `src/components/result/SharedRecommendation.tsx`, `SchemeCard.tsx` | One-city/two-scheme shared result that renders persisted scheme-route rows, team totals, quote fingerprints, and China-time freshness without booking links or client-side route selection. City reveal uses `PeakScenicAccent`; schemes use `.atmosphere-panel` glass on the dark shell; route rows use hairline separators (no nested white cards). |
+| `src/components/result/RefreshingResultNotice.tsx` | Chinese progress, cooldown, retry, and diagnostic feedback with atmosphere ghost/muted chrome; nonterminal wait wraps `PeakScenicAccent`; for nonterminal automatic runs, it posts one bounded authenticated advance before refreshing when a local participant token is available. |
 | `src/components/result/AlternativeCityFlow.tsx` | Mobile-first city search, private progress/result display, and host-only confirmation action. |
 | `src/lib/city/candidate-generator.ts` | Deterministic candidate-city generation from participant cities and host controls. |
-| `src/lib/city/amap-client.ts`, `src/lib/city/city-provider.ts` | Local-first city search and Amap validation; normalized city-level remote matches can become selectable inputs, while non-city remote places are discarded. |
+| `src/lib/city/amap-client.ts`, `src/lib/city/city-provider.ts` | Local hub search plus Amap prefecture validation for selectable **departure** cities; non-city remote places discarded. Meeting candidates stay the hub `CITIES` library. Approved next: merge local+Amap results instead of local-only short-circuit (`2026-07-18-inner-atmosphere-meetup-copy-design.md`). |
 | `src/lib/fallback/mvp-store.ts` | In-memory local fallback persistence with target run states and publication guards; tests can seed verified quotes, while the running app cannot query suppliers in this mode. |
 | `src/lib/agent/run-orchestrator.ts` | Bounded durable-run state machine, persisted advance lease, quote coverage gate, agent review, and guarded publication; dispatches to the equivalent fallback state machine when Supabase is absent. |
 | `src/lib/recommendation/repository.ts` | Server-side persistence and guarded RPC boundary; it does not make policy decisions. |
@@ -115,9 +120,9 @@ In fallback mode, the same logical records are kept in process memory instead of
 
 ## UI Boundaries
 
-- Keep user-facing copy in Chinese on both mobile and desktop.
-- Target routes must stay usable as product workflows on desktop; do not replace them with a marketing landing page.
-- `ResponsiveShell` is the default page shell for the main user routes. It keeps the workflow as a single-column, viewport-height H5 canvas on mobile and desktop, with the main content scrolling inside the canvas instead of stretching into a long document page.
+- Keep user-facing copy in Chinese on both mobile and desktop. Flow/marketing tone and visual phases follow `docs/superpowers/specs/2026-07-17-ui-copy-and-visual-direction.md` (phases 1–4 + adaptive shell shipped). Plan/result IA: `docs/superpowers/specs/2026-07-17-plan-result-ia-design.md`. Approved next UI continuity/copy: `docs/superpowers/specs/2026-07-18-inner-atmosphere-meetup-copy-design.md`.
+- Create/join/plan/result/records use `ResponsiveShell` as a single-column adaptive workflow (fluid `max-w-2xl`, no fake phone chrome). `/` is a full-bleed zero-scroll train-window hero with “最近记录” → `/records`. Create/join: no looping scenic video. Phase 4 `PeakScenicAccent` on wait/reveal peaks. Approved next: muted shell scenic on plan/result/records only.
+- `ResponsiveShell` remains the default shell for create/join/plan/result/records (dark scenic interior, glass panels/CTAs). Content scrolls inside the shell when needed.
 - Main flow pages use the `ResponsiveShell` top-left back action instead of mixing back navigation into bottom business actions.
 - City combobox candidates render in normal document flow and disappear after a city is selected so transport-mode controls remain reachable.
 - Next.js development indicators are disabled in `next.config.ts` so local browser checks do not show the bottom-left `N` overlay.

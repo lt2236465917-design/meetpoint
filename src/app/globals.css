@@ -1,3 +1,4 @@
+@import url("https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Noto+Serif+SC:wght@400;600&display=swap");
 @import "tailwindcss";
 
 :root {
@@ -5,6 +6,11 @@
   --foreground: #171717;
   --app-font-sans: Arial, "PingFang SC", "Microsoft YaHei", sans-serif;
   --app-font-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  --app-font-display: "Noto Serif SC", "Instrument Serif", serif;
+  --app-font-sans-sc: "PingFang SC", "Noto Sans SC", system-ui, sans-serif;
+  --atmosphere-ink: rgba(255, 255, 255, 0.96);
+  --atmosphere-muted: rgba(255, 255, 255, 0.68);
+  --atmosphere-line: rgba(255, 255, 255, 0.16);
 }
 
 @theme inline {
@@ -47,4 +53,179 @@ body {
   margin: 0;
   opacity: 0;
   cursor: pointer;
+}
+
+/* Home hero atmosphere (train-window preview → product `/`) */
+.train-bob {
+  animation: train-bob 3s ease-in-out infinite;
+}
+
+.scenic-fallback {
+  background:
+    radial-gradient(ellipse at 50% 35%, #3a4a5c 0%, #1a222c 55%, #0a0c10 100%);
+}
+
+.readable-title {
+  text-shadow:
+    0 0 1px rgba(0, 0, 0, 0.55),
+    0 1px 2px rgba(0, 0, 0, 0.65),
+    0 2px 8px rgba(0, 0, 0, 0.45),
+    0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.readable-body {
+  text-shadow:
+    0 0 1px rgba(0, 0, 0, 0.5),
+    0 1px 3px rgba(0, 0, 0, 0.55),
+    0 4px 14px rgba(0, 0, 0, 0.35);
+}
+
+.hero-cta {
+  background: rgba(255, 255, 255, 0.16);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.38);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    0 10px 28px rgba(0, 0, 0, 0.22);
+}
+
+.hero-cta:hover {
+  background: rgba(255, 255, 255, 0.24);
+}
+
+.hero-chip {
+  background: rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+.scenery-track {
+  isolation: isolate;
+}
+
+@keyframes train-bob {
+  0%,
+  100% {
+    transform: translateY(0) scale(1.03);
+  }
+
+  50% {
+    transform: translateY(-6px) scale(1.03);
+  }
+}
+
+/* Shared atmosphere (form/plan shells — no scenic video) */
+.font-display {
+  font-family: var(--app-font-display);
+}
+
+.font-sans-sc {
+  font-family: var(--app-font-sans-sc);
+}
+
+.atmosphere-shell {
+  background: #000;
+  color: var(--atmosphere-ink);
+}
+
+.atmosphere-canvas {
+  background:
+    radial-gradient(ellipse at 50% 28%, #3a4a5c 0%, #1a222c 52%, #0a0c10 100%);
+  border-color: rgba(255, 255, 255, 0.1);
+  color: var(--atmosphere-ink);
+}
+
+.atmosphere-panel {
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid var(--atmosphere-line);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 12px 32px rgba(0, 0, 0, 0.28);
+  color: var(--atmosphere-ink);
+}
+
+.atmosphere-field {
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid var(--atmosphere-line);
+  color: var(--atmosphere-ink);
+  color-scheme: dark;
+}
+
+.atmosphere-field::placeholder {
+  color: rgba(255, 255, 255, 0.42);
+}
+
+.atmosphere-cta {
+  background: rgba(255, 255, 255, 0.16);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.38);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    0 10px 28px rgba(0, 0, 0, 0.22);
+  color: #fff;
+}
+
+.atmosphere-cta:hover {
+  background: rgba(255, 255, 255, 0.24);
+}
+
+.atmosphere-cta:disabled {
+  opacity: 0.6;
+}
+
+.atmosphere-ghost {
+  background: transparent;
+  border: 1px solid var(--atmosphere-line);
+  color: var(--atmosphere-ink);
+}
+
+.atmosphere-ghost:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.atmosphere-notice {
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid var(--atmosphere-line);
+  color: var(--atmosphere-muted);
+}
+
+/* Phase 4 — light scenic video on wait / reveal peaks only */
+.peak-scenic {
+  isolation: isolate;
+  border: 1px solid var(--atmosphere-line);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 12px 32px rgba(0, 0, 0, 0.28);
+}
+
+.peak-scenic-media {
+  opacity: 0.42;
+}
+
+.peak-scenic-media::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(
+      180deg,
+      rgba(8, 12, 18, 0.28) 0%,
+      rgba(8, 12, 18, 0.55) 55%,
+      rgba(8, 12, 18, 0.72) 100%
+    );
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .peak-scenic-media video {
+    display: none;
+  }
+
+  .peak-scenic-media {
+    opacity: 1;
+  }
 }

@@ -31,61 +31,67 @@ export type SharedScheme = {
 
 export function SchemeCard({ scheme }: { scheme: SharedScheme }) {
   return (
-    <article className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+    <article className="atmosphere-panel rounded-xl p-4">
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="flex items-baseline gap-2">
-            <h3 className="text-lg font-semibold text-gray-950">
+            <h3 className="text-lg font-semibold text-[var(--atmosphere-ink)]">
               {scheme.kind === "saving" ? "省钱方案" : "省时方案"}
             </h3>
-            <span className="text-xs text-gray-400">
+            <span className="text-xs text-[var(--atmosphere-muted)]">
               {scheme.kind === "saving" ? "给钱包省一点" : "早一点见到面"}
             </span>
           </div>
-          <p className="mt-1 text-xs text-gray-500">
+          <p className="mt-1 text-xs text-[var(--atmosphere-muted)]">
             最晚到达 {formatChinaDateTime(scheme.latestArrivalAt)}
           </p>
         </div>
-        <p className="shrink-0 font-semibold text-gray-950">
+        <p className="shrink-0 font-semibold text-[var(--atmosphere-ink)]">
           团队总路费 ¥{scheme.totalFareCny}
         </p>
       </div>
 
-      <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-gray-700">
-        <p className="rounded-lg bg-gray-50 px-2 py-2">
+      <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-[var(--atmosphere-muted)]">
+        <p className="rounded-lg border border-white/10 bg-black/25 px-2 py-2">
           团队总耗时 {formatDuration(scheme.totalDurationMinutes)}
         </p>
-        <p className="rounded-lg bg-gray-50 px-2 py-2">
+        <p className="rounded-lg border border-white/10 bg-black/25 px-2 py-2">
           全员中转 {scheme.teamTransferCount} 次
         </p>
       </div>
 
-      <div className="mt-4 space-y-3">
+      <div className="mt-4 divide-y divide-white/10">
         {scheme.routes.map((route) => (
           <div
-            className="rounded-lg border border-gray-100 px-3 py-3 text-xs leading-5 text-gray-600"
+            className="py-3 text-xs leading-5 text-[var(--atmosphere-muted)] first:pt-0 last:pb-0"
             key={`${scheme.id}-${route.participantId}`}
           >
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <p className="font-medium text-gray-950">{route.participantName}</p>
+                <p className="font-medium text-[var(--atmosphere-ink)]">
+                  {route.participantName}
+                </p>
                 <p>{formatRoute(route)}</p>
                 <p>
                   {transportModeLabels[route.mode]} · {route.serviceName}
                 </p>
               </div>
-              <p className="shrink-0 font-medium text-gray-950">¥{route.priceCny}</p>
+              <p className="shrink-0 font-medium text-[var(--atmosphere-ink)]">
+                ¥{route.priceCny}
+              </p>
             </div>
             <p className="mt-1">
               {formatClock(route.departAt)}–{formatClock(route.arriveAt)} ·{" "}
-              {formatDuration(route.durationMinutes)} · 中转 {route.transferCount} 次
+              {formatDuration(route.durationMinutes)} · 中转 {route.transferCount}{" "}
+              次
             </p>
-            <details className="mt-1 text-gray-500">
+            <details className="mt-1 text-[var(--atmosphere-muted)]">
               <summary className="cursor-pointer list-none">
                 票价查证于 {formatChinaDateTime(route.queriedAt)} · 数据来源
               </summary>
-              <p className="mt-1">
-                {providerLabel(route.provider)} · 报价编号 {quoteFingerprint(route.quoteId)}
+              <p className="mt-1 opacity-80">
+                {providerLabel(route.provider)} · 报价编号{" "}
+                {quoteFingerprint(route.quoteId)}
               </p>
             </details>
           </div>

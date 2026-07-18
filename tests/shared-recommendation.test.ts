@@ -151,4 +151,17 @@ describe("SharedRecommendation", () => {
     expect(html).not.toContain("去飞猪查看");
     expect(html).not.toContain("booking_url");
   });
+
+  it("uses atmosphere glass chrome instead of white or hard dark slabs", () => {
+    const html = renderToStaticMarkup(
+      createElement(SharedRecommendation, { result }),
+    );
+
+    expect(html).toContain("atmosphere-panel");
+    expect(html).toContain("peak-scenic");
+    expect(html).not.toContain("bg-white");
+    expect(html).not.toContain("bg-gray-950");
+    expect(html).not.toContain("bg-gray-50");
+    expect(html).not.toContain("border-gray-200");
+  });
 });

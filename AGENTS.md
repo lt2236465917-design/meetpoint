@@ -2,12 +2,14 @@
 
 ## Product
 
-This project is a mobile-first Web H5 app for multi-person cross-city meeting planning in China.
+This project is a mobile-usable Web app for multi-person cross-city meeting planning in China (shareable plan links must still work on phones). Shipped UI uses a true adaptive layout (no fake phone frame): full-bleed home hero, `ResponsiveShell` with fluid `max-w-2xl` content width — `docs/superpowers/specs/2026-07-17-desktop-adaptive-shell-design.md`.
 
 ## Development
 
 - Use Chinese for user-facing copy.
-- User-facing flow and marketing copy should feel like friends arranging a meetup, not a fare calculator. Avoid `开算` / calculator framing on primary CTAs; keep result/progress trust language (real fares, no estimates) intact. Canonical direction: `docs/superpowers/specs/2026-07-17-ui-copy-and-visual-direction.md`.
+- User-facing flow and marketing copy should feel like friends arranging a meetup, not a fare calculator. Avoid `开算` / calculator framing on primary CTAs; keep result/progress trust language (real fares, no estimates) intact. Canonical direction: `docs/superpowers/specs/2026-07-17-ui-copy-and-visual-direction.md`. Approved host CTA on the public plan:「开始见面」/「见面安排中」(not「算出见面城市」/「发起计算」) — `docs/superpowers/specs/2026-07-18-inner-atmosphere-meetup-copy-design.md`.
+- `/` uses `src/components/home/HomeHero.tsx` (full-bleed train-window hero, glass CTA → `/create`, opening viewport zero-scroll). `最近见面记录` lives on `/records` (hero entry: “最近记录”). Create/join/plan/result/records stay `ResponsiveShell` with shared `.atmosphere-*` tokens from `src/app/globals.css`. **Create/join:** no looping scenic video behind forms (static deepen only). **Plan/result/records:** muted low-opacity shell scenic under a dark scrim is approved (follows home scene via `meetpoint:scenic-scene`) — implement/ship only per `docs/superpowers/specs/2026-07-18-inner-atmosphere-meetup-copy-design.md` and `docs/superpowers/plans/2026-07-18-inner-atmosphere-meetup-copy.md`.
+- Plan/result IA is StatusLane + glass schemes per `docs/superpowers/specs/2026-07-17-plan-result-ia-design.md` (shipped). Do not deep-restyle alternatives/manage unless a later IA pass is approved. Phase 4 `PeakScenicAccent` stays on wait/reveal peaks; it does not replace shell scenic on plan/result/records once that pass ships.
 - Recommended Chinese explanations must be exact members of `SAFE_EXPLANATIONS_ZH` in `src/lib/agent/prompts.ts`; update whitelist, prompt example, fallback store, and tests together.
 - Use English for code, files, variables, and commit messages.
 - Keep supplier facts, fare arithmetic, date filtering, evidence validation, and publication guardrails deterministic. The Calculation Agent may choose the winning city only from verified quote IDs; see `docs/superpowers/specs/2026-07-15-multi-agent-recommendation-design.md`.
@@ -39,10 +41,12 @@ This project is a mobile-first Web H5 app for multi-person cross-city meeting pl
 - `src/lib/ai/`: server-only DeepSeek client and model configuration used behind `AgentModel`.
 - `src/lib/supabase/`: browser anon client and server-only service-role client.
 - `src/app/api/`: route handlers; use the service-role Supabase client only in server-side files.
-- `src/app/`: mobile-first App Router pages with Chinese user-facing copy.
-- `src/components/layout/`: shared responsive page shells; desktop routes should remain centered phone-sized H5 canvases.
-- `src/components/`: mobile-first UI components.
-- `src/components/result/`: shared one-city/two-scheme rendering and bounded run-progress feedback; render persisted scheme routes directly, never reselect routes client-side, and let a nonterminal automatic result page post one bounded authenticated advance before refresh when the device has a local participant token.
+- `src/app/`: App Router pages with Chinese user-facing copy (mobile-usable adaptive shell, not fake phone chrome); includes `/records` for local meeting history.
+- `src/components/home/`: product home hero (`HomeHero`); scenic video on `/`, plus wait/reveal peaks via `PeakScenicAccent`.
+- `src/components/layout/`: `ResponsiveShell` for create/join/plan/result/records; `.atmosphere-*` tokens; fluid adaptive `max-w-2xl` content width per adaptive-shell spec. Approved next: optional shell scenic backdrop on plan/result/records only (`2026-07-18-inner-atmosphere-meetup-copy-design.md`).
+- `src/components/plan/RecentMeetingRecords.tsx`: browser-local history list used by `/records`.
+- `src/components/`: UI components.
+- `src/components/result/`: shared one-city/two-scheme rendering and bounded run-progress feedback; `PeakScenicAccent` on wait/reveal peaks only; render persisted scheme routes directly, never reselect routes client-side, and let a nonterminal automatic result page post one bounded authenticated advance before refresh when the device has a local participant token.
 - `docs/architecture.md`: stable technical map for routes, data flow, modules, and security boundaries.
 - `docs/integration-guide.md`: stable setup, API, error-code, and smoke-test reference for handoff.
 - `docs/acceptance/`: Multi-Agent live acceptance record, including non-blocking residual hygiene.

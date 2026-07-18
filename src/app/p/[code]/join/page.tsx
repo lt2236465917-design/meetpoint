@@ -109,7 +109,7 @@ export default function JoinPlanPage({ params }: JoinPlanPageProps) {
       backHref={`/p/${code}`}
       backLabel="返回计划页"
       aside={
-        <p className="text-center text-xs leading-5 text-gray-500">
+        <p className="text-center text-xs leading-5">
           交通方式只影响你的可接受路线，不会替别人做选择。
         </p>
       }

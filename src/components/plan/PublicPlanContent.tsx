@@ -59,6 +59,15 @@ export function PublicPlanContent({
     data.plan.participant_limit - data.participants.length,
     0,
   );
+  const statusMessage = resolveStatusMessage({
+    latestRun: data.latestRun,
+    isCalculatingResult,
+    hasCompletedResult,
+    canCalculateHere,
+    participantsFull,
+    participantCount: data.participants.length,
+    missingParticipants,
+  });
 
   useEffect(() => {
     rememberMeetingHistoryItem({
@@ -146,92 +155,104 @@ export function PublicPlanContent({
 
   return (
     <div className="space-y-5" data-auto-refresh="participants">
-      <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-        <h2 className="font-medium text-gray-950">下一步</h2>
-        <div className="mt-4 grid grid-cols-2 gap-2">
-          <Link
-            className="rounded-lg bg-black py-3 text-center font-medium text-white"
-            href={`/p/${code}/join`}
-          >
-            加入这场见面
-          </Link>
-          {hasCompletedResult ? (
-            <Link
-              className="rounded-lg border border-gray-200 py-3 text-center font-medium text-gray-950"
-              href={`/p/${code}/result`}
-            >
-              看结果
-            </Link>
-          ) : (
-            <div
-              aria-disabled="true"
-              className="rounded-lg border border-gray-200 bg-gray-50 py-3 text-center font-medium text-gray-400"
-            >
-              {isCalculatingResult ? "结果生成中" : "暂无结果"}
-            </div>
-          )}
+      <section className="atmosphere-panel rounded-xl p-5">
+        <div role="status" aria-live="polite">
+          <Notice>{statusMessage}</Notice>
         </div>
-        {hasCompletedResult ? (
-          <Link
-            className="mt-3 block w-full rounded-lg border border-gray-200 py-3 text-center font-medium text-gray-950"
-            href={`/p/${code}/alternatives`}
-          >
-            换个城市看看
-          </Link>
-        ) : null}
-        {canCalculateHere ? (
-          <div className="mt-4">
-            <Notice>
-              人齐了！{data.participants.length} 位朋友都填好了，可以开始算这次去哪座城。
-            </Notice>
+
+        <div className="mt-4 space-y-2">
+          {!participantsFull ? (
+            <Link
+              className="atmosphere-cta block w-full rounded-xl py-3 text-center font-medium"
+              href={`/p/${code}/join`}
+            >
+              加入这场见面
+            </Link>
+          ) : null}
+
+          {canCalculateHere ? (
             <button
-              className="mt-3 w-full rounded-lg bg-black py-3 text-center font-medium text-white disabled:opacity-60"
+              className="atmosphere-cta w-full rounded-xl py-3 text-center font-medium disabled:opacity-60"
               disabled={calculating}
               onClick={calculate}
               type="button"
             >
               {calculating ? "计算中" : "算出见面城市"}
             </button>
-            {calculateMessage && (
-              <p className="mt-2 text-xs leading-5 text-gray-500">
-                {calculateMessage}
-              </p>
-            )}
-          </div>
-        ) : isCalculatingResult ? (
-          <div className="mt-4">
-            <Notice>{getRunProgressMessage(data.latestRun!)}</Notice>
-          </div>
-        ) : !data.latestRun ? (
-          <div className="mt-4">
-            <Notice>
-              {participantsFull
-                ? "人齐了，等一位填写过的朋友来发起计算。"
-                : `还差 ${missingParticipants} 位朋友。人齐之后，填过的人都能发起计算。`}
-            </Notice>
-          </div>
-        ) : null}
-      </section>
+          ) : null}
 
-      <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-        <h2 className="mb-3 font-medium text-gray-950">填写记录</h2>
-        {data.participants.length ? (
-          <ParticipantList participants={data.participants} />
-        ) : (
-          <Notice>还没有人填，把链接发到群里吧。</Notice>
-        )}
-      </section>
+          {hasCompletedResult ? (
+            <>
+              <Link
+                className="atmosphere-cta block w-full rounded-xl py-3 text-center font-medium"
+                href={`/p/${code}/result`}
+              >
+                看结果
+              </Link>
+              <Link
+                className="atmosphere-ghost block w-full rounded-xl py-3 text-center font-medium"
+                href={`/p/${code}/alternatives`}
+              >
+                换个城市看看
+              </Link>
+            </>
+          ) : null}
 
-      <p className="text-center text-xs leading-5 text-gray-500">
-        已填写 {data.participants.length} 人 ·{" "}
-        {isCalculatingResult
-          ? "正在生成结果"
-          : hasCompletedResult
-            ? "已有结果"
-            : "就等一声开算了"}
-      </p>
+          {calculateMessage ? (
+            <p className="text-xs leading-5 text-[var(--atmosphere-muted)]">
+              {calculateMessage}
+            </p>
+          ) : null}
+        </div>
+
+        <div className="mt-5 border-t border-white/10 pt-5">
+          <h2 className="mb-3 font-medium text-[var(--atmosphere-ink)]">
+            已填写
+          </h2>
+          {data.participants.length ? (
+            <ParticipantList participants={data.participants} />
+          ) : (
+            <Notice>还没有人填，把链接发到群里吧。</Notice>
+          )}
+        </div>
+      </section>
     </div>
   );
+}
+
+function resolveStatusMessage({
+  latestRun,
+  isCalculatingResult,
+  hasCompletedResult,
+  canCalculateHere,
+  participantsFull,
+  participantCount,
+  missingParticipants,
+}: {
+  latestRun: PublicRunProgress | null;
+  isCalculatingResult: boolean;
+  hasCompletedResult: boolean;
+  canCalculateHere: boolean;
+  participantsFull: boolean;
+  participantCount: number;
+  missingParticipants: number;
+}) {
+  if (isCalculatingResult && latestRun) {
+    return getRunProgressMessage(latestRun);
+  }
+  if (hasCompletedResult) {
+    return "选好了，去看见面城市";
+  }
+  if (latestRun) {
+    return getRunProgressMessage(latestRun);
+  }
+  if (canCalculateHere) {
+    return `人齐了！${participantCount} 位朋友都填好了，可以开始算这次去哪座城。`;
+  }
+  if (participantsFull) {
+    return "人齐了，等一位填写过的朋友来发起计算。";
+  }
+  return `还差 ${missingParticipants} 位朋友。人齐之后，填过的人都能发起计算。`;
 }
 
 function readLocalParticipantEditToken(code: string): string {

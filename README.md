@@ -1,6 +1,6 @@
 # Cross-City MeetPoint
 
-Mobile-first H5 MVP for choosing a fair cross-city meeting city for 2-6 people in China. The same routes render as a centered phone-sized H5 canvas on desktop. Without Supabase credentials, development uses a non-persistent fallback for local creation, participation, and run-progress smoke tests.
+Mobile-usable Web MVP for choosing a fair cross-city meeting city for 2-6 people in China. Shareable plan links must work on phones. Shipped UI uses a true adaptive layout (no fake phone frame): full-bleed home hero, fluid `ResponsiveShell` — [adaptive shell design](docs/superpowers/specs/2026-07-17-desktop-adaptive-shell-design.md). Without Supabase credentials, development uses a non-persistent fallback for local creation, participation, and run-progress smoke tests.
 
 ## Multi-Agent Migration Status
 
@@ -15,16 +15,17 @@ Tasks 1–14 are complete against the [2026-07-15 Multi-Agent design](docs/super
 
 ## Current Flow
 
-- `/`: focused creation entry plus local recent meeting records saved on this device.
+- `/`: full-bleed train-window home hero (zero-scroll opening) with CTA to create a plan and “最近记录” entry to `/records`.
+- `/records`: browser-local recent meeting records on this device.
 - `/create`: host creates a meeting plan, receives a phone-openable public link, and saves the plan to local recent records.
-- `/p/[code]`: public plan page with meeting summary, participant completion state, filling records, join entry, result entry, automatic participant-status refresh, and a direct calculate action for local participants when the participant limit is reached.
+- `/p/[code]`: public plan page with a single StatusLane panel (status → one primary CTA → `已填写` list), automatic participant-status refresh, and a direct calculate action for local participants when the participant limit is reached. IA: `docs/superpowers/specs/2026-07-17-plan-result-ia-design.md`.
 - `/p/[code]/join`: participant submits name, departure city, and accepted transport modes, then returns to the public plan page automatically.
 - `/p/[code]/manage`: legacy route that points users back to the public plan page.
 - `/p/[code]/result`: shared team result page that renders one recommended city plus exactly “省钱方案” and “省时方案” from persisted scheme routes only after completion. Pending, collecting, cooling, calculating, validating, incomplete, and failed states show bounded progress, retry, or diagnostic guidance without result cards.
 - `/p/[code]/alternatives`: participant-only one-city recalculation flow. The preview stays private to its requester and the host until the host confirms replacement.
 - `POST /api/plans`: creates a plan from `{ title, arrivalDate, participantLimit }` and returns `{ code, shareUrl, hostToken }`; the host token is returned once.
 - `GET /api/plans/[code]`: returns public plan data and the run that owns the current shared result; before any shared result exists, it returns the latest automatic-run progress. A private preview never replaces the public projection before host confirmation.
-- `GET /api/cities/search?q=...`: searches the built-in city library first, then uses Amap to validate city-level local misses; returns `{ cities }`.
+- `GET /api/cities/search?q=...`: searches the built-in hub library, then Amap for prefecture-level matches when configured; returns `{ cities }`. Approved next: merge local+Amap hits (not local-only short-circuit) — see [2026-07-18 design](docs/superpowers/specs/2026-07-18-inner-atmosphere-meetup-copy-design.md).
 - `POST /api/plans/[code]/participants`: creates a participant and returns `{ participantId, editToken }`.
 - `GET /api/plans/[code]/candidates`: returns stored candidate city controls for a plan.
 - `POST /api/plans/[code]/candidates`: currently returns `CANDIDATE_EDITING_UNAVAILABLE`.
@@ -46,9 +47,12 @@ Tasks 1–14 are complete against the [2026-07-15 Multi-Agent design](docs/super
 - `src/lib/agent/`: provider-neutral model boundary plus Manager, Query, Calculation, Supervisor, Fallback, tracing, and bounded orchestration modules.
 - `src/lib/agent/run-orchestrator.ts`: creates and incrementally advances durable runs with a persisted lease; it dispatches to the guarded in-memory fallback when Supabase is absent.
 - `src/lib/recommendation/alternative-preview.ts` and `src/lib/security/host-confirmation.ts`: bind a private run to one canonical city and requesting participant, authorize private reads, and pass the exact Supervisor-approved proposal to host-only atomic confirmation.
-- `src/components/result/SharedRecommendation.tsx` and `SchemeCard.tsx`: render the published city once and map persisted participant routes directly, including team totals, route facts, quote fingerprints, and China-time freshness; they never render booking links or client-side route selection.
+- `src/components/result/SharedRecommendation.tsx` and `SchemeCard.tsx`: render the published city once and map persisted participant routes directly on `.atmosphere-panel` glass (no nested white route cards), including team totals, route facts, quote fingerprints, and China-time freshness; they never render booking links or client-side route selection.
 - `src/components/result/RefreshingResultNotice.tsx`: maps every run status to Chinese progress/retry guidance and, when the device holds a local participant token, posts one bounded authenticated run advance before refreshing.
-- `src/lib/ui/meeting-history.ts`: browser-only local recent-record storage; it caches `useSyncExternalStore` snapshots so the homepage does not trigger React update loops.
+- `src/components/home/HomeHero.tsx`: product `/` full-bleed train-window hero (scenic video, train overlay, glass CTA to `/create`, entry to `/records`).
+- `src/components/layout/ResponsiveShell.tsx` + `src/app/globals.css` atmosphere tokens: create/join/plan/result/records share the dark scenic canvas and glass panels/CTAs (create/join stay video-free). Phase 4: `PeakScenicAccent` on wait/reveal peaks. Adaptive `max-w-2xl` content width (no fake phone chrome). Approved next: [inner atmosphere + meetup copy](docs/superpowers/specs/2026-07-18-inner-atmosphere-meetup-copy-design.md) ([plan](docs/superpowers/plans/2026-07-18-inner-atmosphere-meetup-copy.md)).
+- `src/components/result/PeakScenicAccent.tsx` + `src/lib/ui/scenic-videos.ts`: light muted scenic accent for wait/reveal only.
+- `src/lib/ui/meeting-history.ts`: browser-only local recent-record storage; it caches `useSyncExternalStore` snapshots so the records page does not trigger React update loops.
 
 ## Environment
 
@@ -122,14 +126,14 @@ npm run build
 
 In managed sandboxes, `npm run build` can fail if Next/Turbopack is blocked from creating a process and binding a local port. Re-run the same command in an environment that permits local port binding before release.
 
-For UI changes, also verify a mobile viewport around `390x844` and a desktop viewport around `1440x1000`. The desktop routes should render as a centered phone-sized H5 canvas, not a wide document page or marketing page.
+For UI changes, also verify a mobile viewport around `390x844` and a desktop viewport around `1440x1000`: no fake phone chrome; usable adaptive width; home opening zero-scroll; records on `/records` — see the adaptive-shell spec.
 
 ## Manual Handoff Smoke
 
 After the automated verification above, run this browser smoke for Task 14:
 
 1. Create a plan.
-2. Return to `/` and confirm the created plan appears in recent meeting records on the same device.
+2. Open `/records` and confirm the created plan appears in recent meeting records on the same device.
 3. Open the public link.
 4. Submit two participants from different cities.
 5. Confirm the public plan page updates filling records without a manual browser refresh.

@@ -93,35 +93,33 @@ export default function CreatePlanPage() {
       description="三十秒填完，剩下的交给朋友们。"
       backHref="/"
       aside={
-        <p className="text-center text-xs leading-5 text-gray-500">
+        <p className="text-center text-xs leading-5">
           建好后把链接发到群里，人到齐就能开算。
         </p>
       }
     >
       {!result ? (
         <form
-          className="space-y-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm"
+          className="atmosphere-panel space-y-3 rounded-xl p-4"
           method="dialog"
           onSubmit={submit}
         >
-          <label className="block space-y-1.5 text-sm font-medium text-gray-700">
+          <label className="block space-y-1.5 text-sm font-medium text-[var(--atmosphere-muted)]">
             <span>计划名称</span>
             <input
-              className="w-full rounded-lg border px-4 py-3 font-normal text-gray-950"
+              className="atmosphere-field w-full rounded-lg px-4 py-3 font-normal"
               name="title"
               placeholder="例如：老友五月见面局"
               value={title}
               onChange={(event) => setTitle(event.target.value)}
             />
           </label>
-          <div
-            className="block space-y-1.5 text-sm font-medium text-gray-700"
-          >
+          <div className="block space-y-1.5 text-sm font-medium text-[var(--atmosphere-muted)]">
             <span id="arrival-date-label">计划到达日期</span>
             <div className="relative">
               <input
                 aria-labelledby="arrival-date-label"
-                className="native-picker-hit-area w-full rounded-lg border px-4 py-3 pr-12 font-normal text-gray-950"
+                className="atmosphere-field native-picker-hit-area w-full rounded-lg px-4 py-3 pr-12 font-normal"
                 name="arrivalDate"
                 ref={arrivalDateInputRef}
                 type="date"
@@ -130,59 +128,59 @@ export default function CreatePlanPage() {
               />
               <span
                 aria-hidden="true"
-                className="pointer-events-none absolute inset-y-0 right-0 flex w-12 items-center justify-center"
+                className="pointer-events-none absolute inset-y-0 right-0 flex w-12 items-center justify-center text-[var(--atmosphere-muted)]"
               >
                 <CalendarIcon />
               </span>
             </div>
           </div>
-          <div className="relative block space-y-1.5 text-sm font-medium text-gray-700">
-              <span id="participant-limit-label">参与人数上限</span>
-              <input name="participantLimit" type="hidden" value={participantLimit} />
-              <button
-                aria-controls="participant-limit-options"
-                aria-expanded={participantLimitOpen}
-                aria-haspopup="listbox"
-                aria-labelledby="participant-limit-label participant-limit-value"
-                className="flex w-full items-center justify-between rounded-lg border px-4 py-3 font-normal text-gray-950"
-                onClick={() => setParticipantLimitOpen((open) => !open)}
-                type="button"
+          <div className="relative block space-y-1.5 text-sm font-medium text-[var(--atmosphere-muted)]">
+            <span id="participant-limit-label">参与人数上限</span>
+            <input name="participantLimit" type="hidden" value={participantLimit} />
+            <button
+              aria-controls="participant-limit-options"
+              aria-expanded={participantLimitOpen}
+              aria-haspopup="listbox"
+              aria-labelledby="participant-limit-label participant-limit-value"
+              className="atmosphere-field flex w-full items-center justify-between rounded-lg px-4 py-3 font-normal"
+              onClick={() => setParticipantLimitOpen((open) => !open)}
+              type="button"
+            >
+              <span id="participant-limit-value">{participantLimit} 人</span>
+              <ChevronDownIcon expanded={participantLimitOpen} />
+            </button>
+            {participantLimitOpen && (
+              <div
+                className="atmosphere-panel absolute z-10 mt-2 w-full overflow-hidden rounded-lg p-1"
+                id="participant-limit-options"
+                role="listbox"
+                aria-labelledby="participant-limit-label"
               >
-                <span id="participant-limit-value">{participantLimit} 人</span>
-                <ChevronDownIcon expanded={participantLimitOpen} />
-              </button>
-              {participantLimitOpen && (
-                <div
-                  className="absolute z-10 mt-2 w-full overflow-hidden rounded-lg border border-gray-200 bg-white p-1 shadow-lg"
-                  id="participant-limit-options"
-                  role="listbox"
-                  aria-labelledby="participant-limit-label"
-                >
-                  {[2, 3, 4, 5, 6].map((limit) => (
-                    <button
-                      aria-selected={participantLimit === limit}
-                      className="flex w-full rounded-md px-3 py-2 text-left text-sm font-normal text-gray-950 hover:bg-gray-100 aria-selected:bg-gray-100"
-                      key={limit}
-                      onClick={() => {
-                        setParticipantLimit(limit);
-                        setParticipantLimitOpen(false);
-                      }}
-                      role="option"
-                      type="button"
-                    >
-                      {limit} 人
-                    </button>
-                  ))}
-                </div>
-              )}
+                {[2, 3, 4, 5, 6].map((limit) => (
+                  <button
+                    aria-selected={participantLimit === limit}
+                    className="flex w-full rounded-md px-3 py-2 text-left text-sm font-normal text-[var(--atmosphere-ink)] hover:bg-white/10 aria-selected:bg-white/10"
+                    key={limit}
+                    onClick={() => {
+                      setParticipantLimit(limit);
+                      setParticipantLimitOpen(false);
+                    }}
+                    role="option"
+                    type="button"
+                  >
+                    {limit} 人
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
           {error && (
-            <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">
+            <p className="rounded-lg border border-red-300/40 bg-red-500/15 px-3 py-2 text-sm text-red-100">
               {error}
             </p>
           )}
           <button
-            className="w-full rounded-lg bg-black py-3 font-medium text-white disabled:opacity-60"
+            className="atmosphere-cta w-full rounded-xl py-3 font-medium disabled:opacity-60"
             disabled={loading}
             type="submit"
           >
@@ -191,27 +189,27 @@ export default function CreatePlanPage() {
         </form>
       ) : (
         <div className="space-y-4">
-          <section className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-            <p className="text-sm font-medium text-gray-950">{title}</p>
-            <p className="mt-1 text-xs leading-5 text-gray-500">
+          <section className="atmosphere-panel rounded-xl p-4">
+            <p className="text-sm font-medium text-[var(--atmosphere-ink)]">{title}</p>
+            <p className="mt-1 text-xs leading-5 text-[var(--atmosphere-muted)]">
               {arrivalDate} 到达 · {participantLimit} 人
             </p>
           </section>
 
-          <section className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-            <p className="text-xs font-medium text-gray-500">参与填写链接</p>
-            <p className="mt-2 break-all rounded-lg bg-gray-50 px-3 py-2 text-sm font-medium leading-6 text-gray-950">
+          <section className="atmosphere-panel rounded-xl p-4">
+            <p className="text-xs font-medium text-[var(--atmosphere-muted)]">参与填写链接</p>
+            <p className="atmosphere-field mt-2 break-all rounded-lg px-3 py-2 text-sm font-medium leading-6">
               {publicShareUrl}
             </p>
             <button
-              className="mt-3 w-full rounded-lg bg-black py-3 text-sm font-medium text-white"
+              className="atmosphere-cta mt-3 w-full rounded-xl py-3 text-sm font-medium"
               onClick={copyPublicLink}
               type="button"
             >
               复制公开链接
             </button>
             {copyMessage && (
-              <p className="mt-2 text-xs leading-5 text-gray-500">
+              <p className="mt-2 text-xs leading-5 text-[var(--atmosphere-muted)]">
                 {copyMessage}
               </p>
             )}

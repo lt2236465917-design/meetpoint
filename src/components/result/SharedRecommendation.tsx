@@ -1,3 +1,4 @@
+import { PeakScenicAccent } from "@/components/result/PeakScenicAccent";
 import { SchemeCard, type SharedScheme } from "./SchemeCard";
 
 export type SharedResult = {
@@ -17,13 +18,15 @@ export function SharedRecommendation({ result }: { result: SharedResult }) {
 
   return (
     <section className="space-y-4">
-      <div className="rounded-xl bg-gray-950 p-5 text-white shadow-sm">
-        <p className="text-xs text-gray-300">这次的见面城市</p>
-        <h2 className="mt-1 text-2xl font-semibold">{result.cityName}</h2>
-        <p className="mt-3 text-sm leading-6 text-gray-200">
+      <PeakScenicAccent className="rounded-xl p-5" label="结果揭晓">
+        <p className="readable-body text-xs text-white/85">这次的见面城市</p>
+        <h2 className="readable-title mt-1 font-display text-2xl font-semibold text-white">
+          {result.cityName}
+        </h2>
+        <p className="readable-body mt-3 text-sm leading-6 text-white/90">
           {result.explanationZh}
         </p>
-      </div>
+      </PeakScenicAccent>
       <SchemeCard scheme={saving} />
       <SchemeCard scheme={fast} />
     </section>

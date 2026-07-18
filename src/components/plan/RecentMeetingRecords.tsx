@@ -24,14 +24,20 @@ const actionLabels: Record<MeetingHistoryItem["role"], string> = {
 const emptyMeetingRecordsSnapshot: MeetingHistoryItem[] = [];
 const compactRecordCount = 3;
 
-export function RecentMeetingRecords() {
+export function RecentMeetingRecords({
+  showHeading = true,
+}: {
+  showHeading?: boolean;
+} = {}) {
   const records = useSyncExternalStore(
     subscribeToMeetingHistory,
     getMeetingHistorySnapshot,
     getEmptyMeetingRecordsSnapshot,
   );
 
-  return <RecentMeetingRecordsView records={records} />;
+  return (
+    <RecentMeetingRecordsView records={records} showHeading={showHeading} />
+  );
 }
 
 export function getEmptyMeetingRecordsSnapshot() {
@@ -40,8 +46,10 @@ export function getEmptyMeetingRecordsSnapshot() {
 
 export function RecentMeetingRecordsView({
   records,
+  showHeading = true,
 }: {
   records: MeetingHistoryItem[];
+  showHeading?: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [copyMessageCode, setCopyMessageCode] = useState<string | null>(null);
@@ -58,42 +66,56 @@ export function RecentMeetingRecordsView({
   }
 
   return (
-    <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-      <div className="flex items-center justify-between gap-3">
-        <h2 className="font-medium text-gray-950">最近见面记录</h2>
-        {records.length > 0 && (
-          <span className="text-xs text-gray-500">本机保存</span>
-        )}
-      </div>
+    <section className="atmosphere-panel rounded-xl p-5">
+      {(showHeading || records.length > 0) && (
+        <div className="flex items-center justify-between gap-3">
+          {showHeading ? (
+            <h2 className="font-display text-base font-medium text-[var(--atmosphere-ink)]">
+              最近见面记录
+            </h2>
+          ) : (
+            <span className="sr-only">最近见面记录</span>
+          )}
+          {records.length > 0 && (
+            <span className="ml-auto text-xs text-[var(--atmosphere-muted)]">
+              本机保存
+            </span>
+          )}
+        </div>
+      )}
 
       {records.length === 0 ? (
-        <p className="mt-3 text-sm leading-6 text-gray-600">
+        <p
+          className={`text-sm leading-6 text-[var(--atmosphere-muted)] ${
+            showHeading ? "mt-3" : ""
+          }`}
+        >
           还没有见面记录。发起或加入一场见面后，它会在这里等你。
         </p>
       ) : (
         <div className="mt-4 grid gap-2">
           {visibleRecords.map((record) => (
             <article
-              className="rounded-lg border border-gray-200 px-3 py-3"
+              className="rounded-lg border border-white/10 px-3 py-3"
               key={record.code}
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-gray-950">
+                  <p className="truncate text-sm font-medium text-[var(--atmosphere-ink)]">
                     {record.title}
                   </p>
-                  <p className="mt-1 text-xs leading-5 text-gray-500">
+                  <p className="mt-1 text-xs leading-5 text-[var(--atmosphere-muted)]">
                     {actionLabels[record.role]}{" "}
                     {formatVisitedAt(record.lastVisitedAt)}
                   </p>
-                  <p className="mt-1 text-xs text-gray-500">
+                  <p className="mt-1 text-xs text-[var(--atmosphere-muted)]">
                     {record.arrivalDate} 到达 · {roleLabels[record.role]}
                   </p>
                 </div>
                 <div className="flex shrink-0 gap-2">
                   <button
                     aria-label={`复制${record.title}邀请链接`}
-                    className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-950"
+                    className="atmosphere-ghost rounded-lg px-3 py-1.5 text-xs font-medium"
                     data-copy-plan-code={record.code}
                     onClick={() => void copyPlanLink(record)}
                     type="button"
@@ -102,7 +124,7 @@ export function RecentMeetingRecordsView({
                   </button>
                   <Link
                     aria-label={`查看${record.title}填写情况`}
-                    className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-950"
+                    className="atmosphere-ghost rounded-lg px-3 py-1.5 text-xs font-medium"
                     href={`/p/${record.code}`}
                   >
                     查看
@@ -113,7 +135,7 @@ export function RecentMeetingRecordsView({
           ))}
           {hiddenCount > 0 && !expanded && (
             <button
-              className="rounded-lg border border-dashed border-gray-300 py-2 text-sm font-medium text-gray-700"
+              className="atmosphere-ghost rounded-lg border-dashed py-2 text-sm font-medium"
               onClick={() => setExpanded(true)}
               type="button"
             >

@@ -4,6 +4,7 @@ import path from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { PublicPlanContent } from "@/components/plan/PublicPlanContent";
+import type { PublicRunProgress } from "@/components/result/RefreshingResultNotice";
 
 const planData = {
   plan: {
@@ -19,7 +20,7 @@ const planData = {
       accepted_modes: ["high_speed_rail" as const],
     },
   ],
-  latestRun: null,
+  latestRun: null as PublicRunProgress | null,
 };
 
 describe("PublicPlanContent", () => {
@@ -32,9 +33,25 @@ describe("PublicPlanContent", () => {
     );
 
     expect(html).toContain("data-auto-refresh");
-    expect(html).toContain("已填写 1 人");
-    expect(html).toContain("填写记录");
+    expect(html).toContain("已填写");
+    expect(html).toContain("atmosphere-panel");
+    expect(html).not.toContain("填写记录");
     expect(html).not.toContain("发起人还没有开始计算。");
+  });
+
+  it("keeps status in a single StatusLane panel without footer duplication", () => {
+    const html = renderToStaticMarkup(
+      createElement(PublicPlanContent, {
+        code: "ABC123",
+        initialData: planData,
+      }),
+    );
+
+    expect(html).toContain("还差 1 位朋友。人齐之后，填过的人都能发起计算。");
+    expect(html).not.toContain("已填写 1 人");
+    expect(html).not.toContain("就等一声开算了");
+    expect(html).not.toContain("暂无结果");
+    expect(html.match(/atmosphere-panel/g)?.length).toBe(1);
   });
 
   it("saves viewed public plans into the local meeting records", () => {
@@ -61,6 +78,7 @@ describe("PublicPlanContent", () => {
     );
 
     expect(html).toContain("还差 1 位朋友。人齐之后，填过的人都能发起计算。");
+    expect(html).toContain("加入这场见面");
     expect(html).not.toContain("算出见面城市");
   });
 
@@ -72,7 +90,9 @@ describe("PublicPlanContent", () => {
       }),
     );
 
-    expect(html).toContain("暂无结果");
+    expect(html).toContain("加入这场见面");
+    expect(html).not.toContain("暂无结果");
+    expect(html).not.toContain("结果生成中");
     expect(html).not.toContain('href="/p/ABC123/result"');
   });
 
@@ -82,13 +102,32 @@ describe("PublicPlanContent", () => {
         code: "ABC123",
         initialData: {
           ...planData,
-          latestRun: { id: "run-1", status: "completed" },
+          participants: [
+            ...planData.participants,
+            {
+              id: "participant-2",
+              name: "韩梅梅",
+              departure_city_name: "上海",
+              accepted_modes: ["flight" as const],
+            },
+          ],
+          latestRun: {
+            runId: "run-1",
+            status: "completed",
+            traceId: "trace-1",
+            pendingGroups: 0,
+            retryAt: null,
+            diagnosticCode: null,
+          },
         },
       }),
     );
 
+    expect(html).toContain("选好了，去看见面城市");
     expect(html).toContain("看结果");
     expect(html).toContain('href="/p/ABC123/result"');
+    expect(html).toContain("换个城市看看");
+    expect(html).not.toContain("加入这场见面");
   });
 
   it("keeps the result action unavailable while the calculation is running", () => {
@@ -110,8 +149,9 @@ describe("PublicPlanContent", () => {
     );
 
     expect(html).toContain("正在替大家查 6 组真实车票和机票");
-    expect(html).toContain("结果生成中");
-    expect(html).toContain("正在生成结果");
+    expect(html).not.toContain("结果生成中");
+    expect(html).not.toContain("暂无结果");
+    expect(html).not.toContain("正在生成结果");
     expect(html).not.toContain('href="/p/ABC123/result"');
     expect(html).not.toContain("已有结果");
   });
@@ -161,6 +201,7 @@ describe("PublicPlanContent", () => {
 
     expect(html).toContain("位朋友都填好了，可以开始算这次去哪座城");
     expect(html).toContain("算出见面城市");
+    expect(html).not.toContain("加入这场见面");
     expect(html).not.toContain("发起人还没有开始计算。");
   });
 });

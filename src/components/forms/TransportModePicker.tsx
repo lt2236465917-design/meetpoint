@@ -12,9 +12,11 @@ const modes: Array<{ value: TransportMode; label: string }> = [
 export function TransportModePicker({
   value,
   onChange,
+  tone = "atmosphere",
 }: {
   value: TransportMode[];
   onChange: (value: TransportMode[]) => void;
+  tone?: "default" | "atmosphere";
 }) {
   function toggle(mode: TransportMode) {
     onChange(
@@ -23,6 +25,8 @@ export function TransportModePicker({
         : [...value, mode],
     );
   }
+
+  const isAtmosphere = tone === "atmosphere";
 
   return (
     <div className="grid grid-cols-3 gap-2">
@@ -35,9 +39,13 @@ export function TransportModePicker({
             type="button"
             onClick={() => toggle(mode.value)}
             className={`rounded-lg border px-3 py-3 text-sm font-medium ${
-              selected
-                ? "border-black bg-black text-white"
-                : "border-gray-200 bg-white text-gray-700"
+              isAtmosphere
+                ? selected
+                  ? "border-white/50 bg-white/20 text-white"
+                  : "atmosphere-ghost text-[var(--atmosphere-muted)]"
+                : selected
+                  ? "border-black bg-black text-white"
+                  : "border-gray-200 bg-white text-gray-700"
             }`}
           >
             {mode.label}

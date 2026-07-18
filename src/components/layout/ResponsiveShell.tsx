@@ -19,36 +19,36 @@ export function ResponsiveShell({
   backLabel?: string;
 }) {
   return (
-    <main className="flex min-h-svh items-center justify-center bg-slate-100 p-0 text-gray-950 sm:p-6">
-      <div className="flex h-svh w-full max-w-md flex-col overflow-hidden bg-white shadow-sm sm:h-[min(860px,calc(100svh-3rem))] sm:rounded-3xl sm:border sm:border-gray-200">
-        <header className="shrink-0 border-b border-gray-100 px-5 pb-4 pt-5">
+    <main className="atmosphere-shell atmosphere-canvas min-h-svh">
+      <div className="mx-auto flex min-h-svh w-full max-w-2xl flex-col">
+        <header className="shrink-0 border-b border-white/10 px-5 pb-4 pt-5 sm:px-8">
           {backHref && (
             <Link
               aria-label={backLabel}
-              className="mb-3 inline-flex h-9 items-center gap-1 rounded-full border border-gray-200 px-3 text-sm font-medium text-gray-700"
+              className="atmosphere-ghost mb-3 inline-flex h-9 items-center gap-1 rounded-full px-3 font-sans-sc text-sm font-medium"
               href={backHref}
             >
               <span aria-hidden="true">‹</span>
               <span>{backLabel}</span>
             </Link>
           )}
-          <h1 className="text-2xl font-semibold tracking-tight text-gray-950">
+          <h1 className="font-display text-2xl font-semibold tracking-tight text-[var(--atmosphere-ink)]">
             {title}
           </h1>
           {description && (
-            <p className="mt-2 text-sm leading-6 text-gray-600">
+            <p className="mt-2 font-sans-sc text-sm leading-6 text-[var(--atmosphere-muted)]">
               {description}
             </p>
           )}
           {actions && <div className="mt-4">{actions}</div>}
         </header>
 
-        <section className="scrollbar-none min-h-0 flex-1 overflow-y-auto px-5 py-5">
+        <section className="scrollbar-none min-h-0 flex-1 overflow-y-auto px-5 py-5 font-sans-sc sm:px-8">
           {children}
         </section>
 
         {aside && (
-          <footer className="shrink-0 border-t border-gray-100 bg-white px-5 py-4">
+          <footer className="shrink-0 border-t border-white/10 px-5 py-4 text-[var(--atmosphere-muted)] sm:px-8">
             {aside}
           </footer>
         )}

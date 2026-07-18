@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { PeakScenicAccent } from "@/components/result/PeakScenicAccent";
 import { Notice } from "@/components/ui/Notice";
 import type { RunStatus } from "@/lib/agent/contracts";
 import { readMeetingHistory } from "@/lib/ui/meeting-history";
@@ -75,22 +76,32 @@ export function RefreshingResultNotice({
     return () => window.clearTimeout(timer);
   }, [autoRefresh, delay, refresh]);
 
-  return (
+  const body = (
     <div aria-live="polite" className="space-y-2" role="status">
       <Notice>{getRunProgressMessage(progress, now)}</Notice>
       {progress.status === "incomplete" || progress.status === "failed" ? (
-        <p className="text-xs leading-5 text-gray-500">
+        <p className="text-xs leading-5 text-[var(--atmosphere-muted)]">
           诊断编号 {diagnosticRunId(progress.runId)}
         </p>
       ) : null}
       <button
-        className="w-full rounded-lg border border-gray-200 py-3 text-sm font-medium text-gray-950"
+        className="atmosphere-ghost w-full rounded-xl py-3 text-sm font-medium"
         onClick={() => void refresh()}
         type="button"
       >
         刷新结果
       </button>
     </div>
+  );
+
+  if (!autoRefresh) {
+    return body;
+  }
+
+  return (
+    <PeakScenicAccent className="rounded-xl p-4" label="算票等待">
+      {body}
+    </PeakScenicAccent>
   );
 }
 
