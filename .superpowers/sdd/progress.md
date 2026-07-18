@@ -70,33 +70,25 @@ Plan: `docs/superpowers/plans/2026-07-15-multi-agent-recommendation-implementati
 
 # UI Copy And Visual Direction Progress
 
-Branch: `task-1-scaffold` (uncommitted product UI work may sit on this branch)
+Branch: `task-1-scaffold`
 
-- Phase 1 home hero: shipped (`HomeHero` on `/`).
-- Phase 2 atmosphere tokens → `ResponsiveShell` / create / join / plan: shipped.
-- Phase 3 plan/result IA: **shipped** 2026-07-17 (StatusLane on `PublicPlanContent`; glass `SharedRecommendation` / `SchemeCard` / `RefreshingResultNotice`). Spec: `docs/superpowers/specs/2026-07-17-plan-result-ia-design.md`.
-- Phase 4 optional wait/reveal video: **shipped** (`PeakScenicAccent` on wait/reveal peaks only).
-- Adaptive shell (去画框): **shipped** 2026-07-18 — full-bleed zero-scroll `/`, `ResponsiveShell` `max-w-2xl`, `/records` for 最近见面记录; AGENTS/architecture/integration-guide/README collapsed to shipped wording (neat-freak 2026-07-18). Spec: `docs/superpowers/specs/2026-07-17-desktop-adaptive-shell-design.md`. Gates: lint / 343 tests / build green. Desktop+mobile visual smoke done 2026-07-18; Phase 1–4 + adaptive shell still **uncommitted** on `task-1-scaffold`.
-- Inner atmosphere + meetup copy: **shipped** 2026-07-18. Spec: `docs/superpowers/specs/2026-07-18-inner-atmosphere-meetup-copy-design.md`. Plan (Tasks 1–7): `docs/superpowers/plans/2026-07-18-inner-atmosphere-meetup-copy.md`. Alternatives/manage deep IA still out of scope.
-- Recovery Next (product UI): alternatives/manage remain shell-only unless a later IA pass is approved.
+- Phase 1–4 + adaptive shell: **shipped and committed** (`a2d6908`, 2026-07-18).
+- Inner atmosphere + meetup copy (Tasks 1–7): **shipped and committed** through `4972560` (2026-07-18). Spec/plan marked shipped in authority docs.
+- Post-ship smoke hardening (2026-07-18, included in the recovery batch): home brand `meetpoint`; hydrate-safe scenic preference; remount any-scene ready; readable shell scrim; decorative video `pointer-events: none` (fixes multi-click on records「查看」/plan CTAs when Next hydration overlay was also present).
+- Recovery Next (product UI): merge/PR `task-1-scaffold` when ready; alternatives/manage remain shell-only unless a later IA pass is approved.
 
 # Inner Atmosphere + Meetup Copy SDD Progress
 
-Base: `a2d6908` (Phase 1–4 + adaptive shell committed)
+Base: `a2d6908` (Phase 1–4 + adaptive shell)
 Branch: `task-1-scaffold`
 Plan: `docs/superpowers/plans/2026-07-18-inner-atmosphere-meetup-copy.md`
+Shipped HEAD (Tasks 1–7 + final copy fix): `4972560`
 
-- Preflight: working in place on feature branch; baseline commit `a2d6908`.
-- Task 1: in progress
-- Task 1: complete (commits a2d6908..4e573a4, review clean; Minors for final: SSR/write-clamp test gaps, Node localStorage stubs, null videoRef activate path)
-- Task 2: in progress
-- Task 2: complete (commits 4e573a4..2d82a2c, review clean; Minors for final: stale globals no-video comment, alternatives/manage scenic source assert gap, no reduced-motion/onError component test)
-- Task 3: in progress
-- Task 3: complete (commits 2d82a2c..f17fe0d, review clean; Minors for final: stale #3a4a5c global assert, shared canvas under scenic shells)
-- Task 4: in progress
-- Task 4: complete (commits f17fe0d..7e1681e, review clean; Minors for final: in-flight CTA assert gap; RefreshingResultNotice still has 再算一次试试)
-- Task 5: in progress
-- Task 5: complete (commits 7e1681e..d1fdba6, review clean; Minors for final: empty-hint source-only, hub amap dedupe negative assert)
-- Task 6: in progress
-- Task 6: complete (commits d1fdba6..35bae2e, review clean; Minor: dismiss source-only)
-- Task 7: complete — authority docs synced to shipped wording; lint/test/build green; manual smoke deferred to controller/human (no browser evidence in this task).
+- Task 1: complete (`a2d6908..4e573a4`)
+- Task 2: complete (`4e573a4..2d82a2c`)
+- Task 3: complete (`2d82a2c..f17fe0d`)
+- Task 4: complete (`f17fe0d..7e1681e`); final review also cleared residual「再算一次」in `RefreshingResultNotice` (`4972560`)
+- Task 5: complete (`7e1681e..d1fdba6`)
+- Task 6: complete (`d1fdba6..35bae2e`)
+- Task 7: complete (`35bae2e..a49b554` incl. CityCombobox lint fix + authority docs)
+- Final review: Ready to merge after the post-ship smoke recovery batch (see UI Progress Recovery Next)

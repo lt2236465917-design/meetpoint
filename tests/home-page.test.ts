@@ -13,7 +13,8 @@ describe("HomePage", () => {
       "utf8",
     );
 
-    expect(html).toContain("跨城见面");
+    expect(html).toContain("meetpoint");
+    expect(html).not.toContain(">跨城见面<");
     expect(html).toContain("散在几座城的朋友");
     expect(html).toContain("发起见面计划");
     expect(html).toContain('href="/create"');
@@ -46,5 +47,15 @@ describe("HomePage", () => {
     expect(html).not.toContain("一键开算");
     expect(html).not.toContain("开算");
     expect(pageSource + heroSource).not.toContain("window.alert");
+    // Remount after /records must reveal the persisted active scene (any index).
+    expect(heroSource).toMatch(/setSceneReady\(true\)/);
+    expect(heroSource).not.toMatch(
+      /if \(index === 0\) set(?:First)?SceneReady\(true\)/,
+    );
+    // Do not read localStorage in useState — that hydrates wrong and spawns a
+    // Next.js error overlay that intercepts clicks on later routes.
+    expect(heroSource).not.toMatch(/useState\(\s*readScenicSceneIndex\s*\)/);
+    expect(heroSource).toContain("useSyncExternalStore(");
+    expect(heroSource).toMatch(/function getServerScenicSceneSnapshot\(\)[\s\S]*return 0;/);
   });
 });

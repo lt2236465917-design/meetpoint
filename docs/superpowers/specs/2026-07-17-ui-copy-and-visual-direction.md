@@ -10,7 +10,7 @@ Approved product-facing direction for Chinese copy and home-hero visual language
 - Phase 3 (plan/result IA): **shipped** (StatusLane on public plan + glass schemes on shared result; see `2026-07-17-plan-result-ia-design.md`).
 - Phase 4 (optional wait/reveal video): **shipped** — light muted looping scenic video on calculation-wait (`RefreshingResultNotice` nonterminal) and city-reveal (`SharedRecommendation`); `prefers-reduced-motion` falls back to scenic gradient.
 - Adaptive shell (approved 2026-07-17): **shipped** — no fake H5 phone frame; true adaptive layout; home opening zero-scroll; 最近见面记录 on `/records` — see `2026-07-17-desktop-adaptive-shell-design.md`.
-- Inner atmosphere continuity + meetup copy: **shipped** 2026-07-18 — create/join static deepen (still no form video); plan/result/records muted shell scenic following home scene (`meetpoint:scenic-scene`); host CTA「开始见面」/「见面安排中」; departure prefecture search merge; create participant menu opens upward. See `2026-07-18-inner-atmosphere-meetup-copy-design.md`. This **supersedes** the older “plan/shell stay video-free” and “算出见面城市” host-CTA wording.
+- Inner atmosphere continuity + meetup copy: **shipped** 2026-07-18 — create/join static deepen (still no form video); plan/result/records muted shell scenic following home scene (`meetpoint:scenic-scene`); host CTA「开始见面」/「见面安排中」; departure prefecture search merge; create participant menu opens upward. Home hero brand mark: `meetpoint`. See `2026-07-18-inner-atmosphere-meetup-copy-design.md`. This **supersedes** the older “plan/shell stay video-free” and “算出见面城市” host-CTA wording.
 
 ## Copy principles
 

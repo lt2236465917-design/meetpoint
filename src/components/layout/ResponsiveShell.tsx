@@ -24,7 +24,7 @@ export function ResponsiveShell({
   return (
     <main className="atmosphere-shell atmosphere-canvas relative min-h-svh overflow-hidden">
       {scenic ? <ShellScenicBackdrop /> : null}
-      <div className="relative z-10 mx-auto flex min-h-svh w-full max-w-2xl flex-col">
+      <div className="relative z-10 isolate mx-auto flex min-h-svh w-full max-w-2xl flex-col">
         <header className="shrink-0 border-b border-white/10 px-5 pb-4 pt-5 sm:px-8">
           {backHref && (
             <Link

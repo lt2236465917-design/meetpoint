@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import {
   readScenicSceneIndex,
+  subscribeScenicSceneIndex,
   writeScenicSceneIndex,
 } from "@/lib/ui/scenic-preference";
 import { SCENIC_VIDEOS as videos } from "@/lib/ui/scenic-videos";
@@ -15,6 +16,10 @@ const HAVE_METADATA = 1;
 const HAVE_FUTURE_DATA = 3;
 const NETWORK_EMPTY = 0;
 const SCENE_READY_TIMEOUT_MS = 4500;
+
+function getServerScenicSceneSnapshot() {
+  return 0;
+}
 
 function setSceneStart(video: HTMLVideoElement, startAt: number) {
   const canUseSceneStart =
@@ -107,9 +112,17 @@ function waitForSceneReady(video: HTMLVideoElement, startAt: number) {
 }
 
 export function HomeHero() {
-  const [activeVideo, setActiveVideo] = useState(readScenicSceneIndex);
+  // The server snapshot stays at 0 so SSR HTML matches hydration; React restores
+  // the local preference after subscribing instead of reading it in useState().
+  const activeVideo = useSyncExternalStore(
+    subscribeScenicSceneIndex,
+    readScenicSceneIndex,
+    getServerScenicSceneSnapshot,
+  );
   const [isTransitioning, setIsTransitioning] = useState(false);
-  const [firstSceneReady, setFirstSceneReady] = useState(false);
+  // Gates opacity for whichever scene is active (not only index 0 — remount after
+  // visiting /records must reveal the persisted non-zero scene too).
+  const [sceneReady, setSceneReady] = useState(false);
   const hasSceneChanged = useRef(false);
   const switchLockRef = useRef(false);
   const transitionTimeoutRef = useRef<number | undefined>(undefined);
@@ -148,16 +161,16 @@ export function HomeHero() {
         if (playResult) {
           void playResult
             .then(() => {
-              if (index === 0) setFirstSceneReady(true);
+              setSceneReady(true);
             })
             .catch(() => {
-              if (index === 0) setFirstSceneReady(true);
+              setSceneReady(true);
             });
-        } else if (index === 0) {
-          setFirstSceneReady(true);
+        } else {
+          setSceneReady(true);
         }
       } catch {
-        if (index === 0) setFirstSceneReady(true);
+        setSceneReady(true);
       }
     });
   }, [activeVideo]);
@@ -173,7 +186,7 @@ export function HomeHero() {
   };
 
   const activateVideo = (index: number) => {
-    setActiveVideo(index);
+    setSceneReady(false);
     writeScenicSceneIndex(index);
     setIsTransitioning(true);
     releaseSwitchLockAfterFade();
@@ -228,8 +241,8 @@ export function HomeHero() {
               ref={(element) => {
                 videoRefs.current[index] = element;
               }}
-              className={`absolute inset-0 z-10 h-full w-full object-cover transition-opacity duration-[1400ms] ease-in-out ${
-                activeVideo === index && firstSceneReady
+              className={`pointer-events-none absolute inset-0 z-10 h-full w-full object-cover transition-opacity duration-[1400ms] ease-in-out ${
+                activeVideo === index && sceneReady
                   ? "opacity-100"
                   : "opacity-0"
               }`}
@@ -239,7 +252,7 @@ export function HomeHero() {
               muted
               playsInline
               onPlaying={() => {
-                if (index === 0) setFirstSceneReady(true);
+                if (index === activeVideo) setSceneReady(true);
               }}
               onEnded={() => switchToNextVideo(index)}
               aria-label={`${video.label}背景`}
@@ -259,7 +272,7 @@ export function HomeHero() {
       <div className="relative z-20 flex h-full flex-col px-5 py-5 sm:px-8">
         <header className="flex shrink-0 items-center justify-between gap-4">
           <p className="font-display readable-title text-xl text-white sm:text-2xl">
-            跨城见面
+            meetpoint
           </p>
           <Link
             href="/records"

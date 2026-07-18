@@ -103,6 +103,12 @@ body {
 
 .scenery-track {
   isolation: isolate;
+  pointer-events: none;
+}
+
+.scenery-track video,
+.scenery-track .scenic-fallback {
+  pointer-events: none;
 }
 
 @keyframes train-bob {
@@ -204,6 +210,12 @@ body {
   z-index: 0;
 }
 
+.shell-scenic-media,
+.shell-scenic-media video,
+.shell-scenic-media .scenic-fallback {
+  pointer-events: none;
+}
+
 .shell-scenic-media {
   position: absolute;
   inset: 0;
@@ -213,16 +225,18 @@ body {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  opacity: 0.28;
+  /* Top of approved 0.22–0.32 band so scene still reads under the scrim */
+  opacity: 0.32;
 }
 
 .shell-scenic-media::after {
   content: "";
   position: absolute;
   inset: 0;
+  /* Readable CTA/status first, but leave enough light that scenic isn't a black void */
   background:
-    linear-gradient(180deg, rgba(8, 10, 14, 0.72) 0%, rgba(8, 10, 14, 0.88) 100%),
-    radial-gradient(ellipse at 50% 30%, rgba(20, 28, 40, 0.35) 0%, rgba(8, 10, 14, 0.9) 70%);
+    linear-gradient(180deg, rgba(8, 10, 14, 0.48) 0%, rgba(8, 10, 14, 0.64) 100%),
+    radial-gradient(ellipse at 50% 30%, rgba(20, 28, 40, 0.22) 0%, rgba(8, 10, 14, 0.58) 70%);
 }
 
 @media (prefers-reduced-motion: reduce) {

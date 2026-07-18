@@ -17,7 +17,7 @@ The approved product and Multi-Agent architecture is documented separately in `d
 
 | Route | Purpose |
 | --- | --- |
-| `/` | Full-bleed train-window home hero (`HomeHero`): zero-scroll opening, CTA to `/create`, “最近记录” entry to `/records`. |
+| `/` | Full-bleed train-window home hero (`HomeHero`, brand `meetpoint`): zero-scroll opening, CTA to `/create`, “最近记录” entry to `/records`. |
 | `/records` | Browser-local recent meeting records (`RecentMeetingRecords`) in `ResponsiveShell`. |
 | `/create` | Host creates a plan, receives a phone-openable public link, and saves the plan to local recent records. |
 | `/p/[code]` | Public plan StatusLane (status, one primary CTA, `已填写` list), auto-refreshed participant completion, join/calculate/result entry, and direct calculation for local participants once the participant limit is reached. |
@@ -69,10 +69,10 @@ In fallback mode, the same logical records are kept in process memory instead of
 
 | Module | Responsibility |
 | --- | --- |
-| `src/components/home/HomeHero.tsx` | Product `/` train-window hero: scenic video, train overlay, text-shadow copy, glass CTA to `/create`; persists/hydrates scene index via `meetpoint:scenic-scene`. |
+| `src/components/home/HomeHero.tsx` | Product `/` train-window hero: brand `meetpoint`, scenic video (`pointer-events: none`), train overlay, glass CTA to `/create`. Scene index starts at `0` for hydration, then restores `meetpoint:scenic-scene` after mount; any active scene must set ready before opacity reveal. |
 | `src/lib/ui/scenic-videos.ts` | Shared CloudFront scenic clip catalog for home, shell scenic, and phase-4 peaks. |
-| `src/lib/ui/scenic-preference.ts` | Read/write `meetpoint:scenic-scene` so plan/result/records shell scenic follows the home scene. |
-| `src/components/layout/ShellScenicBackdrop.tsx` | Optional muted low-opacity shell video + scrim; reduced-motion/error falls back to deepened canvas. |
+| `src/lib/ui/scenic-preference.ts` | Read/write `meetpoint:scenic-scene` + same-tab `meetpoint:scenic-scene-updated` so shell scenic follows the home scene without SSR `useState(localStorage)`. |
+| `src/components/layout/ShellScenicBackdrop.tsx` | Optional muted low-opacity shell video + readable dark scrim (`pointer-events: none`); reduced-motion/error falls back to deepened canvas; explicit `play()` after mount. |
 | `src/components/result/PeakScenicAccent.tsx` | Light muted looping scenic accent for wait/reveal peaks only; reduced-motion falls back to `.scenic-fallback`. |
 | `src/components/layout/ResponsiveShell.tsx` | Shared page shell: cold scenic-gradient canvas via `.atmosphere-*` tokens, glass back/header/footer; used by create/join/plan/result/records. Fluid adaptive `max-w-2xl` content width — no fake phone chrome. Create/join: static deepen, no looping video. Plan/result/records: optional muted shell scenic under a dark scrim (`docs/superpowers/specs/2026-07-18-inner-atmosphere-meetup-copy-design.md`). |
 | `src/app/globals.css` | Home hero tokens (`.readable-*`, `.hero-cta`, `.scenic-fallback`) plus shared atmosphere tokens (`.atmosphere-shell/canvas/panel/field/cta/ghost/notice`, `.font-display` / `.font-sans-sc`). |
@@ -123,7 +123,7 @@ In fallback mode, the same logical records are kept in process memory instead of
 ## UI Boundaries
 
 - Keep user-facing copy in Chinese on both mobile and desktop. Flow/marketing tone and visual phases follow `docs/superpowers/specs/2026-07-17-ui-copy-and-visual-direction.md` (phases 1–4 + adaptive shell + inner atmosphere/meetup copy shipped). Plan/result IA: `docs/superpowers/specs/2026-07-17-plan-result-ia-design.md`. Shell scenic + meetup CTA: `docs/superpowers/specs/2026-07-18-inner-atmosphere-meetup-copy-design.md`.
-- Create/join/plan/result/records use `ResponsiveShell` as a single-column adaptive workflow (fluid `max-w-2xl`, no fake phone chrome). `/` is a full-bleed zero-scroll train-window hero with “最近记录” → `/records`. Create/join: no looping scenic video (static deepen). Plan/result/records: muted shell scenic following `meetpoint:scenic-scene`. Phase 4 `PeakScenicAccent` on wait/reveal peaks. Host plan CTA:「开始见面」/「见面安排中」.
+- Create/join/plan/result/records use `ResponsiveShell` as a single-column adaptive workflow (fluid `max-w-2xl`, no fake phone chrome). `/` is a full-bleed zero-scroll train-window hero (brand `meetpoint`) with “最近记录” → `/records`. Create/join: no looping scenic video (static deepen). Plan/result/records: muted shell scenic following `meetpoint:scenic-scene` (readable scrim, not a black void; content `isolate` so CTAs stay clickable). Phase 4 `PeakScenicAccent` on wait/reveal peaks. Host plan CTA:「开始见面」/「见面安排中」.
 - `ResponsiveShell` remains the default shell for create/join/plan/result/records (dark scenic interior, glass panels/CTAs). Content scrolls inside the shell when needed.
 - Main flow pages use the `ResponsiveShell` top-left back action instead of mixing back navigation into bottom business actions.
 - City combobox candidates render in normal document flow and disappear after a city is selected so transport-mode controls remain reachable.

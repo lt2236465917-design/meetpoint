@@ -4,6 +4,8 @@
 
 **Shipped** 2026-07-18 (conversation design + Subagent-Driven Tasks 1–7).
 
+Post-ship smoke hardening (2026-07-18): home brand mark `meetpoint`; hydrate-safe scenic preference (no `useState(localStorage)`); any-scene ready on remount; shell scrim readable (not near-opaque black); decorative videos `pointer-events: none` so records/plan CTAs click once.
+
 Extends `2026-07-17-ui-copy-and-visual-direction.md` and `2026-07-17-desktop-adaptive-shell-design.md`. Does **not** reopen alternatives / manage IA.
 
 ## Problem
@@ -170,4 +172,3 @@ Authority docs (`AGENTS.md`, `2026-07-17-ui-copy-and-visual-direction.md`, `docs
 - Full prefecture meeting-candidate matrix.
 - Dual desktop/H5 codebases.
 - Rotating or expanding scenic clip catalog beyond existing `SCENIC_VIDEOS`.
-`
