@@ -95,7 +95,7 @@ Returns:
 
 `GET /api/cities/search?q=上海`
 
-Returns `{ "cities": [] }`. Today, built-in hub matches return immediately (local short-circuit). On a local miss and with `AMAP_API_KEY` configured, the server requests Amap input tips with a 3-second timeout, then returns normalized prefecture-level or municipality city matches such as `{ "code": "amap-440800", "name": "湛江", "province": "广东" }`. Amap failure, invalid data, missing credentials, and non-city locations safely return no remote selectable city. Approved next (not shipped): merge local hubs with Amap prefecture hits for the same query — `docs/superpowers/specs/2026-07-18-inner-atmosphere-meetup-copy-design.md`.
+Returns `{ "cities": [] }`. Merges built-in hub matches with Amap prefecture-level hits for the same query (local first, deduped by code/name). With `AMAP_API_KEY` configured, the server requests Amap input tips with a 3-second timeout and adds normalized prefecture-level or municipality matches such as `{ "code": "amap-440800", "name": "湛江", "province": "广东" }`. Amap failure, invalid data, missing credentials, and non-city locations omit remote rows without blocking local hits — `docs/superpowers/specs/2026-07-18-inner-atmosphere-meetup-copy-design.md`.
 
 ### Submit Participant
 

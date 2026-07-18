@@ -77,7 +77,7 @@ Single calm scene (`静水`), muted + loop + `playsInline`, soft opacity + gradi
 - Create / join / plan / `ResponsiveShell` sources contain no peak video
 - `npm run lint`, `npm run test`, and `npm run build` pass
 
-## Planned phases (next sessions)
+## Shipped phases
 
 1. ~~Port approved home hero into product `/` (Meetpoint copy + train/scenery; CTA → `/create`)~~ **done**
 2. Extract design tokens into `ResponsiveShell` / globals so create/join/plan do not feel like a different product — **done (Approach A)**
