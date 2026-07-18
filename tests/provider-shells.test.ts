@@ -55,15 +55,28 @@ describe("searchGateway", () => {
 });
 
 describe("searchCities", () => {
-  it("uses built-in city search before external Amap lookup", async () => {
-    const fetchMock = vi.fn();
-    vi.stubGlobal("fetch", fetchMock);
+  it("merges Amap prefecture matches after local hubs for the same query", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            status: "1",
+            tips: [
+              { name: "武汉市", district: "湖北省", adcode: "420100" },
+              { name: "武威市", district: "甘肃省", adcode: "620600" },
+            ],
+          }),
+          { status: 200 },
+        ),
+      ),
+    );
     vi.stubEnv("AMAP_API_KEY", "test-key");
 
-    const cities = await searchCities("武汉");
-
-    expect(cities.map((city) => city.code)).toEqual(["wuhan"]);
-    expect(fetchMock).not.toHaveBeenCalled();
+    const cities = await searchCities("武");
+    expect(cities[0]).toEqual(expect.objectContaining({ code: "wuhan", name: "武汉" }));
+    expect(cities.map((c) => c.code)).toContain("amap-620600");
+    expect(fetch).toHaveBeenCalled();
   });
 
   it("selects Tianjin from the local city library without requiring Amap", async () => {
@@ -98,11 +111,20 @@ describe("searchCities", () => {
     ]);
   });
 
+  it("returns local hubs when Amap fails but local hits exist", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("unavailable", { status: 503 })));
+    vi.stubEnv("AMAP_API_KEY", "test-key");
+
+    await expect(searchCities("武汉")).resolves.toEqual([
+      expect.objectContaining({ code: "wuhan", name: "武汉" }),
+    ]);
+  });
+
   it.each([
     ["HTTP failure", () => new Response("unavailable", { status: 503 })],
     ["Amap status 0", () => new Response(JSON.stringify({ status: "0", tips: [] }), { status: 200 })],
     ["invalid JSON", () => new Response("not-json", { status: 200 })],
-  ])("returns an empty list after %s", async (_name, responseFactory) => {
+  ])("returns an empty list after %s when there are no local hits", async (_name, responseFactory) => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(responseFactory()));
     vi.stubEnv("AMAP_API_KEY", "test-key");
 

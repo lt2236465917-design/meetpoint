@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
@@ -15,5 +17,26 @@ describe("CityCombobox", () => {
 
     expect(html).toContain('value="北京"');
     expect(html).not.toContain("北京 · 北京");
+  });
+
+  it("uses a departure-friendly placeholder by default", () => {
+    const html = renderToStaticMarkup(
+      createElement(CityCombobox, {
+        value: null,
+        onChange: vi.fn(),
+      }),
+    );
+
+    expect(html).toContain("输入城市名，如 北京 / 湛江");
+  });
+
+  it("documents an empty-search hint for unknown city names", () => {
+    const source = readFileSync(
+      path.join(process.cwd(), "src/components/forms/CityCombobox.tsx"),
+      "utf8",
+    );
+
+    expect(source).toContain("searchedEmpty");
+    expect(source).toContain("没找到这个市，试试完整市名，如「湛江」");
   });
 });

@@ -20,41 +20,47 @@ function isPrefectureLevelAdcode(adcode: string) {
 }
 
 export async function searchCities(query: string): Promise<CitySearchResult[]> {
-  const local = searchLocalCities(query);
-  if (local.length > 0) return local;
+  const local = searchLocalCities(query).map(({ code, name, province }) => ({
+    code,
+    name,
+    province,
+  }));
+  const seenCodes = new Set(local.map((city) => city.code));
+  const seenNames = new Set(local.map((city) => normalizeCityName(city.name)));
 
   const amapKey = process.env.AMAP_API_KEY;
-  if (!amapKey) return [];
+  if (!amapKey) return local.slice(0, 8);
 
   const candidates = await searchAmapCities(query, { apiKey: amapKey });
-  const matches: CitySearchResult[] = [];
-  const seenCodes = new Set<string>();
+  const merged = [...local];
 
   for (const candidate of candidates) {
     const cityName = normalizeCityName(candidate.name);
     const city = CITIES.find((supportedCity) => supportedCity.name === cityName);
     if (city) {
-      if (seenCodes.has(city.code)) continue;
+      if (seenCodes.has(city.code) || seenNames.has(city.name)) continue;
 
-      matches.push(city);
+      merged.push({ code: city.code, name: city.name, province: city.province });
       seenCodes.add(city.code);
-      if (matches.length === 8) break;
+      seenNames.add(city.name);
+      if (merged.length === 8) break;
       continue;
     }
 
     if (!candidate.adcode || !isPrefectureLevelAdcode(candidate.adcode)) continue;
 
     const code = `amap-${candidate.adcode}`;
-    if (seenCodes.has(code)) continue;
+    if (seenCodes.has(code) || seenNames.has(cityName)) continue;
 
-    matches.push({
+    merged.push({
       code,
       name: cityName,
       province: normalizeProvinceName(candidate.district) || cityName,
     });
     seenCodes.add(code);
-    if (matches.length === 8) break;
+    seenNames.add(cityName);
+    if (merged.length === 8) break;
   }
 
-  return matches;
+  return merged.slice(0, 8);
 }
