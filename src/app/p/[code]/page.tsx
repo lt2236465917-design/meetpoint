@@ -72,6 +72,7 @@ export default async function PublicPlanPage({
   if (!data) {
     return (
       <ResponsiveShell
+        scenic
         title="计划不存在"
         description="这个计划可能已失效，或链接里的计划码不正确。"
         backHref="/"
@@ -84,6 +85,7 @@ export default async function PublicPlanPage({
 
   return (
     <ResponsiveShell
+      scenic
       title={data.plan.title}
       description={`${data.plan.meeting_date} 到达`}
       backHref="/"

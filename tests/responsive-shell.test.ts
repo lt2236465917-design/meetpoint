@@ -40,4 +40,16 @@ describe("ResponsiveShell", () => {
     expect(html).not.toContain("lg:grid-cols");
     expect(html).not.toContain("lg:sticky");
   });
+
+  it("renders a light scenic backdrop only when scenic is enabled", () => {
+    const withScenic = renderToStaticMarkup(
+      createElement(ResponsiveShell, { title: "计划", scenic: true }, "body"),
+    );
+    const without = renderToStaticMarkup(
+      createElement(ResponsiveShell, { title: "创建" }, "body"),
+    );
+
+    expect(withScenic).toContain("shell-scenic");
+    expect(without).not.toContain("shell-scenic");
+  });
 });

@@ -75,6 +75,7 @@ export function ResultContent({
 
   return (
     <ResponsiveShell
+      scenic
       title={title}
       description="一座城市，两套走法，每一程都查得到真实票价。"
       backHref={`/p/${code}`}
@@ -110,6 +111,7 @@ export default async function ResultPage({
   if (!data) {
     return (
       <ResponsiveShell
+        scenic
         title="计划不存在"
         description="这个计划可能已失效，或链接里的计划码不正确。"
         backHref="/"

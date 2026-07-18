@@ -145,22 +145,26 @@ describe("PeakScenicAccent (phase 4)", () => {
     expect(html).toContain("南京");
   });
 
-  it("does not put scenic video behind create/join/plan shells", () => {
+  it("keeps create/join form trees free of shell scenic video wiring", () => {
     const root = process.cwd();
-    const sources = [
+    for (const relative of [
       "src/app/create/page.tsx",
       "src/components/plan/JoinParticipantForm.tsx",
-      "src/components/plan/PublicPlanContent.tsx",
-      "src/components/layout/ResponsiveShell.tsx",
-    ].map((relative) =>
-      readFileSync(path.join(root, relative), "utf8"),
-    );
-
-    for (const source of sources) {
-      expect(source).not.toContain("PeakScenicAccent");
+      "src/app/p/[code]/join/page.tsx",
+    ]) {
+      const source = readFileSync(path.join(root, relative), "utf8");
+      expect(source).not.toContain("scenic");
+      expect(source).not.toContain("ShellScenicBackdrop");
       expect(source).not.toContain("<video");
-      expect(source).not.toContain("SCENIC_VIDEOS");
     }
+  });
+
+  it("enables shell scenic on plan, result, and records pages only", () => {
+    const root = process.cwd();
+    expect(readFileSync(path.join(root, "src/app/p/[code]/page.tsx"), "utf8")).toContain("scenic");
+    expect(readFileSync(path.join(root, "src/app/p/[code]/result/page.tsx"), "utf8")).toContain("scenic");
+    expect(readFileSync(path.join(root, "src/app/records/page.tsx"), "utf8")).toContain("scenic");
+    expect(readFileSync(path.join(root, "src/app/create/page.tsx"), "utf8")).not.toMatch(/\bscenic\b/);
   });
 
   it("defines peak-scenic styles and reduced-motion fallback in globals.css", () => {

@@ -30,5 +30,11 @@ describe("atmosphere design tokens", () => {
 
     expect(css).toContain("#3a4a5c");
     expect(css).toContain("#0a0c10");
+
+    expect(css).toContain(".shell-scenic");
+    expect(css).toContain(".shell-scenic-media");
+    expect(css).toMatch(
+      /prefers-reduced-motion:\s*reduce[\s\S]*\.shell-scenic-media video/,
+    );
   });
 });

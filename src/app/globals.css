@@ -194,6 +194,42 @@ body {
   color: var(--atmosphere-muted);
 }
 
+/* Shell scenic backdrop (plan / result / records) */
+.shell-scenic {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  z-index: 0;
+}
+
+.shell-scenic-media {
+  position: absolute;
+  inset: 0;
+}
+
+.shell-scenic-media video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.28;
+}
+
+.shell-scenic-media::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(180deg, rgba(8, 10, 14, 0.72) 0%, rgba(8, 10, 14, 0.88) 100%),
+    radial-gradient(ellipse at 50% 30%, rgba(20, 28, 40, 0.35) 0%, rgba(8, 10, 14, 0.9) 70%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shell-scenic-media video {
+    display: none;
+  }
+}
+
 /* Phase 4 — light scenic video on wait / reveal peaks only */
 .peak-scenic {
   isolation: isolate;
