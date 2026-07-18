@@ -19,47 +19,56 @@ export function CityCombobox({
 }) {
   const [query, setQuery] = useState(value?.name ?? "");
   const [results, setResults] = useState<CityOption[]>([]);
-  const [fetchSettled, setFetchSettled] = useState(false);
-  const showResults = results.length > 0 && query.trim() !== value?.name;
+  const [settledQuery, setSettledQuery] = useState("");
+  const normalizedQuery = query.trim();
+  const showResults = results.length > 0 && normalizedQuery !== value?.name;
   const searchedEmpty =
-    query.trim() !== "" && fetchSettled && results.length === 0;
+    normalizedQuery !== "" &&
+    settledQuery === normalizedQuery &&
+    results.length === 0;
   const isAtmosphere = tone === "atmosphere";
 
   useEffect(() => {
-    const normalized = query.trim();
-    if (!normalized) {
-      setResults([]);
-      setFetchSettled(false);
+    if (!normalizedQuery) {
       return;
     }
 
     const controller = new AbortController();
-    setFetchSettled(false);
     void (async () => {
       try {
         const response = await fetch(
-          `/api/cities/search?q=${encodeURIComponent(normalized)}`,
+          `/api/cities/search?q=${encodeURIComponent(normalizedQuery)}`,
           { signal: controller.signal },
         );
         if (!response.ok) {
-          if (!controller.signal.aborted) setResults([]);
+          if (!controller.signal.aborted) {
+            setResults([]);
+            setSettledQuery(normalizedQuery);
+          }
           return;
         }
         const json = (await response.json()) as { cities?: CityOption[] };
         if (!Array.isArray(json.cities)) {
-          if (!controller.signal.aborted) setResults([]);
+          if (!controller.signal.aborted) {
+            setResults([]);
+            setSettledQuery(normalizedQuery);
+          }
           return;
         }
-        if (!controller.signal.aborted) setResults(json.cities);
+        if (!controller.signal.aborted) {
+          setResults(json.cities);
+          setSettledQuery(normalizedQuery);
+        }
       } catch {
-        if (!controller.signal.aborted) setResults([]);
-      } finally {
-        if (!controller.signal.aborted) setFetchSettled(true);
+        if (!controller.signal.aborted) {
+          setResults([]);
+          setSettledQuery(normalizedQuery);
+        }
       }
     })();
 
     return () => controller.abort();
-  }, [query]);
+  }, [normalizedQuery]);
 
   useEffect(() => {
     const normalized = query.trim();
@@ -84,7 +93,7 @@ export function CityCombobox({
           setQuery(nextQuery);
           if (!nextQuery.trim()) {
             setResults([]);
-            setFetchSettled(false);
+            setSettledQuery("");
           }
           if (value && nextQuery !== value.name) onChange(null);
         }}
