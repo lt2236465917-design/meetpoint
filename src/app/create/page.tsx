@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ResponsiveShell } from "@/components/layout/ResponsiveShell";
 import { getApiErrorMessage } from "@/lib/ui/api-error-message";
 import { copyTextToClipboard } from "@/lib/ui/clipboard";
@@ -19,10 +19,37 @@ export default function CreatePlanPage() {
   const [participantLimit, setParticipantLimit] = useState(4);
   const [participantLimitOpen, setParticipantLimitOpen] = useState(false);
   const arrivalDateInputRef = useRef<HTMLInputElement>(null);
+  const participantLimitRef = useRef<HTMLDivElement>(null);
   const [result, setResult] = useState<CreatePlanResult | null>(null);
   const [error, setError] = useState("");
   const [copyMessage, setCopyMessage] = useState("");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!participantLimitOpen) return;
+
+    function handleMouseDown(event: MouseEvent) {
+      if (
+        participantLimitRef.current &&
+        !participantLimitRef.current.contains(event.target as Node)
+      ) {
+        setParticipantLimitOpen(false);
+      }
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setParticipantLimitOpen(false);
+      }
+    }
+
+    document.addEventListener("mousedown", handleMouseDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handleMouseDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [participantLimitOpen]);
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -134,7 +161,10 @@ export default function CreatePlanPage() {
               </span>
             </div>
           </div>
-          <div className="relative block space-y-1.5 text-sm font-medium text-[var(--atmosphere-muted)]">
+          <div
+            className="relative block space-y-1.5 text-sm font-medium text-[var(--atmosphere-muted)]"
+            ref={participantLimitRef}
+          >
             <span id="participant-limit-label">参与人数上限</span>
             <input name="participantLimit" type="hidden" value={participantLimit} />
             <button
@@ -151,7 +181,7 @@ export default function CreatePlanPage() {
             </button>
             {participantLimitOpen && (
               <div
-                className="atmosphere-panel absolute z-10 mt-2 w-full overflow-hidden rounded-lg p-1"
+                className="atmosphere-panel absolute bottom-full z-10 mb-2 w-full overflow-hidden rounded-lg p-1"
                 id="participant-limit-options"
                 role="listbox"
                 aria-labelledby="participant-limit-label"
