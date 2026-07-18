@@ -31,6 +31,16 @@ describe("atmosphere design tokens", () => {
     expect(css).toContain("#3a4a5c");
     expect(css).toContain("#0a0c10");
 
+    const canvasMatch = css.match(/\.atmosphere-canvas\s*\{([\s\S]*?)\}/);
+    expect(canvasMatch).not.toBeNull();
+    const canvasBlock = canvasMatch![1];
+    const radialCount = (canvasBlock.match(/radial-gradient/g) ?? []).length;
+    const linearCount = (canvasBlock.match(/linear-gradient/g) ?? []).length;
+    expect(radialCount >= 2 || (radialCount >= 1 && linearCount >= 1)).toBe(
+      true,
+    );
+    expect(canvasBlock).toContain("#0a0c10");
+
     expect(css).toContain(".shell-scenic");
     expect(css).toContain(".shell-scenic-media");
     expect(css).toMatch(

@@ -116,7 +116,7 @@ body {
   }
 }
 
-/* Shared atmosphere (form/plan shells — no scenic video) */
+/* Shared atmosphere (form shells static; plan may use shell scenic) */
 .font-display {
   font-family: var(--app-font-display);
 }
@@ -132,7 +132,8 @@ body {
 
 .atmosphere-canvas {
   background:
-    radial-gradient(ellipse at 50% 28%, #3a4a5c 0%, #1a222c 52%, #0a0c10 100%);
+    radial-gradient(ellipse at 50% 18%, rgba(90, 110, 130, 0.45) 0%, transparent 42%),
+    radial-gradient(ellipse at 50% 40%, #2a3544 0%, #141a22 55%, #0a0c10 100%);
   border-color: rgba(255, 255, 255, 0.1);
   color: var(--atmosphere-ink);
 }
@@ -149,7 +150,7 @@ body {
 }
 
 .atmosphere-field {
-  background: rgba(0, 0, 0, 0.28);
+  background: rgba(0, 0, 0, 0.36);
   border: 1px solid var(--atmosphere-line);
   color: var(--atmosphere-ink);
   color-scheme: dark;
