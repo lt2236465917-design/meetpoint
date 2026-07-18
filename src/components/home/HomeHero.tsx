@@ -2,6 +2,10 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import {
+  readScenicSceneIndex,
+  writeScenicSceneIndex,
+} from "@/lib/ui/scenic-preference";
 import { SCENIC_VIDEOS as videos } from "@/lib/ui/scenic-videos";
 
 const overlayImage =
@@ -103,7 +107,7 @@ function waitForSceneReady(video: HTMLVideoElement, startAt: number) {
 }
 
 export function HomeHero() {
-  const [activeVideo, setActiveVideo] = useState(0);
+  const [activeVideo, setActiveVideo] = useState(readScenicSceneIndex);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [firstSceneReady, setFirstSceneReady] = useState(false);
   const hasSceneChanged = useRef(false);
@@ -170,6 +174,7 @@ export function HomeHero() {
 
   const activateVideo = (index: number) => {
     setActiveVideo(index);
+    writeScenicSceneIndex(index);
     setIsTransitioning(true);
     releaseSwitchLockAfterFade();
   };
