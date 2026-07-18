@@ -108,8 +108,8 @@ describe("result page public states", () => {
       diagnosticCode: "REAL_QUOTE_COVERAGE_INCOMPLETE",
     });
 
-    expect(html).toContain("有几位朋友的票价这次没查全，所以先不出结论");
-    expect(html).toContain("再算一次试试");
+    expect(html).toContain("有几位朋友的票价没查全，过一会再试一次");
+    expect(html).not.toContain("再算一次试试");
     expect(html).toContain("诊断编号 RUN-12345678");
     expect(html).not.toContain("省钱方案");
   });
@@ -119,7 +119,7 @@ describe("result page public states", () => {
       diagnosticCode: "AGENT_PROPOSAL_INVALID",
     });
 
-    expect(html).toContain("这次没算成，回计划页再试一次");
+    expect(html).toContain("这次没安排成，稍后再试一次");
     expect(html).toContain("把下面这串编号发给发起人");
     expect(html).toContain("诊断编号 RUN-12345678");
     expect(html).not.toContain("省钱方案");

@@ -18,7 +18,7 @@ Tasks 1–14 are complete against the [2026-07-15 Multi-Agent design](docs/super
 - `/`: full-bleed train-window home hero (zero-scroll opening) with CTA to create a plan and “最近记录” entry to `/records`.
 - `/records`: browser-local recent meeting records on this device.
 - `/create`: host creates a meeting plan, receives a phone-openable public link, and saves the plan to local recent records.
-- `/p/[code]`: public plan page with a single StatusLane panel (status → one primary CTA → `已填写` list), automatic participant-status refresh, and a direct calculate action for local participants when the participant limit is reached. IA: `docs/superpowers/specs/2026-07-17-plan-result-ia-design.md`.
+- `/p/[code]`: public plan page with a single StatusLane panel (status → one primary CTA → `已填写` list), automatic participant-status refresh, and a host「开始见面」action for local participants when the participant limit is reached. IA: `docs/superpowers/specs/2026-07-17-plan-result-ia-design.md`.
 - `/p/[code]/join`: participant submits name, departure city, and accepted transport modes, then returns to the public plan page automatically.
 - `/p/[code]/manage`: legacy route that points users back to the public plan page.
 - `/p/[code]/result`: shared team result page that renders one recommended city plus exactly “省钱方案” and “省时方案” from persisted scheme routes only after completion. Pending, collecting, cooling, calculating, validating, incomplete, and failed states show bounded progress, retry, or diagnostic guidance without result cards.

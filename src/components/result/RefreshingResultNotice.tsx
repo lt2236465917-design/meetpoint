@@ -125,9 +125,9 @@ export function getRunProgressMessage(progress: PublicRunProgress, now = new Dat
     case "awaiting_host_confirmation":
       return "替代城市正在等待发起人确认，共享结果暂不变更";
     case "incomplete":
-      return "有几位朋友的票价这次没查全，所以先不出结论。再算一次试试。";
+      return "有几位朋友的票价没查全，过一会再试一次";
     case "failed":
-      return "这次没算成，回计划页再试一次。如果反复失败，把下面这串编号发给发起人。";
+      return "这次没安排成，稍后再试一次。如果反复失败，把下面这串编号发给发起人。";
     case "completed":
       return "选好了！去看看这次在哪儿见";
   }
