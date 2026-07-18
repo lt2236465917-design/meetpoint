@@ -40,7 +40,7 @@ The approved product and Multi-Agent architecture is documented separately in `d
 | `/api/plans/[code]/previews` | `POST` | Create a private alternative run restricted to one canonical city. | `x-participant-token` |
 | `/api/plans/[code]/previews/[runId]` | `GET` | Read private progress/result data; unauthorized callers receive 404. | Requesting `x-participant-token` or `x-host-token` |
 | `/api/plans/[code]/previews/[runId]/confirm` | `POST` | Confirm the exact approved proposal and atomically replace the current shared result. | `x-host-token` only |
-| `/api/cities/search` | `GET` | Search local city data first, then Amap-backed city-level matches. | None |
+| `/api/cities/search` | `GET` | Merge local hub hits with Amap-backed prefecture-level matches for departure search. | None |
 
 ## Data Flow
 
@@ -57,7 +57,7 @@ In fallback mode, the same logical records are kept in process memory instead of
 
 ## External Provider Boundary
 
-1. City search returns built-in-library results immediately. On a local miss, the server calls Amap input tips with a 3-second limit, validates the narrow response, and returns normalized prefecture-level or municipality city results. Amap failures, invalid responses, missing keys, and non-city places return no remote selectable city.
+1. City search merges built-in hub library hits with Amap input tips (3-second limit): local matches first, then normalized prefecture-level or municipality Amap results (deduped). Amap failures, invalid responses, missing keys, and non-city places omit remote rows without blocking local hits.
 2. `POST /v1/search` accepts a normalized `departureDate` and returns real options with stable gateway-issued `quoteId` values, nullable upstream-native `providerQuoteId`, response `traceId`, and query timestamp. Stable error responses include `traceId` and nullable `retryAfterMs`; only rate-limited responses may carry a non-null retry delay.
 3. `services/travel-provider-gateway/` owns FlyAI credentials and CLI execution. Its HTTP boundary is `GET /healthz` and bearer-authenticated `POST /v1/search`; requests and responses are strict Zod schemas. `/healthz` proves only process reachability, never supplier quota, risk-control clearance, or real-ticket availability.
 4. The gateway uses argument-array `execFile` calls with shell execution disabled, a 12-second provider timeout, a five-minute route-facts cache, and global FIFO concurrency limited to one supplier call. Cache misses for the same normalized route key share one in-flight provider call. Timeout, unavailable, and upstream-unavailable failures retry once; a rate-limit failure never retries immediately, instead imposing a 5-second global cooldown and escalating the next cooldown to 15 seconds if the first post-cooldown supplier call is also rate limited. It classifies FlyAI CLI failures into stable no-route, no-ticket, rate-limit, upstream-unavailable, CLI-failed, timeout, unavailable, and invalid-response errors without returning raw provider output; FlyAI/Fliggy 403 risk-control rejections are treated as rate-limit failures. Only the default FlyAI path writes the server-only `flyai_diagnostic` event, containing a hashed route fingerprint, mode, outcome, field-name arrays, item counts, dropped categories, and CLI error code; it never contains provider text, ticket facts, city names, identities, or secrets and is not an HTTP, cache, or database contract. It does not receive participant identity, generate candidates, select routes, score cities, call DeepSeek, or persist plans.
@@ -69,10 +69,12 @@ In fallback mode, the same logical records are kept in process memory instead of
 
 | Module | Responsibility |
 | --- | --- |
-| `src/components/home/HomeHero.tsx` | Product `/` train-window hero: scenic video, train overlay, text-shadow copy, glass CTA to `/create`. |
-| `src/lib/ui/scenic-videos.ts` | Shared CloudFront scenic clip catalog for home + phase-4 peaks. |
+| `src/components/home/HomeHero.tsx` | Product `/` train-window hero: scenic video, train overlay, text-shadow copy, glass CTA to `/create`; persists/hydrates scene index via `meetpoint:scenic-scene`. |
+| `src/lib/ui/scenic-videos.ts` | Shared CloudFront scenic clip catalog for home, shell scenic, and phase-4 peaks. |
+| `src/lib/ui/scenic-preference.ts` | Read/write `meetpoint:scenic-scene` so plan/result/records shell scenic follows the home scene. |
+| `src/components/layout/ShellScenicBackdrop.tsx` | Optional muted low-opacity shell video + scrim; reduced-motion/error falls back to deepened canvas. |
 | `src/components/result/PeakScenicAccent.tsx` | Light muted looping scenic accent for wait/reveal peaks only; reduced-motion falls back to `.scenic-fallback`. |
-| `src/components/layout/ResponsiveShell.tsx` | Shared page shell: cold scenic-gradient canvas via `.atmosphere-*` tokens, glass back/header/footer; used by create/join/plan/result/records. Fluid adaptive `max-w-2xl` content width — no fake phone chrome. Create/join: no looping video. Approved next: optional muted shell scenic on plan/result/records only (`docs/superpowers/specs/2026-07-18-inner-atmosphere-meetup-copy-design.md`). |
+| `src/components/layout/ResponsiveShell.tsx` | Shared page shell: cold scenic-gradient canvas via `.atmosphere-*` tokens, glass back/header/footer; used by create/join/plan/result/records. Fluid adaptive `max-w-2xl` content width — no fake phone chrome. Create/join: static deepen, no looping video. Plan/result/records: optional muted shell scenic under a dark scrim (`docs/superpowers/specs/2026-07-18-inner-atmosphere-meetup-copy-design.md`). |
 | `src/app/globals.css` | Home hero tokens (`.readable-*`, `.hero-cta`, `.scenic-fallback`) plus shared atmosphere tokens (`.atmosphere-shell/canvas/panel/field/cta/ghost/notice`, `.font-display` / `.font-sans-sc`). |
 | `src/components/plan/PublicPlanContent.tsx` | Client public-plan content that keeps participant status fresh by polling the read-plan API. Single StatusLane `.atmosphere-panel`: status band + one state-driven primary CTA + light `已填写` list (no footer status echo); see `docs/superpowers/specs/2026-07-17-plan-result-ia-design.md`. |
 | `src/components/plan/JoinParticipantForm.tsx` | Participant submission form with labeled controls and a post-submit return action. |
@@ -81,7 +83,7 @@ In fallback mode, the same logical records are kept in process memory instead of
 | `src/components/result/RefreshingResultNotice.tsx` | Chinese progress, cooldown, retry, and diagnostic feedback with atmosphere ghost/muted chrome; nonterminal wait wraps `PeakScenicAccent`; for nonterminal automatic runs, it posts one bounded authenticated advance before refreshing when a local participant token is available. |
 | `src/components/result/AlternativeCityFlow.tsx` | Mobile-first city search, private progress/result display, and host-only confirmation action. |
 | `src/lib/city/candidate-generator.ts` | Deterministic candidate-city generation from participant cities and host controls. |
-| `src/lib/city/amap-client.ts`, `src/lib/city/city-provider.ts` | Local hub search plus Amap prefecture validation for selectable **departure** cities; non-city remote places discarded. Meeting candidates stay the hub `CITIES` library. Approved next: merge local+Amap results instead of local-only short-circuit (`2026-07-18-inner-atmosphere-meetup-copy-design.md`). |
+| `src/lib/city/amap-client.ts`, `src/lib/city/city-provider.ts` | Merged local hub + Amap prefecture results for selectable **departure** cities; non-city remote places discarded. Meeting candidates stay the hub `CITIES` library (`2026-07-18-inner-atmosphere-meetup-copy-design.md`). |
 | `src/lib/fallback/mvp-store.ts` | In-memory local fallback persistence with target run states and publication guards; tests can seed verified quotes, while the running app cannot query suppliers in this mode. |
 | `src/lib/agent/run-orchestrator.ts` | Bounded durable-run state machine, persisted advance lease, quote coverage gate, agent review, and guarded publication; dispatches to the equivalent fallback state machine when Supabase is absent. |
 | `src/lib/recommendation/repository.ts` | Server-side persistence and guarded RPC boundary; it does not make policy decisions. |
@@ -120,8 +122,8 @@ In fallback mode, the same logical records are kept in process memory instead of
 
 ## UI Boundaries
 
-- Keep user-facing copy in Chinese on both mobile and desktop. Flow/marketing tone and visual phases follow `docs/superpowers/specs/2026-07-17-ui-copy-and-visual-direction.md` (phases 1–4 + adaptive shell shipped). Plan/result IA: `docs/superpowers/specs/2026-07-17-plan-result-ia-design.md`. Approved next UI continuity/copy: `docs/superpowers/specs/2026-07-18-inner-atmosphere-meetup-copy-design.md`.
-- Create/join/plan/result/records use `ResponsiveShell` as a single-column adaptive workflow (fluid `max-w-2xl`, no fake phone chrome). `/` is a full-bleed zero-scroll train-window hero with “最近记录” → `/records`. Create/join: no looping scenic video. Phase 4 `PeakScenicAccent` on wait/reveal peaks. Approved next: muted shell scenic on plan/result/records only.
+- Keep user-facing copy in Chinese on both mobile and desktop. Flow/marketing tone and visual phases follow `docs/superpowers/specs/2026-07-17-ui-copy-and-visual-direction.md` (phases 1–4 + adaptive shell + inner atmosphere/meetup copy shipped). Plan/result IA: `docs/superpowers/specs/2026-07-17-plan-result-ia-design.md`. Shell scenic + meetup CTA: `docs/superpowers/specs/2026-07-18-inner-atmosphere-meetup-copy-design.md`.
+- Create/join/plan/result/records use `ResponsiveShell` as a single-column adaptive workflow (fluid `max-w-2xl`, no fake phone chrome). `/` is a full-bleed zero-scroll train-window hero with “最近记录” → `/records`. Create/join: no looping scenic video (static deepen). Plan/result/records: muted shell scenic following `meetpoint:scenic-scene`. Phase 4 `PeakScenicAccent` on wait/reveal peaks. Host plan CTA:「开始见面」/「见面安排中」.
 - `ResponsiveShell` remains the default shell for create/join/plan/result/records (dark scenic interior, glass panels/CTAs). Content scrolls inside the shell when needed.
 - Main flow pages use the `ResponsiveShell` top-left back action instead of mixing back navigation into bottom business actions.
 - City combobox candidates render in normal document flow and disappear after a city is selected so transport-mode controls remain reachable.

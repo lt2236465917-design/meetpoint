@@ -10,12 +10,12 @@ Approved product-facing direction for Chinese copy and home-hero visual language
 - Phase 3 (plan/result IA): **shipped** (StatusLane on public plan + glass schemes on shared result; see `2026-07-17-plan-result-ia-design.md`).
 - Phase 4 (optional wait/reveal video): **shipped** — light muted looping scenic video on calculation-wait (`RefreshingResultNotice` nonterminal) and city-reveal (`SharedRecommendation`); `prefers-reduced-motion` falls back to scenic gradient.
 - Adaptive shell (approved 2026-07-17): **shipped** — no fake H5 phone frame; true adaptive layout; home opening zero-scroll; 最近见面记录 on `/records` — see `2026-07-17-desktop-adaptive-shell-design.md`.
-- **Approved next (not shipped):** inner atmosphere continuity + meetup copy — create/join static deepen (still no form video); plan/result/records muted shell scenic following home scene; host CTA「开始见面」; departure prefecture search merge; create participant menu opens upward. See `2026-07-18-inner-atmosphere-meetup-copy-design.md` and plan `../plans/2026-07-18-inner-atmosphere-meetup-copy.md`. That design **supersedes** the older “plan/shell stay video-free” and “算出见面城市” host-CTA wording below once shipped.
+- Inner atmosphere continuity + meetup copy: **shipped** 2026-07-18 — create/join static deepen (still no form video); plan/result/records muted shell scenic following home scene (`meetpoint:scenic-scene`); host CTA「开始见面」/「见面安排中」; departure prefecture search merge; create participant menu opens upward. See `2026-07-18-inner-atmosphere-meetup-copy-design.md`. This **supersedes** the older “plan/shell stay video-free” and “算出见面城市” host-CTA wording.
 
 ## Copy principles
 
 - Flow and marketing surfaces (home, create, join, wait-for-friends) speak as **friends about to meet**, not as a fare-lookup tool.
-- Avoid primary CTA language that frames the product as a calculator (`开算`, `开始计算`, `算出见面城市`, `发起计算` as the hero/host action). Prefer meeting-outcome language (`发起见面计划`; approved host run CTA「开始见面」/「见面安排中」per `2026-07-18-inner-atmosphere-meetup-copy-design.md`).
+- Avoid primary CTA language that frames the product as a calculator (`开算`, `开始计算`, `算出见面城市`, `发起计算` as the hero/host action). Prefer meeting-outcome language (`发起见面计划`; host run CTA「开始见面」/「见面安排中」per `2026-07-18-inner-atmosphere-meetup-copy-design.md`).
 - Result and progress surfaces stay trustworthy: real fares, no estimates, incomplete coverage does not publish. Translate engineering jargon for users (`供应商限流` → human wording; quote fingerprints stay folded under data-source disclosure).
 - Prefer `朋友` over `全员` in user-facing prose when the audience is participants, not operators.
 - Recommended Chinese explanations must stay inside `SAFE_EXPLANATIONS_ZH` in `src/lib/agent/prompts.ts`. Changing them requires updating the whitelist, model prompt example, fallback store, and agent tests together.
@@ -46,7 +46,7 @@ Shared decisions:
 - Primary CTA: semi-transparent glass pill, slightly shorter than full content column (`~18–19.5rem`), larger white label text
 - Do **not** put looping scenic video behind **create/join** form pages; reuse tokens (type, glass, atmosphere) and static deepened canvas instead
 - Phase 4: light scenic video at emotional peaks (calculation wait, result reveal) via `PeakScenicAccent` (shipped)
-- Approved next: plan/result/records may add muted full-shell scenic under a dark scrim (`2026-07-18-inner-atmosphere-meetup-copy-design.md`) — still never behind create/join forms
+- Plan/result/records: muted full-shell scenic under a dark scrim (`2026-07-18-inner-atmosphere-meetup-copy-design.md`, shipped) — still never behind create/join forms
 
 ## Phase 4 — Wait / reveal light scenic video
 
@@ -82,7 +82,8 @@ Single calm scene (`静水`), muted + loop + `playsInline`, soft opacity + gradi
 1. ~~Port approved home hero into product `/` (Meetpoint copy + train/scenery; CTA → `/create`)~~ **done**
 2. Extract design tokens into `ResponsiveShell` / globals so create/join/plan do not feel like a different product — **done (Approach A)**
 3. ~~Interaction/IA pass on plan and result pages (less card stacking; clearer “who’s missing / ready / result”)~~ **done** (StatusLane + glass schemes; `2026-07-17-plan-result-ia-design.md`)
-4. ~~Optional light video only on wait / reveal moments~~ **done** (`PeakScenicAccent` + shared `SCENIC_VIDEOS`; never behind create/join forms; plan/result/records shell scenic is a separate approved next pass)
+4. ~~Optional light video only on wait / reveal moments~~ **done** (`PeakScenicAccent` + shared `SCENIC_VIDEOS`; never behind create/join forms)
+5. ~~Inner atmosphere continuity + meetup copy~~ **done** (plan/result/records shell scenic; create/join static deepen;「开始见面」; departure search merge; upward participant menu — `2026-07-18-inner-atmosphere-meetup-copy-design.md`)
 
 ## Phase 2 — Shared atmosphere tokens (Approach A)
 

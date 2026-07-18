@@ -2,7 +2,7 @@
 
 ## Status
 
-**Approved design** (conversation 2026-07-18). Not yet implemented.
+**Shipped** 2026-07-18 (conversation design + Subagent-Driven Tasks 1–7).
 
 Extends `2026-07-17-ui-copy-and-visual-direction.md` and `2026-07-17-desktop-adaptive-shell-design.md`. Does **not** reopen alternatives / manage IA.
 
@@ -70,7 +70,7 @@ Extends `2026-07-17-ui-copy-and-visual-direction.md` and `2026-07-17-desktop-ada
 | --- | --- |
 | Inner form/plan shells: no scenic video | **Create / join:** no looping video. **Plan / result / records:** allow muted low-opacity looping video under a dark scrim |
 
-Update `AGENTS.md`, `2026-07-17-ui-copy-and-visual-direction.md`, and `docs/architecture.md` when implementing so authority docs match shipped behavior.
+Authority docs (`AGENTS.md`, `2026-07-17-ui-copy-and-visual-direction.md`, `docs/architecture.md`, `docs/superpowers/README.md`) match this shipped redline.
 
 ---
 

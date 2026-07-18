@@ -77,5 +77,26 @@ Branch: `task-1-scaffold` (uncommitted product UI work may sit on this branch)
 - Phase 3 plan/result IA: **shipped** 2026-07-17 (StatusLane on `PublicPlanContent`; glass `SharedRecommendation` / `SchemeCard` / `RefreshingResultNotice`). Spec: `docs/superpowers/specs/2026-07-17-plan-result-ia-design.md`.
 - Phase 4 optional wait/reveal video: **shipped** (`PeakScenicAccent` on wait/reveal peaks only).
 - Adaptive shell (去画框): **shipped** 2026-07-18 — full-bleed zero-scroll `/`, `ResponsiveShell` `max-w-2xl`, `/records` for 最近见面记录; AGENTS/architecture/integration-guide/README collapsed to shipped wording (neat-freak 2026-07-18). Spec: `docs/superpowers/specs/2026-07-17-desktop-adaptive-shell-design.md`. Gates: lint / 343 tests / build green. Desktop+mobile visual smoke done 2026-07-18; Phase 1–4 + adaptive shell still **uncommitted** on `task-1-scaffold`.
-- Inner atmosphere + meetup copy: **approved design + plan** 2026-07-18, **not shipped**. Spec: `docs/superpowers/specs/2026-07-18-inner-atmosphere-meetup-copy-design.md`. Plan (Tasks 1–7): `docs/superpowers/plans/2026-07-18-inner-atmosphere-meetup-copy.md`. Execution mode: Subagent-Driven. Alternatives/manage deep IA still out of scope.
-- Recovery Next (product UI): (1) Subagent-Driven execute plan Tasks 1–7 (scenic preference → shell scenic → static deepen →「开始见面」copy → city search merge → upward participant dropdown → docs + lint/test/build); (2) optional commit of prior uncommitted adaptive-shell bundle before or with this pass; (3) alternatives/manage remain shell-only unless a later IA pass is approved.
+- Inner atmosphere + meetup copy: **shipped** 2026-07-18. Spec: `docs/superpowers/specs/2026-07-18-inner-atmosphere-meetup-copy-design.md`. Plan (Tasks 1–7): `docs/superpowers/plans/2026-07-18-inner-atmosphere-meetup-copy.md`. Alternatives/manage deep IA still out of scope.
+- Recovery Next (product UI): alternatives/manage remain shell-only unless a later IA pass is approved.
+
+# Inner Atmosphere + Meetup Copy SDD Progress
+
+Base: `a2d6908` (Phase 1–4 + adaptive shell committed)
+Branch: `task-1-scaffold`
+Plan: `docs/superpowers/plans/2026-07-18-inner-atmosphere-meetup-copy.md`
+
+- Preflight: working in place on feature branch; baseline commit `a2d6908`.
+- Task 1: in progress
+- Task 1: complete (commits a2d6908..4e573a4, review clean; Minors for final: SSR/write-clamp test gaps, Node localStorage stubs, null videoRef activate path)
+- Task 2: in progress
+- Task 2: complete (commits 4e573a4..2d82a2c, review clean; Minors for final: stale globals no-video comment, alternatives/manage scenic source assert gap, no reduced-motion/onError component test)
+- Task 3: in progress
+- Task 3: complete (commits 2d82a2c..f17fe0d, review clean; Minors for final: stale #3a4a5c global assert, shared canvas under scenic shells)
+- Task 4: in progress
+- Task 4: complete (commits f17fe0d..7e1681e, review clean; Minors for final: in-flight CTA assert gap; RefreshingResultNotice still has 再算一次试试)
+- Task 5: in progress
+- Task 5: complete (commits 7e1681e..d1fdba6, review clean; Minors for final: empty-hint source-only, hub amap dedupe negative assert)
+- Task 6: in progress
+- Task 6: complete (commits d1fdba6..35bae2e, review clean; Minor: dismiss source-only)
+- Task 7: complete — authority docs synced to shipped wording; lint/test/build green; manual smoke deferred to controller/human (no browser evidence in this task).
