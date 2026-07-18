@@ -87,13 +87,13 @@ export function ResultContent({
       }
     >
       <div className="space-y-4">
-        {!progress ? <Notice>还没有计算结果。</Notice> : null}
+        {!progress ? <Notice>还没有见面结果</Notice> : null}
         {progress && !completed ? (
           <RefreshingResultNotice code={code} progress={progress} now={now} />
         ) : null}
         {completed && result ? <SharedRecommendation result={result} /> : null}
         {completed && !result ? (
-          <Notice>结果数据不完整，请返回计划页重新计算。</Notice>
+          <Notice>结果不完整，请回计划页再点一次「开始见面」</Notice>
         ) : null}
       </div>
     </ResponsiveShell>

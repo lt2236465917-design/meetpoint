@@ -47,7 +47,9 @@ describe("PublicPlanContent", () => {
       }),
     );
 
-    expect(html).toContain("还差 1 位朋友。人齐之后，填过的人都能发起计算。");
+    expect(html).toContain(
+      "还差 1 位朋友。人齐之后，填过的人都能点「开始见面」。",
+    );
     expect(html).not.toContain("已填写 1 人");
     expect(html).not.toContain("就等一声开算了");
     expect(html).not.toContain("暂无结果");
@@ -77,9 +79,13 @@ describe("PublicPlanContent", () => {
       }),
     );
 
-    expect(html).toContain("还差 1 位朋友。人齐之后，填过的人都能发起计算。");
+    expect(html).toContain(
+      "还差 1 位朋友。人齐之后，填过的人都能点「开始见面」。",
+    );
     expect(html).toContain("加入这场见面");
     expect(html).not.toContain("算出见面城市");
+    expect(html).not.toContain("发起计算");
+    expect(html).not.toContain("开算");
   });
 
   it("does not render the result action as a link before a run exists", () => {
@@ -179,7 +185,7 @@ describe("PublicPlanContent", () => {
     expect(html).not.toContain("省钱方案");
   });
 
-  it("shows a direct calculation entry for local participants when participants are full", () => {
+  it("shows a direct meetup entry for local participants when participants are full", () => {
     const html = renderToStaticMarkup(
       createElement(PublicPlanContent, {
         code: "ABC123",
@@ -199,9 +205,39 @@ describe("PublicPlanContent", () => {
       }),
     );
 
-    expect(html).toContain("位朋友都填好了，可以开始算这次去哪座城");
-    expect(html).toContain("算出见面城市");
+    expect(html).toContain("人齐了！点一下，看看这次去哪座城见。");
+    expect(html).toContain("开始见面");
+    expect(html).not.toContain("开算");
+    expect(html).not.toContain("发起计算");
+    expect(html).not.toContain("算出见面城市");
     expect(html).not.toContain("加入这场见面");
     expect(html).not.toContain("发起人还没有开始计算。");
+  });
+
+  it("tells waiting devices to wait for a filled-in friend when full", () => {
+    const html = renderToStaticMarkup(
+      createElement(PublicPlanContent, {
+        code: "ABC123",
+        initialData: {
+          ...planData,
+          participants: [
+            ...planData.participants,
+            {
+              id: "participant-2",
+              name: "韩梅梅",
+              departure_city_name: "上海",
+              accepted_modes: ["flight" as const],
+            },
+          ],
+        },
+      }),
+    );
+
+    expect(html).toContain(
+      "人齐了，等一位填过资料的朋友来点「开始见面」。",
+    );
+    expect(html).not.toContain("开算");
+    expect(html).not.toContain("发起计算");
+    expect(html).not.toContain("算出见面城市");
   });
 });

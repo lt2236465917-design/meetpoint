@@ -94,7 +94,7 @@ export default function CreatePlanPage() {
       backHref="/"
       aside={
         <p className="text-center text-xs leading-5">
-          建好后把链接发到群里，人到齐就能开算。
+          建好后把链接发到群里，人到齐就能开始见面。
         </p>
       }
     >

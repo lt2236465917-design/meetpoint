@@ -29,6 +29,10 @@ describe("CreatePlanPage native input controls", () => {
     expect(pageSource).toContain('name="participantLimit"');
     expect(pageSource).not.toContain("<select");
     expect(pageSource).not.toContain('type="number"');
+    expect(pageSource).toContain(
+      "建好后把链接发到群里，人到齐就能开始见面。",
+    );
+    expect(pageSource).not.toContain("开算");
   });
 
   it("expands the browser's own picker indicator across the input", () => {

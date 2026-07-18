@@ -65,7 +65,6 @@ export function PublicPlanContent({
     hasCompletedResult,
     canCalculateHere,
     participantsFull,
-    participantCount: data.participants.length,
     missingParticipants,
   });
 
@@ -139,7 +138,7 @@ export function PublicPlanContent({
       const json = await response.json().catch(() => ({}));
       if (!response.ok) {
         setCalculateMessage(
-          getApiErrorMessage(json.error, "计算失败，请稍后重试"),
+          getApiErrorMessage(json.error, "这次没安排成，稍后再试一次"),
         );
         return;
       }
@@ -147,7 +146,7 @@ export function PublicPlanContent({
       setCalculateMessage("正在打开结果页。");
       window.location.href = `/p/${code}/result`;
     } catch {
-      setCalculateMessage("计算失败，请稍后重试");
+      setCalculateMessage("这次没安排成，稍后再试一次");
     } finally {
       setCalculating(false);
     }
@@ -177,7 +176,7 @@ export function PublicPlanContent({
               onClick={calculate}
               type="button"
             >
-              {calculating ? "计算中" : "算出见面城市"}
+              {calculating ? "见面安排中" : "开始见面"}
             </button>
           ) : null}
 
@@ -226,7 +225,6 @@ function resolveStatusMessage({
   hasCompletedResult,
   canCalculateHere,
   participantsFull,
-  participantCount,
   missingParticipants,
 }: {
   latestRun: PublicRunProgress | null;
@@ -234,7 +232,6 @@ function resolveStatusMessage({
   hasCompletedResult: boolean;
   canCalculateHere: boolean;
   participantsFull: boolean;
-  participantCount: number;
   missingParticipants: number;
 }) {
   if (isCalculatingResult && latestRun) {
@@ -247,12 +244,12 @@ function resolveStatusMessage({
     return getRunProgressMessage(latestRun);
   }
   if (canCalculateHere) {
-    return `人齐了！${participantCount} 位朋友都填好了，可以开始算这次去哪座城。`;
+    return "人齐了！点一下，看看这次去哪座城见。";
   }
   if (participantsFull) {
-    return "人齐了，等一位填写过的朋友来发起计算。";
+    return "人齐了，等一位填过资料的朋友来点「开始见面」。";
   }
-  return `还差 ${missingParticipants} 位朋友。人齐之后，填过的人都能发起计算。`;
+  return `还差 ${missingParticipants} 位朋友。人齐之后，填过的人都能点「开始见面」。`;
 }
 
 function readLocalParticipantEditToken(code: string): string {

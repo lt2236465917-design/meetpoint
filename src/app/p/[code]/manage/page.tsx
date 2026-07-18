@@ -21,7 +21,7 @@ export default function ManagePage({
       <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
         <h2 className="font-medium text-gray-950">去计划页继续</h2>
         <p className="mt-3 text-sm leading-6 text-gray-600">
-          参与人数填满后，已填写过这份计划的人可以直接在计划页开始计算。
+          参与人数填满后，已填写过这份计划的人可以直接在计划页点「开始见面」。
         </p>
         <Link
           className="mt-4 block rounded-lg bg-black py-3 text-center font-medium text-white"

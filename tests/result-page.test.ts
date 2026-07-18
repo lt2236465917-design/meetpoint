@@ -1,4 +1,6 @@
 import { createElement } from "react";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { ResultContent } from "@/app/p/[code]/result/page";
@@ -133,7 +135,20 @@ describe("result page public states", () => {
       }),
     );
 
-    expect(html).toContain("还没有计算结果");
+    expect(html).toContain("还没有见面结果");
+    expect(html).not.toContain("还没有计算结果");
     expect(html).not.toContain("省钱方案");
+  });
+
+  it("asks users to restart meetup from the plan when the result is incomplete", () => {
+    const pageSource = readFileSync(
+      path.join(process.cwd(), "src/app/p/[code]/result/page.tsx"),
+      "utf8",
+    );
+
+    expect(pageSource).toContain(
+      "结果不完整，请回计划页再点一次「开始见面」",
+    );
+    expect(pageSource).not.toContain("请返回计划页重新计算");
   });
 });
