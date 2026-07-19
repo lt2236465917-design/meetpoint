@@ -5,7 +5,7 @@ import { searchAmapCities } from "@/lib/city/amap-client";
 export type CitySearchResult = Pick<City, "code" | "name" | "province">;
 
 function normalizeCityName(name: string) {
-  return name.trim().replace(/市$/, "");
+  return name.trim().replace(/(特别行政区|市)$/, "");
 }
 
 function normalizeProvinceName(district: string) {
@@ -13,10 +13,6 @@ function normalizeProvinceName(district: string) {
     .trim()
     .replace(/^(中国)?/, "")
     .replace(/(省|市|自治区|壮族自治区|回族自治区|维吾尔自治区|特别行政区).*$/, "");
-}
-
-function isPrefectureLevelAdcode(adcode: string) {
-  return /^\d{4}00$/.test(adcode);
 }
 
 export async function searchCities(query: string): Promise<CitySearchResult[]> {
@@ -47,15 +43,13 @@ export async function searchCities(query: string): Promise<CitySearchResult[]> {
       continue;
     }
 
-    if (!candidate.adcode || !isPrefectureLevelAdcode(candidate.adcode)) continue;
-
     const code = `amap-${candidate.adcode}`;
     if (seenCodes.has(code) || seenNames.has(cityName)) continue;
 
     merged.push({
       code,
       name: cityName,
-      province: normalizeProvinceName(candidate.district) || cityName,
+      province: normalizeProvinceName(candidate.district) || "中国",
     });
     seenCodes.add(code);
     seenNames.add(cityName);

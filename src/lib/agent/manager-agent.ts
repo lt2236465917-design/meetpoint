@@ -12,7 +12,10 @@ const participantSchema = z.object({
   departureCityName: z.string().trim().min(1),
   acceptedModes: z.array(transportModeSchema).min(1),
 }).strict().superRefine((participant, context) => {
-  if (!findCityByCode(participant.departureCityCode)) {
+  if (!(
+    findCityByCode(participant.departureCityCode)
+    || /^amap-\d{6}$/.test(participant.departureCityCode)
+  )) {
     context.addIssue({ code: "custom", path: ["departureCityCode"], message: "unknown city" });
   }
 });

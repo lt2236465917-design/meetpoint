@@ -50,9 +50,9 @@ function compareStrings(left: readonly string[], right: readonly string[]): numb
 }
 
 function savingOrder(left: VerifiedQuote, right: VerifiedQuote): number {
-  return compareNumber(left.transferCount, right.transferCount)
+  return compareNumber(left.priceCny, right.priceCny)
+    || compareNumber(left.transferCount, right.transferCount)
     || compareNumber(left.durationMinutes, right.durationMinutes)
-    || compareNumber(left.priceCny, right.priceCny)
     || compareString(left.quoteId, right.quoteId);
 }
 
@@ -74,10 +74,7 @@ export function buildSavingScheme(
     );
     if (eligible.length === 0) return null;
 
-    const minimumFare = Math.min(...eligible.map((quote) => quote.priceCny));
-    const selected = eligible
-      .filter((quote) => quote.priceCny * 10 <= minimumFare * 11)
-      .sort(savingOrder)[0];
+    const selected = eligible.sort(savingOrder)[0];
     if (!selected) return null;
 
     quoteIdsByParticipant[participantId] = selected.quoteId;

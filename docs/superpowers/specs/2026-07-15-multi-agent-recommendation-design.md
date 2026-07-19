@@ -54,6 +54,8 @@ The product remains a structured mobile-first H5 form. Natural-language plan inp
 
 The Calculation Agent owns route comparison, scheme construction, and the final city proposal. It may use only verified quote records and must cite every selected `quote_id`. Deterministic tools independently verify arithmetic, dates, evidence, and publication invariants.
 
+Policy version `2026-07-19.v2` changes saving selection from the former 110% convenience band to the exact lowest verified fare. Existing published results remain historical. New Supabase-backed runs use v2 only after `202607190001_recommendation_policy_v2.sql` is applied to that environment; local code and schema files must not be described as remotely deployed before that migration succeeds.
+
 ### Direct-first eligibility
 
 For each participant, city, and scheme:
@@ -64,12 +66,11 @@ For each participant, city, and scheme:
 
 ### Saving scheme
 
-For each participant, find the lowest fare inside the direct-first eligible set. Admit routes priced at no more than 110% of that minimum, then choose by:
+For each participant, choose the lowest fare inside the direct-first eligible set. This includes a verified direct normal-train quote whenever that mode is accepted and it is cheaper than the available direct high-speed rail or flight quotes. Resolve equal-fare ties by:
 
 1. fewer transfers;
 2. shorter duration;
-3. lower fare;
-4. stable quote identifier as the final reproducible tie-break.
+3. stable quote identifier as the final reproducible tie-break.
 
 The team saving scheme consists of the selected route for every participant. Its fare is the exact sum returned by the arithmetic validator.
 
@@ -221,7 +222,7 @@ Core system-prompt constraints:
 - never estimate, infer, or edit prices and schedules;
 - require selected arrival-date equality in China local time;
 - require complete participant coverage;
-- apply direct-first and the explicit 110%/130% policies;
+- apply direct-first, exact-lowest-fare saving selection, and the explicit 130% fast-scheme cap;
 - cite every selected quote ID;
 - call validators for arithmetic and evidence;
 - return `incomplete` instead of fabricating a result.
@@ -271,7 +272,7 @@ Recommendation cards and the shared result entry appear only for a `completed` r
 1. The create form no longer asks for a target arrival time and submits the arrival date contract.
 2. Query-date expansion and China-local arrival-date filtering are covered by automated tests for flights, high-speed rail, normal trains, and overnight journeys.
 3. A completed result contains one city and exactly two schemes.
-4. Saving-policy tests cover the 110% range, direct-first behavior, transfers, duration, and stable ties.
+4. Saving-policy tests cover exact lowest fare (including direct normal train), direct-first behavior, equal-fare transfers/duration, and stable ties.
 5. Fast-policy tests cover the 130% team cap, duration, latest arrival, transfers, and stable ties.
 6. Missing or estimated quotes can never pass publication guardrails.
 7. Calculation Agent outputs are strict, evidence-linked, and rejected when they violate policy.

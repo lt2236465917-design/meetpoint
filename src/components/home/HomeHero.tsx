@@ -247,10 +247,13 @@ export function HomeHero() {
                   : "opacity-0"
               }`}
               src={video.src}
-              preload="auto"
+              preload={activeVideo === index ? "auto" : "metadata"}
               autoPlay={activeVideo === index}
               muted
               playsInline
+              onCanPlay={() => {
+                if (index === activeVideo) setSceneReady(true);
+              }}
               onPlaying={() => {
                 if (index === activeVideo) setSceneReady(true);
               }}

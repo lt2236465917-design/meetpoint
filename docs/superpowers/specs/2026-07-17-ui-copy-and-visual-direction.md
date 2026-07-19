@@ -10,7 +10,7 @@ Approved product-facing direction for Chinese copy and home-hero visual language
 - Phase 3 (plan/result IA): **shipped** (StatusLane on public plan + glass schemes on shared result; see `2026-07-17-plan-result-ia-design.md`).
 - Phase 4 (optional wait/reveal video): **shipped** — light muted looping scenic video on calculation-wait (`RefreshingResultNotice` nonterminal) and city-reveal (`SharedRecommendation`); `prefers-reduced-motion` falls back to scenic gradient.
 - Adaptive shell (approved 2026-07-17): **shipped** — no fake H5 phone frame; true adaptive layout; home opening zero-scroll; 最近见面记录 on `/records` — see `2026-07-17-desktop-adaptive-shell-design.md`.
-- Inner atmosphere continuity + meetup copy: **shipped** 2026-07-18 — create/join static deepen (still no form video); plan/result/records muted shell scenic following home scene (`meetpoint:scenic-scene`); host CTA「开始见面」/「见面安排中」; departure prefecture search merge; create participant menu opens upward. Home hero brand mark: `meetpoint`. See `2026-07-18-inner-atmosphere-meetup-copy-design.md`. This **supersedes** the older “plan/shell stay video-free” and “算出见面城市” host-CTA wording.
+- Inner atmosphere continuity + meetup copy: **shipped** 2026-07-18, with 2026-07-19 smoke hardening — home continuously cycles all four clips; each functional route uses one root-mounted deterministic clip under the shared scrim; host CTA「开始见面」/「见面安排中」; departure prefecture search hardening; create participant menu expands inline without covering the CTA. Home hero brand mark: `meetpoint`. See `2026-07-18-inner-atmosphere-meetup-copy-design.md`. This **supersedes** older “plan/shell stay video-free”, “create/join static only”, and “算出见面城市” wording.
 
 ## Copy principles
 
@@ -44,9 +44,9 @@ Shared decisions:
 - Metaphor: train window = on the way to meet friends
 - Readability: prefer **text-shadow** over a full-screen dark scrim (scrim kills scenery)
 - Primary CTA: semi-transparent glass pill, slightly shorter than full content column (`~18–19.5rem`), larger white label text
-- Do **not** put looping scenic video behind **create/join** form pages; reuse tokens (type, glass, atmosphere) and static deepened canvas instead
+- Functional pages use one route-fixed muted looping clip under the readable shell scrim; only home cycles all four clips
 - Phase 4: light scenic video at emotional peaks (calculation wait, result reveal) via `PeakScenicAccent` (shipped)
-- Plan/result/records: muted full-shell scenic under a dark scrim (`2026-07-18-inner-atmosphere-meetup-copy-design.md`, shipped) — still never behind create/join forms
+- Route-fixed shell scenic mapping: create=静水, join=静水, plan=密林, result=破晓, records=破晓, alternatives=静水, manage=密林 (`2026-07-18-inner-atmosphere-meetup-copy-design.md`)
 
 ## Phase 4 — Wait / reveal light scenic video
 
@@ -82,8 +82,8 @@ Single calm scene (`静水`), muted + loop + `playsInline`, soft opacity + gradi
 1. ~~Port approved home hero into product `/` (Meetpoint copy + train/scenery; CTA → `/create`)~~ **done**
 2. Extract design tokens into `ResponsiveShell` / globals so create/join/plan do not feel like a different product — **done (Approach A)**
 3. ~~Interaction/IA pass on plan and result pages (less card stacking; clearer “who’s missing / ready / result”)~~ **done** (StatusLane + glass schemes; `2026-07-17-plan-result-ia-design.md`)
-4. ~~Optional light video only on wait / reveal moments~~ **done** (`PeakScenicAccent` + shared `SCENIC_VIDEOS`; never behind create/join forms)
-5. ~~Inner atmosphere continuity + meetup copy~~ **done** (plan/result/records shell scenic; create/join static deepen;「开始见面」; departure search merge; upward participant menu — `2026-07-18-inner-atmosphere-meetup-copy-design.md`)
+4. ~~Optional light video only on wait / reveal moments~~ **done** (`PeakScenicAccent` + shared `SCENIC_VIDEOS`; later route-fixed shell scenic does not replace peak accents)
+5. ~~Inner atmosphere continuity + meetup copy~~ **done** (home four-clip loop; functional route-fixed shell scenic;「开始见面」; departure search merge; upward participant menu — `2026-07-18-inner-atmosphere-meetup-copy-design.md`)
 
 ## Phase 2 — Shared atmosphere tokens (Approach A)
 
@@ -91,7 +91,7 @@ Single calm scene (`静水`), muted + loop + `playsInline`, soft opacity + gradi
 
 ### Goal
 
-Create / join / public plan (and any other `ResponsiveShell` route) should feel like the same product as `/`: full-bleed dark scenic canvas, cold gray atmosphere, glass panels and CTAs, shared type stacks. **No looping scenic video** on form-heavy pages.
+Create / join / public plan (and any other `ResponsiveShell` route) should feel like the same product as `/`: full-bleed dark scenic canvas, cold gray atmosphere, glass panels and CTAs, shared type stacks. The original phase-2 static-only form constraint is superseded by the 2026-07-18 route-fixed scenic follow-up.
 
 ### Chosen approach
 

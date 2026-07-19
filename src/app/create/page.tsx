@@ -181,7 +181,7 @@ export default function CreatePlanPage() {
             </button>
             {participantLimitOpen && (
               <div
-                className="atmosphere-panel absolute bottom-full z-10 mb-2 w-full overflow-hidden rounded-lg p-1"
+                className="atmosphere-panel mt-2 w-full overflow-hidden rounded-lg p-1"
                 id="participant-limit-options"
                 role="listbox"
                 aria-labelledby="participant-limit-label"

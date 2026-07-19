@@ -2,7 +2,7 @@ import { z } from "zod";
 
 import { transportModeSchema } from "@/lib/validation/schemas";
 
-export const POLICY_VERSION = "2026-07-15.v1" as const;
+export const POLICY_VERSION = "2026-07-19.v2" as const;
 
 export const runStatusSchema = z.enum([
   "pending",
@@ -32,6 +32,7 @@ export const routeTaskSchema = z
     participantId: z.string(),
     cityCode: z.string(),
     originCityCode: z.string(),
+    originCityName: z.string().trim().min(1).optional(),
     mode: transportModeSchema,
     searchDate: z.string(),
     physicalKey: z.string(),

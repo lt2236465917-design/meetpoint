@@ -60,17 +60,21 @@ describe("directFirstEligible", () => {
 });
 
 describe("buildSavingScheme", () => {
-  it("uses the exact 110 percent boundary", () => {
+  it("selects the cheapest direct quote even when a faster quote is within 110 percent", () => {
     const scheme = buildSavingScheme(["p1"], [
-      quote("minimum", "p1", { priceCny: 100, durationMinutes: 200 }),
-      quote("boundary", "p1", { priceCny: 110, durationMinutes: 100 }),
-      quote("above", "p1", { priceCny: 111, durationMinutes: 50 }),
+      quote("normal-train", "p1", {
+        mode: "normal_train",
+        serviceName: "Z1",
+        priceCny: 100,
+        durationMinutes: 200,
+      }),
+      quote("high-speed", "p1", { priceCny: 110, durationMinutes: 100 }),
     ]);
 
     expect(scheme).toEqual({
       kind: "saving",
-      quoteIdsByParticipant: { p1: "boundary" },
-      totalFareCny: 110,
+      quoteIdsByParticipant: { p1: "normal-train" },
+      totalFareCny: 100,
     });
   });
 
@@ -85,15 +89,8 @@ describe("buildSavingScheme", () => {
     {
       name: "duration",
       quotes: [
-        quote("loser", "p1", { durationMinutes: 121, priceCny: 100 }),
-        quote("winner", "p1", { durationMinutes: 120, priceCny: 110 }),
-      ],
-    },
-    {
-      name: "fare",
-      quotes: [
-        quote("loser", "p1", { priceCny: 101 }),
-        quote("winner", "p1", { priceCny: 100 }),
+        quote("loser", "p1", { durationMinutes: 121 }),
+        quote("winner", "p1", { durationMinutes: 120 }),
       ],
     },
     {

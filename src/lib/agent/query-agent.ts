@@ -72,10 +72,11 @@ function validatedTask(value: unknown, taskId: string): StoredRouteTask {
 function gatewayRequest(task: StoredRouteTask): GatewaySearchRequest | null {
   const origin = findCityByCode(task.originCityCode);
   const destination = findCityByCode(task.cityCode);
-  if (!origin || !destination) return null;
+  const originName = origin?.name ?? task.originCityName;
+  if (!originName || !destination) return null;
   return {
-    originCityCode: origin.code,
-    originCityName: origin.name,
+    originCityCode: task.originCityCode,
+    originCityName: originName,
     destinationCityCode: destination.code,
     destinationCityName: destination.name,
     departureDate: task.searchDate,

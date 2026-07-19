@@ -56,7 +56,7 @@ function snapshot(overrides: Partial<CalculationSnapshot> = {}): CalculationSnap
     runId,
     traceId,
     proposalVersion: 1,
-    policyVersion: "2026-07-15.v1",
+    policyVersion: "2026-07-19.v2",
     arrivalDate: "2026-08-15",
     participantIds: ["p1", "p2"],
     cityInputs: [{

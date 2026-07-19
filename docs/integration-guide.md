@@ -7,7 +7,8 @@ This guide is the quick reference for running and calling the MVP locally.
 1. Install dependencies with `npm install`.
 2. Copy `.env.example` to `.env.local`.
 3. Fill Supabase variables for persistent Supabase-backed runs. Without Supabase variables, the app uses an in-memory fallback store for local smoke testing.
-4. Run the app with `npm run dev`.
+4. Before running code that changes `POLICY_VERSION`, apply pending database migrations with `npx supabase migration list`, `npx supabase db push --dry-run`, then `npx supabase db push`. Never paste the database password into chat, logs, or project files.
+5. Run the app with `npm run dev`.
 
 The same user-facing routes must remain usable on phones (shareable plan links) and on desktop. Shipped UI uses a true adaptive layout without fake phone chrome — see `docs/superpowers/specs/2026-07-17-desktop-adaptive-shell-design.md`.
 
@@ -39,7 +40,7 @@ Pre-migration `city_recommendations` and `travel_options` are historical read-on
 | `NEXT_PUBLIC_SUPABASE_URL` | Browser and server | Supabase project URL. |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Browser and server | Public anon key for browser reads. |
 | `SUPABASE_SERVICE_ROLE_KEY` | Server only | Service-role key for route handlers and calculations. |
-| `AMAP_API_KEY` | Server only | Local-miss Amap city validation for city-level selectable results. |
+| `AMAP_API_KEY` | Server only | Amap administrative-district lookup for non-hub prefecture-level departure cities. |
 | `DEEPSEEK_API_KEY` | Server only | Provider-neutral Calculation/Supervisor model. |
 | `DEEPSEEK_MODEL` | Server only | Optional server-side model override; defaults to `deepseek-v4-flash`. |
 | `FLYAI_PROBE_CLI_PATH` | Server only | Optional operator-only executable override for the redacted FlyAI probe. |
@@ -95,7 +96,7 @@ Returns:
 
 `GET /api/cities/search?q=上海`
 
-Returns `{ "cities": [] }`. Merges built-in hub matches with Amap prefecture-level hits for the same query (local first, deduped by code/name). With `AMAP_API_KEY` configured, the server requests Amap input tips with a 3-second timeout and adds normalized prefecture-level or municipality matches such as `{ "code": "amap-440800", "name": "湛江", "province": "广东" }`. Amap failure, invalid data, missing credentials, and non-city locations omit remote rows without blocking local hits — `docs/superpowers/specs/2026-07-18-inner-atmosphere-meetup-copy-design.md`.
+Returns `{ "cities": [] }`. Merges built-in hub matches with Amap city-level hits for the same query (local first, deduped by code/name). With `AMAP_API_KEY` configured, the server requests Amap administrative districts with a 5-second timeout and one bounded retry after request/response failure, and maintains a server-memory index loaded from the Amap China administrative tree as the full-coverage fallback. It adds normalized results such as `{ "code": "amap-440800", "name": "湛江", "province": "广东" }`; input tips are province-label enrichment only because their adcodes are commonly district-level. Failed index loads are not cached. Missing credentials and non-city locations still omit remote rows without blocking local hits — `docs/superpowers/specs/2026-07-18-inner-atmosphere-meetup-copy-design.md`.
 
 ### Submit Participant
 
@@ -143,7 +144,7 @@ Returns:
 }
 ```
 
-Both paths return HTTP 202 and do not wait for supplier work. The durable orchestrator uses only verified quotes, complete coverage, deterministic policy replay, Supervisor approval, a persisted advance lease, and the guarded publication RPC. The local fallback has the same state and publication rules but no supplier adapter, so it becomes `incomplete` unless tests inject verified quotes.
+Both paths return HTTP 202 and do not wait for supplier work. The durable orchestrator uses only verified quotes, complete coverage, deterministic policy replay, Supervisor approval, a persisted advance lease, and the guarded publication RPC. Under policy `2026-07-19.v2`, saving is the exact lowest verified direct-first fare across each participant's accepted modes (including direct normal train), while fast is the quickest direct-first team combination within 130% of the saving total. The local fallback has the same state and publication rules but no supplier adapter, so it becomes `incomplete` unless tests inject verified quotes.
 
 ### Advance a Run
 
@@ -227,14 +228,14 @@ Terminal run progress may expose these `diagnosticCode` values without publishin
 
 Use these checks after layout or component changes:
 
-1. Open `/` at a desktop viewport around `1440x1000`; confirm a full-bleed train-window hero (brand `meetpoint`, no fake phone chrome), zero-scroll opening with “发起见面计划” → `/create` and “最近记录” → `/records`, and no bottom-left Next.js `N` indicator. Switch a scenic scene, open `/records`, then return — the same scene’s video should still play.
-2. Open `/create` at a mobile viewport around `390x844`; confirm the `ResponsiveShell` fills the visible screen height with the dark scenic-gradient canvas (not a white card shell), glass form panels, a usable single-column workflow, and no looping scenic video behind the form.
-3. Open `/p/[code]`, `/p/[code]/join`, and `/p/[code]/result` on desktop; confirm each route uses the adaptive atmosphere shell (`max-w-2xl`, not a multi-column desktop dashboard or fake phone frame). On plan/result (and `/records`) expect muted shell scenic under a readable dark scrim — not a solid black void. On the public plan page expect one StatusLane panel (status +「开始见面」CTA + `已填写` list). On the result page expect glass `.atmosphere-panel` scheme cards (no nested white route cards); while arranging or on city reveal, expect light `PeakScenicAccent` video (not behind create/join forms). Contracts: `docs/superpowers/specs/2026-07-18-inner-atmosphere-meetup-copy-design.md`, `docs/superpowers/specs/2026-07-17-plan-result-ia-design.md`, adaptive shell in `docs/superpowers/specs/2026-07-17-desktop-adaptive-shell-design.md`.
-4. Open `/records` and confirm recent meeting records render in the adaptive shell with a back link to `/`. 「查看」/「复制链接」should activate on a single click (if a Next.js hydration error badge appears, dismiss it first — app scenic must not require multi-click).
+1. Open `/` at a desktop viewport around `1440x1000`; confirm a full-bleed train-window hero (brand `meetpoint`, no fake phone chrome), zero-scroll opening with “发起见面计划” → `/create` and “最近记录” → `/records`, and no bottom-left Next.js `N` indicator. Confirm all four clips continuously cycle and manual scene selection still works; only the active clip should load eagerly.
+2. Open `/create` at a mobile viewport around `390x844`; confirm the `ResponsiveShell` fills the visible screen height with glass form panels, a usable single-column workflow, and the fixed 静水 clip under a readable dark scrim.
+3. Open `/p/[code]`, `/p/[code]/join`, `/p/[code]/result`, `/records`, `/p/[code]/alternatives`, and `/p/[code]/manage`; confirm each route uses its fixed scene (plan=密林, join=静水, result=破晓, records=破晓, alternatives=静水, manage=密林) and never cycles all four. On the public plan page expect one StatusLane panel (status +「开始见面」CTA + `已填写` list). On the result page expect glass `.atmosphere-panel` scheme cards (no nested white route cards); while arranging or on city reveal, expect light `PeakScenicAccent` video. Contracts: `docs/superpowers/specs/2026-07-18-inner-atmosphere-meetup-copy-design.md`, `docs/superpowers/specs/2026-07-17-plan-result-ia-design.md`, adaptive shell in `docs/superpowers/specs/2026-07-17-desktop-adaptive-shell-design.md`.
+4. Open `/records` and confirm recent meeting records render in the adaptive shell with a back link to `/`. 「查看」/「复制链接」should activate on a single click; a slow dynamic plan route must immediately change「查看」to「正在打开…」and show the plan loading shell. Browser translation cards are not app UI and should be disabled for localhost if they cover controls.
 5. On `/p/[code]/join`, type a departure city, confirm city candidates do not cover the transport-mode buttons, then select a city and confirm the candidates disappear. Searching a prefecture such as「湛江」should be selectable when `AMAP_API_KEY` is configured.
 6. Confirm no browser or framework overlay visually covers the right side of the app. If a red overlay appears while the DOM has no app-level fixed red element, check browser extensions / Next.js issue badge before changing app CSS.
 7. On `/create` in a WebKit/Chrome browser, click the middle of the “计划到达日期” field, then confirm the platform-native date picker opens and the selected value appears. The native picker controls its own closing behavior.
-8. On `/create`, click "参与人数上限". Confirm the app-styled 2–6 person panel opens **upward** (does not cover「生成邀请链接」), and selecting one option updates the field and closes the panel.
+8. On `/create`, click "参与人数上限". Confirm the app-styled 2–6 person panel expands in normal document flow below the trigger, pushes「生成邀请链接」down instead of covering it, and closes after selecting an option.
 
 ## Gateway Setup And Contract (internal service)
 

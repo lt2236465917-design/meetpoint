@@ -1,6 +1,5 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { ShellScenicBackdrop } from "@/components/layout/ShellScenicBackdrop";
 
 export function ResponsiveShell({
   title,
@@ -10,7 +9,6 @@ export function ResponsiveShell({
   actions,
   backHref,
   backLabel = "返回上一页",
-  scenic = false,
 }: {
   title: string;
   description?: string;
@@ -19,11 +17,9 @@ export function ResponsiveShell({
   actions?: ReactNode;
   backHref?: string;
   backLabel?: string;
-  scenic?: boolean;
 }) {
   return (
     <main className="atmosphere-shell atmosphere-canvas relative min-h-svh overflow-hidden">
-      {scenic ? <ShellScenicBackdrop /> : null}
       <div className="relative z-10 isolate mx-auto flex min-h-svh w-full max-w-2xl flex-col">
         <header className="shrink-0 border-b border-white/10 px-5 pb-4 pt-5 sm:px-8">
           {backHref && (

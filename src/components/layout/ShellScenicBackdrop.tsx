@@ -2,10 +2,13 @@
 
 import { useEffect, useRef, useSyncExternalStore } from "react";
 import {
-  readScenicSceneIndex,
-  subscribeScenicSceneIndex,
-} from "@/lib/ui/scenic-preference";
-import { SCENIC_VIDEOS } from "@/lib/ui/scenic-videos";
+  SCENIC_SCENES,
+  type ScenicSceneId,
+} from "@/lib/ui/scenic-videos";
+import {
+  readScenicPlaybackPosition,
+  recordScenicPlaybackPosition,
+} from "@/lib/ui/scenic-playback";
 
 function subscribeReducedMotion(onStoreChange: () => void) {
   const media = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -21,24 +24,14 @@ function getServerReducedMotionSnapshot() {
   return true;
 }
 
-function getServerScenicSceneSnapshot() {
-  return 0;
-}
-
-export function ShellScenicBackdrop() {
+export function ShellScenicBackdrop({ scene }: { scene: ScenicSceneId }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const reducedMotion = useSyncExternalStore(
     subscribeReducedMotion,
     getReducedMotionSnapshot,
     getServerReducedMotionSnapshot,
   );
-  const sceneIndex = useSyncExternalStore(
-    subscribeScenicSceneIndex,
-    readScenicSceneIndex,
-    getServerScenicSceneSnapshot,
-  );
-
-  const videoSrc = reducedMotion ? null : SCENIC_VIDEOS[sceneIndex].src;
+  const videoSrc = reducedMotion ? null : SCENIC_SCENES[scene].src;
 
   useEffect(() => {
     const video = videoRef.current;
@@ -54,7 +47,19 @@ export function ShellScenicBackdrop() {
     } catch {
       // ignore
     }
-  }, [videoSrc]);
+
+    return () => {
+      recordScenicPlaybackPosition(scene, video.currentTime);
+    };
+  }, [scene, videoSrc]);
+
+  function restorePlaybackPosition(video: HTMLVideoElement) {
+    const saved = readScenicPlaybackPosition(scene);
+    const target = saved ?? SCENIC_SCENES[scene].startAt;
+    if (Number.isFinite(video.duration) && target < video.duration) {
+      video.currentTime = target;
+    }
+  }
 
   return (
     <div className="shell-scenic" aria-hidden="true">
@@ -70,6 +75,10 @@ export function ShellScenicBackdrop() {
             loop
             playsInline
             preload="auto"
+            onLoadedMetadata={(event) => restorePlaybackPosition(event.currentTarget)}
+            onTimeUpdate={(event) => {
+              recordScenicPlaybackPosition(scene, event.currentTarget.currentTime);
+            }}
             onError={(event) => {
               event.currentTarget.style.display = "none";
             }}

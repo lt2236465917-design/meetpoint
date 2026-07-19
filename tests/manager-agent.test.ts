@@ -72,6 +72,28 @@ describe("ManagerAgent", () => {
     );
   });
 
+  it("accepts an Amap prefecture as a departure without making it a meeting candidate", async () => {
+    const store = managerRepository();
+
+    await new ManagerAgent(store.repository).prepare({
+      ...validInput,
+      participants: [
+        {
+          ...validInput.participants[0],
+          departureCityCode: "amap-230200",
+          departureCityName: "齐齐哈尔",
+        },
+        validInput.participants[1],
+      ],
+    });
+
+    expect(store.tasks.some((task) => (
+      task.originCityCode === "amap-230200"
+      && task.originCityName === "齐齐哈尔"
+    ))).toBe(true);
+    expect(store.candidates.map((candidate) => candidate.cityCode)).not.toContain("amap-230200");
+  });
+
   it("rejects duplicate participant IDs before persistence", async () => {
     const { repository, tasks } = managerRepository();
     await expect(new ManagerAgent(repository).prepare({

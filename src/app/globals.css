@@ -122,7 +122,7 @@ body {
   }
 }
 
-/* Shared atmosphere (form shells static; plan may use shell scenic) */
+/* Shared functional-page atmosphere */
 .font-display {
   font-family: var(--app-font-display);
 }
@@ -132,14 +132,12 @@ body {
 }
 
 .atmosphere-shell {
-  background: #000;
+  background: transparent;
   color: var(--atmosphere-ink);
 }
 
 .atmosphere-canvas {
-  background:
-    radial-gradient(ellipse at 50% 18%, rgba(90, 110, 130, 0.45) 0%, transparent 42%),
-    radial-gradient(ellipse at 50% 40%, #2a3544 0%, #141a22 55%, #0a0c10 100%);
+  background: transparent;
   border-color: rgba(255, 255, 255, 0.1);
   color: var(--atmosphere-ink);
 }
@@ -201,10 +199,10 @@ body {
   color: var(--atmosphere-muted);
 }
 
-/* Shell scenic backdrop (plan / result / records) */
+/* Root-mounted scenic backdrop for functional routes */
 .shell-scenic {
   pointer-events: none;
-  position: absolute;
+  position: fixed;
   inset: 0;
   overflow: hidden;
   z-index: 0;
@@ -225,21 +223,27 @@ body {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  /* Top of approved 0.22–0.32 band so scene still reads under the scrim */
-  opacity: 0.32;
+  /* Route-fixed motion should read immediately; panels own text contrast. */
+  opacity: 0.72;
 }
 
 .shell-scenic-media::after {
   content: "";
   position: absolute;
   inset: 0;
-  /* Readable CTA/status first, but leave enough light that scenic isn't a black void */
+  /* Keep copy readable without flattening the moving scene into a dark still. */
   background:
-    linear-gradient(180deg, rgba(8, 10, 14, 0.48) 0%, rgba(8, 10, 14, 0.64) 100%),
-    radial-gradient(ellipse at 50% 30%, rgba(20, 28, 40, 0.22) 0%, rgba(8, 10, 14, 0.58) 70%);
+    linear-gradient(180deg, rgba(8, 10, 14, 0.14) 0%, rgba(8, 10, 14, 0.26) 100%),
+    radial-gradient(ellipse at 50% 30%, rgba(20, 28, 40, 0.04) 0%, rgba(8, 10, 14, 0.12) 70%);
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .atmosphere-canvas {
+    background:
+      radial-gradient(ellipse at 50% 18%, rgba(90, 110, 130, 0.45) 0%, transparent 42%),
+      radial-gradient(ellipse at 50% 40%, #2a3544 0%, #141a22 55%, #0a0c10 100%);
+  }
+
   .shell-scenic-media video {
     display: none;
   }

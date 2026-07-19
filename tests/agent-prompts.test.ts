@@ -20,7 +20,9 @@ describe("agent prompts", () => {
     const prompt = buildCalculationSystemPrompt({ quoteIds: ["q1"], policyVersion: "2026-07-15.v1" });
     expect(prompt).toContain("q1");
     expect(prompt).toContain("direct-first");
-    expect(prompt).toContain("110%");
+    expect(prompt).toContain("最低票价");
+    expect(prompt).toContain("普通火车");
+    expect(prompt).not.toContain("110%");
     expect(prompt).toContain("130%");
     expect(prompt).toContain("incomplete");
     expect(prompt).toContain("JSON");

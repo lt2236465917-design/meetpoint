@@ -57,6 +57,9 @@ export function JoinParticipantForm({
         value={acceptedModes}
         onChange={onAcceptedModesChange}
       />
+      <p className="text-xs leading-5 text-[var(--atmosphere-muted)]">
+        只比较你选中的交通方式；选中普通火车后，直达普速会参与省钱方案比价。
+      </p>
       <button
         className="atmosphere-cta w-full rounded-xl py-3 font-medium disabled:opacity-60"
         disabled={loading}

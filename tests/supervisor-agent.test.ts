@@ -33,7 +33,7 @@ const proposal: RecommendationProposal = {
 };
 
 const snapshot: CalculationSnapshot = {
-  runId, traceId, proposalVersion: 1, policyVersion: "2026-07-15.v1", arrivalDate: "2026-08-15",
+  runId, traceId, proposalVersion: 1, policyVersion: "2026-07-19.v2", arrivalDate: "2026-08-15",
   participantIds: ["p1", "p2"], missingTaskIds: [],
   cityInputs: [{ cityCode: "wuhan", quotes: [
     quote("p1-saving", "p1", { durationMinutes: 180 }), quote("p1-fast", "p1", { priceCny: 120, durationMinutes: 60 }),

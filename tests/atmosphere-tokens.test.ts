@@ -34,15 +34,14 @@ describe("atmosphere design tokens", () => {
     const canvasMatch = css.match(/\.atmosphere-canvas\s*\{([\s\S]*?)\}/);
     expect(canvasMatch).not.toBeNull();
     const canvasBlock = canvasMatch![1];
-    const radialCount = (canvasBlock.match(/radial-gradient/g) ?? []).length;
-    const linearCount = (canvasBlock.match(/linear-gradient/g) ?? []).length;
-    expect(radialCount >= 2 || (radialCount >= 1 && linearCount >= 1)).toBe(
-      true,
-    );
-    expect(canvasBlock).toContain("#0a0c10");
+    expect(canvasBlock).toContain("background: transparent");
 
     expect(css).toContain(".shell-scenic");
     expect(css).toContain(".shell-scenic-media");
+    expect(css).toMatch(/\.shell-scenic-media video\s*\{[\s\S]*?opacity:\s*0\.72/);
+    expect(css).toContain("rgba(8, 10, 14, 0.14)");
+    expect(css).toContain("rgba(8, 10, 14, 0.26)");
+    expect(css).toContain("rgba(8, 10, 14, 0.12)");
     expect(css).toMatch(
       /prefers-reduced-motion:\s*reduce[\s\S]*\.shell-scenic-media video/,
     );

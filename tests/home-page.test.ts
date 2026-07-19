@@ -21,6 +21,9 @@ describe("HomePage", () => {
     expect(html).toContain("hero-cta");
     expect(html).toContain("readable-title");
     expect(html).toContain("train-bob");
+    expect(html.match(/<video/g)).toHaveLength(4);
+    expect(html.match(/preload="auto"/g)).toHaveLength(1);
+    expect(html.match(/preload="metadata"/g)).toHaveLength(3);
     expect(html).toContain("最近记录");
     expect(html).toContain('href="/records"');
     expect(html).toContain("h-svh");
@@ -57,5 +60,7 @@ describe("HomePage", () => {
     expect(heroSource).not.toMatch(/useState\(\s*readScenicSceneIndex\s*\)/);
     expect(heroSource).toContain("useSyncExternalStore(");
     expect(heroSource).toMatch(/function getServerScenicSceneSnapshot\(\)[\s\S]*return 0;/);
+    expect(heroSource).toContain("onEnded={() => switchToNextVideo(index)}");
+    expect(heroSource).toContain("onCanPlay");
   });
 });

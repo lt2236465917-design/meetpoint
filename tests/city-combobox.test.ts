@@ -39,4 +39,14 @@ describe("CityCombobox", () => {
     expect(source).toContain("searchedEmpty");
     expect(source).toContain("没找到这个市，试试完整市名，如「湛江」");
   });
+
+  it("debounces remote city lookup and shows search feedback", () => {
+    const source = readFileSync(
+      path.join(process.cwd(), "src/components/forms/CityCombobox.tsx"),
+      "utf8",
+    );
+
+    expect(source).toContain("debouncedQuery");
+    expect(source).toContain("正在查找城市…");
+  });
 });

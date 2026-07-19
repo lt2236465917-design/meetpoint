@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 import { ResultContent } from "@/app/p/[code]/result/page";
 import { PeakScenicAccent } from "@/components/result/PeakScenicAccent";
 import { SharedRecommendation } from "@/components/result/SharedRecommendation";
+import { functionalScenicScene } from "@/lib/ui/functional-scenic";
 import { SCENIC_VIDEOS } from "@/lib/ui/scenic-videos";
 
 vi.mock("next/navigation", () => ({
@@ -145,7 +146,7 @@ describe("PeakScenicAccent (phase 4)", () => {
     expect(html).toContain("南京");
   });
 
-  it("keeps create/join form trees free of shell scenic video wiring", () => {
+  it("keeps create/join form trees free of direct video wiring", () => {
     const root = process.cwd();
     for (const relative of [
       "src/app/create/page.tsx",
@@ -153,18 +154,15 @@ describe("PeakScenicAccent (phase 4)", () => {
       "src/app/p/[code]/join/page.tsx",
     ]) {
       const source = readFileSync(path.join(root, relative), "utf8");
-      expect(source).not.toContain("scenic");
       expect(source).not.toContain("ShellScenicBackdrop");
       expect(source).not.toContain("<video");
     }
   });
 
-  it("enables shell scenic on plan, result, and records pages only", () => {
-    const root = process.cwd();
-    expect(readFileSync(path.join(root, "src/app/p/[code]/page.tsx"), "utf8")).toContain("scenic");
-    expect(readFileSync(path.join(root, "src/app/p/[code]/result/page.tsx"), "utf8")).toContain("scenic");
-    expect(readFileSync(path.join(root, "src/app/records/page.tsx"), "utf8")).toContain("scenic");
-    expect(readFileSync(path.join(root, "src/app/create/page.tsx"), "utf8")).not.toMatch(/\bscenic\b/);
+  it("assigns fixed shell scenic scenes without adding a page switcher", () => {
+    expect(functionalScenicScene("/create")).toBe("stillWater");
+    expect(functionalScenicScene("/p/ABCD/join")).toBe("stillWater");
+    expect(functionalScenicScene("/p/ABCD/result")).toBe("dawn");
   });
 
   it("defines peak-scenic styles and reduced-motion fallback in globals.css", () => {

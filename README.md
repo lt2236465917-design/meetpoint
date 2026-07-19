@@ -6,6 +6,8 @@ Mobile-usable Web MVP for choosing a fair cross-city meeting city for 2-6 people
 
 Tasks 1–14 are complete against the [2026-07-15 Multi-Agent design](docs/superpowers/specs/2026-07-15-multi-agent-recommendation-design.md): one city, saving/fast schemes from verified quotes, private host-confirmed alternatives, and no estimate/three-city/explanation-only paths. Canonical evidence and non-blocking residual hygiene live in the [acceptance record](docs/acceptance/2026-07-15-multi-agent-live-acceptance.md) (credential rotation operator-waived on 2026-07-17).
 
+Local policy `2026-07-19.v2` defines saving as the exact lowest verified fare in each participant's direct-first accepted-mode set (including direct normal train) and keeps fast within 130% of the saving total. Supabase environments must apply `202607190001_recommendation_policy_v2.sql` before new durable runs use v2; the migration is not implied by building the app.
+
 ## Scripts
 
 - `npm run dev`
@@ -38,7 +40,7 @@ Tasks 1–14 are complete against the [2026-07-15 Multi-Agent design](docs/super
 ## Core Modules
 
 - `src/lib/city/candidate-generator.ts`: deterministic candidate-city generation from participant cities and host controls.
-- `src/lib/city/amap-client.ts` and `src/lib/city/city-provider.ts`: local-first city search with a 3-second server-side Amap validation fallback for city-level results.
+- `src/lib/city/amap-client.ts` and `src/lib/city/city-provider.ts`: local-first city search with canonical Amap administrative-district lookup, a 5-second timeout, one bounded retry, and a server-memory China city index fallback for prefecture-level departures.
 - `src/lib/fallback/mvp-store.ts`: server-side in-memory fallback store that preserves the target run states and publication guards for local tests; it never synthesizes estimates or calls suppliers.
 - `src/lib/travel/types.ts`: strict main-app request contract for the isolated travel gateway.
 - `src/lib/travel/gateway-client.ts`: server-side authenticated gateway client used by QueryAgent to persist verified quotes without participant identity crossing the gateway boundary.
@@ -50,7 +52,7 @@ Tasks 1–14 are complete against the [2026-07-15 Multi-Agent design](docs/super
 - `src/components/result/SharedRecommendation.tsx` and `SchemeCard.tsx`: render the published city once and map persisted participant routes directly on `.atmosphere-panel` glass (no nested white route cards), including team totals, route facts, quote fingerprints, and China-time freshness; they never render booking links or client-side route selection.
 - `src/components/result/RefreshingResultNotice.tsx`: maps every run status to Chinese progress/retry guidance and, when the device holds a local participant token, posts one bounded authenticated run advance before refreshing.
 - `src/components/home/HomeHero.tsx`: product `/` full-bleed train-window hero (brand `meetpoint`, scenic video, train overlay, glass CTA to `/create`, entry to `/records`).
-- `src/components/layout/ResponsiveShell.tsx` + `src/app/globals.css` atmosphere tokens: create/join/plan/result/records share the dark scenic canvas and glass panels/CTAs. Create/join stay video-free (static deepen); plan/result/records use muted shell scenic under a dark scrim. Phase 4: `PeakScenicAccent` on wait/reveal peaks. Adaptive `max-w-2xl` content width (no fake phone chrome). Inner atmosphere + meetup copy shipped — [2026-07-18 design](docs/superpowers/specs/2026-07-18-inner-atmosphere-meetup-copy-design.md) ([plan](docs/superpowers/plans/2026-07-18-inner-atmosphere-meetup-copy.md)).
+- `src/components/layout/FunctionalScenicBackdrop.tsx`, `ShellScenicBackdrop.tsx`, `ResponsiveShell.tsx`, and `src/app/globals.css`: one root-mounted route-fixed clip stays alive through functional-page loading/navigation, with playback checkpoints after unavoidable remounts; `ResponsiveShell` renders adaptive `max-w-2xl` content above it. Only home cycles all four clips. Phase 4 `PeakScenicAccent` remains on wait/reveal peaks.
 - `src/components/result/PeakScenicAccent.tsx` + `src/lib/ui/scenic-videos.ts`: light muted scenic accent for wait/reveal only.
 - `src/lib/ui/meeting-history.ts`: browser-only local recent-record storage; it caches `useSyncExternalStore` snapshots so the records page does not trigger React update loops.
 

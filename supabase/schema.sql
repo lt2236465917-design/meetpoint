@@ -184,7 +184,7 @@ create table if not exists recommendation_runs (
     check (kind in ('automatic', 'alternative')),
   requested_city_code text,
   requested_by_participant_id uuid references participants(id) on delete set null,
-  policy_version text not null default '2026-07-15.v1',
+  policy_version text not null default '2026-07-19.v2',
   trace_id uuid not null default gen_random_uuid(),
   retry_after timestamptz,
   advance_lease_token uuid,

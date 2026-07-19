@@ -158,9 +158,10 @@ type RouteTaskRow = {
   retry_after: string | null;
   error_code: string | null;
   recommendation_runs: unknown;
+  participants: unknown;
 };
 
-const ROUTE_TASK_SELECT = "id,run_id,participant_id,city_code,origin_city_code,mode,search_date,physical_key,status,attempt_count,retry_after,error_code,recommendation_runs!inner(plans!inner(meeting_date))";
+const ROUTE_TASK_SELECT = "id,run_id,participant_id,city_code,origin_city_code,mode,search_date,physical_key,status,attempt_count,retry_after,error_code,recommendation_runs!inner(plans!inner(meeting_date)),participants!inner(departure_city_name)";
 const RUN_SELECT = "id,plan_id,status,trace_id,retry_after,error_summary,policy_version,kind,plans!inner(meeting_date)";
 
 function firstRelation(value: unknown): Record<string, unknown> | null {
@@ -180,12 +181,17 @@ function taskArrivalDate(row: RouteTaskRow): string {
 }
 
 function toStoredTask(row: RouteTaskRow): StoredRouteTask {
+  const participant = firstRelation(row.participants);
+  if (typeof participant?.departure_city_name !== "string") {
+    throw new Error(`Route task origin city name not found: ${row.id}`);
+  }
   return {
     id: row.id,
     runId: row.run_id,
     participantId: row.participant_id,
     cityCode: row.city_code,
     originCityCode: row.origin_city_code,
+    originCityName: participant.departure_city_name,
     mode: row.mode,
     searchDate: row.search_date,
     arrivalDate: taskArrivalDate(row),

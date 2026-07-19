@@ -22,6 +22,18 @@ describe("CreatePlanPage", () => {
     expect(html).not.toContain('method="get"');
   });
 
+  it("keeps participant limit options in the form flow instead of covering earlier fields", () => {
+    const pageSource = readFileSync(
+      path.join(process.cwd(), "src/app/create/page.tsx"),
+      "utf8",
+    );
+
+    expect(pageSource).not.toContain("absolute bottom-full");
+    expect(pageSource).toContain(
+      'className="atmosphere-panel mt-2 w-full overflow-hidden rounded-lg p-1"',
+    );
+  });
+
   it("saves a created plan into the local meeting records", () => {
     const pageSource = readFileSync(
       path.join(process.cwd(), "src/app/create/page.tsx"),

@@ -35,6 +35,7 @@ describe("SupabaseRecommendationRepository", () => {
         retry_after: null,
         error_code: null,
         recommendation_runs: [{ plans: [{ meeting_date: "2026-08-15" }] }],
+        participants: [{ departure_city_name: "北京" }],
       },
       error: null,
     });
@@ -44,8 +45,12 @@ describe("SupabaseRecommendationRepository", () => {
     const task = await new SupabaseRecommendationRepository().getRouteTask("task-1");
 
     expect(mocks.select).toHaveBeenCalledWith(expect.stringContaining("plans!inner(meeting_date)"));
+    expect(mocks.select).toHaveBeenCalledWith(expect.stringContaining("participants!inner(departure_city_name)"));
     expect(mocks.select).not.toHaveBeenCalledWith(expect.stringContaining("arrival_date"));
-    expect(task).toEqual(expect.objectContaining({ arrivalDate: "2026-08-15" }));
+    expect(task).toEqual(expect.objectContaining({
+      arrivalDate: "2026-08-15",
+      originCityName: "北京",
+    }));
   });
 
   it("creates the entire run matrix through one atomic RPC", async () => {

@@ -9,7 +9,7 @@ import {
 
 describe("multi-agent contracts", () => {
   it("accepts exactly one city with saving and fast schemes", () => {
-    expect(POLICY_VERSION).toBe("2026-07-15.v1");
+    expect(POLICY_VERSION).toBe("2026-07-19.v2");
     expect(runStatusSchema.parse("awaiting_host_confirmation")).toBe(
       "awaiting_host_confirmation",
     );

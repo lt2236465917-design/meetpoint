@@ -1,4 +1,6 @@
 import { createElement } from "react";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { ResponsiveShell } from "@/components/layout/ResponsiveShell";
@@ -41,15 +43,25 @@ describe("ResponsiveShell", () => {
     expect(html).not.toContain("lg:sticky");
   });
 
-  it("renders a light scenic backdrop only when scenic is enabled", () => {
-    const withScenic = renderToStaticMarkup(
-      createElement(ResponsiveShell, { title: "计划", scenic: true }, "body"),
+  it("leaves the persistent functional scenic clip outside the page shell", () => {
+    const shell = renderToStaticMarkup(
+      createElement(ResponsiveShell, { title: "结果" }, "body"),
     );
-    const without = renderToStaticMarkup(
-      createElement(ResponsiveShell, { title: "创建" }, "body"),
+    const backdropSource = readFileSync(
+      path.join(
+        process.cwd(),
+        "src/components/layout/ShellScenicBackdrop.tsx",
+      ),
+      "utf8",
+    );
+    const rootLayoutSource = readFileSync(
+      path.join(process.cwd(), "src/app/layout.tsx"),
+      "utf8",
     );
 
-    expect(withScenic).toContain("shell-scenic");
-    expect(without).not.toContain("shell-scenic");
+    expect(backdropSource.match(/<video/g)).toHaveLength(1);
+    expect(backdropSource).toContain("SCENIC_SCENES[scene].src");
+    expect(shell).not.toContain("shell-scenic");
+    expect(rootLayoutSource).toContain("<FunctionalScenicBackdrop />");
   });
 });

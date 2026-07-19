@@ -94,6 +94,28 @@ describe("QueryAgent", () => {
     expect(repository.outcomes).toHaveLength(2);
   });
 
+  it("sends a persisted Amap departure name to the ticket gateway", async () => {
+    const amapTask: StoredRouteTask = {
+      ...task("amap-task", "p1"),
+      originCityCode: "amap-230200",
+      originCityName: "齐齐哈尔",
+      physicalKey: "amap-230200:wuhan:flight:2026-08-14",
+    };
+    const repository = queryRepository([amapTask]);
+    const ticketTool = vi.fn(async () => result);
+
+    await new QueryAgent(
+      repository.repository,
+      ticketTool,
+      createPhysicalTicketScheduler(),
+    ).execute("amap-task");
+
+    expect(ticketTool).toHaveBeenCalledWith(expect.objectContaining({
+      originCityCode: "amap-230200",
+      originCityName: "齐齐哈尔",
+    }));
+  });
+
   it("turns gateway rate limits into cooldown state without an immediate retry", async () => {
     const repository = queryRepository([task("t1", "p1")]);
     const ticketTool = vi.fn(async () => {

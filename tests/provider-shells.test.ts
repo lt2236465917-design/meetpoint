@@ -1,10 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { searchCities } from "@/lib/city/city-provider";
+import { resetAmapCityIndexCacheForTests } from "@/lib/city/amap-client";
 import { GatewayClientError, searchGateway } from "@/lib/travel/gateway-client";
 
 const originalEnv = process.env;
 
 afterEach(() => {
+  resetAmapCityIndexCacheForTests();
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
   process.env = originalEnv;
@@ -58,7 +60,7 @@ describe("searchCities", () => {
   it("merges Amap prefecture matches after local hubs for the same query", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn().mockResolvedValue(
+      vi.fn().mockImplementation(() => Promise.resolve(
         new Response(
           JSON.stringify({
             status: "1",
@@ -69,7 +71,7 @@ describe("searchCities", () => {
           }),
           { status: 200 },
         ),
-      ),
+      )),
     );
     vi.stubEnv("AMAP_API_KEY", "test-key");
 
@@ -88,10 +90,10 @@ describe("searchCities", () => {
   });
 
   it("normalizes an Amap city tip to a selectable city result", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
+    vi.stubGlobal("fetch", vi.fn().mockImplementation(() => Promise.resolve(new Response(JSON.stringify({
       status: "1",
       tips: [{ name: "武汉市", district: "湖北省", adcode: "420100" }],
-    }), { status: 200 })));
+    }), { status: 200 }))));
     vi.stubEnv("AMAP_API_KEY", "test-key");
 
     await expect(searchCities("武汉市")).resolves.toEqual([
@@ -100,15 +102,138 @@ describe("searchCities", () => {
   });
 
   it("makes Amap prefecture-level cities selectable when they are not in the local library", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
+    vi.stubGlobal("fetch", vi.fn().mockImplementation(() => Promise.resolve(new Response(JSON.stringify({
       status: "1",
       tips: [{ name: "湛江市", district: "广东省", adcode: "440800" }],
-    }), { status: 200 })));
+    }), { status: 200 }))));
     vi.stubEnv("AMAP_API_KEY", "test-key");
 
     await expect(searchCities("湛江市")).resolves.toEqual([
       expect.objectContaining({ code: "amap-440800", name: "湛江", province: "广东" }),
     ]);
+  });
+
+  it("uses the administrative-district city code instead of an input-tip district code", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(String(input));
+      if (url.pathname === "/v3/config/district") {
+        return new Response(JSON.stringify({
+          status: "1",
+          districts: [{
+            name: "齐齐哈尔市",
+            adcode: "230200",
+            level: "city",
+            citycode: "0452",
+          }],
+        }), { status: 200 });
+      }
+      return new Response(JSON.stringify({
+        status: "1",
+        tips: [{
+          name: "齐齐哈尔市",
+          district: "黑龙江省齐齐哈尔市",
+          adcode: "230203",
+        }],
+      }), { status: 200 });
+    }));
+    vi.stubEnv("AMAP_API_KEY", "test-key");
+
+    await expect(searchCities("齐齐哈尔")).resolves.toEqual([
+      { code: "amap-230200", name: "齐齐哈尔", province: "黑龙江" },
+    ]);
+  });
+
+  it("retries the canonical district lookup once after a transient failure", async () => {
+    let districtCalls = 0;
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(String(input));
+      if (url.pathname === "/v3/config/district") {
+        districtCalls += 1;
+        if (districtCalls === 1) return new Response("unavailable", { status: 503 });
+        return new Response(JSON.stringify({
+          status: "1",
+          districts: [{
+            name: "齐齐哈尔市",
+            adcode: "230200",
+            level: "city",
+          }],
+        }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ status: "1", tips: [] }), {
+        status: 200,
+      });
+    }));
+    vi.stubEnv("AMAP_API_KEY", "test-key");
+
+    await expect(searchCities("齐齐哈尔")).resolves.toEqual([
+      { code: "amap-230200", name: "齐齐哈尔", province: "中国" },
+    ]);
+    expect(districtCalls).toBe(2);
+  });
+
+  it("accepts province-administered cities whose adcodes do not end in 00", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(String(input));
+      if (url.pathname === "/v3/config/district") {
+        return new Response(JSON.stringify({
+          status: "1",
+          districts: [{ name: "济源市", adcode: "419001", level: "city" }],
+        }), { status: 200 });
+      }
+      return new Response(JSON.stringify({
+        status: "1",
+        tips: [{ name: "济源市", district: "河南省济源市", adcode: "419001" }],
+      }), { status: 200 });
+    }));
+    vi.stubEnv("AMAP_API_KEY", "test-key");
+
+    await expect(searchCities("济源")).resolves.toEqual([
+      { code: "amap-419001", name: "济源", province: "河南" },
+    ]);
+  });
+
+  it("falls back to the Amap China city index when direct lookup fails", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(String(input));
+      if (url.pathname === "/v3/assistant/inputtips") {
+        return new Response(JSON.stringify({ status: "1", tips: [] }), {
+          status: 200,
+        });
+      }
+      if (url.searchParams.get("keywords") === "中国") {
+        return new Response(JSON.stringify({
+          status: "1",
+          districts: [{
+            name: "中华人民共和国",
+            adcode: "100000",
+            level: "country",
+            districts: [{
+              name: "黑龙江省",
+              adcode: "230000",
+              level: "province",
+              districts: [{
+                name: "齐齐哈尔市",
+                adcode: "230200",
+                level: "city",
+                districts: [],
+              }],
+            }],
+          }],
+        }), { status: 200 });
+      }
+      return new Response("unavailable", { status: 503 });
+    }));
+    vi.stubEnv("AMAP_API_KEY", "test-key");
+
+    await expect(searchCities("齐齐哈尔")).resolves.toEqual([
+      { code: "amap-230200", name: "齐齐哈尔", province: "黑龙江" },
+    ]);
+
+    const requestCountAfterWarmup = vi.mocked(fetch).mock.calls.length;
+    await expect(searchCities("齐齐哈")).resolves.toEqual([
+      { code: "amap-230200", name: "齐齐哈尔", province: "黑龙江" },
+    ]);
+    expect(fetch).toHaveBeenCalledTimes(requestCountAfterWarmup);
   });
 
   it("returns local hubs when Amap fails but local hits exist", async () => {

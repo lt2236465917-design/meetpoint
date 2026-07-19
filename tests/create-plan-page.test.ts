@@ -33,10 +33,10 @@ describe("CreatePlanPage native input controls", () => {
       "建好后把链接发到群里，人到齐就能开始见面。",
     );
     expect(pageSource).not.toContain("开算");
-    expect(pageSource).toContain("bottom-full");
-    expect(pageSource).toContain("mb-2");
-    expect(pageSource).not.toContain(
-      "absolute z-10 mt-2 w-full overflow-hidden rounded-lg p-1",
+    expect(pageSource).not.toContain("bottom-full");
+    expect(pageSource).not.toContain("absolute bottom-full");
+    expect(pageSource).toContain(
+      "atmosphere-panel mt-2 w-full overflow-hidden rounded-lg p-1",
     );
     expect(pageSource).toContain("Escape");
     expect(pageSource).toContain("mousedown");

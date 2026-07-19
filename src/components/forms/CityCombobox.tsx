@@ -18,6 +18,7 @@ export function CityCombobox({
   tone?: "default" | "atmosphere";
 }) {
   const [query, setQuery] = useState(value?.name ?? "");
+  const [debouncedQuery, setDebouncedQuery] = useState(query.trim());
   const [results, setResults] = useState<CityOption[]>([]);
   const [settledQuery, setSettledQuery] = useState("");
   const normalizedQuery = query.trim();
@@ -26,6 +27,10 @@ export function CityCombobox({
     normalizedQuery !== "" &&
     settledQuery === normalizedQuery &&
     results.length === 0;
+  const searching =
+    normalizedQuery !== "" &&
+    normalizedQuery !== value?.name &&
+    settledQuery !== normalizedQuery;
   const isAtmosphere = tone === "atmosphere";
 
   useEffect(() => {
@@ -33,17 +38,28 @@ export function CityCombobox({
       return;
     }
 
+    const timeout = window.setTimeout(() => {
+      setDebouncedQuery(normalizedQuery);
+    }, 250);
+    return () => window.clearTimeout(timeout);
+  }, [normalizedQuery]);
+
+  useEffect(() => {
+    if (!debouncedQuery) {
+      return;
+    }
+
     const controller = new AbortController();
     void (async () => {
       try {
         const response = await fetch(
-          `/api/cities/search?q=${encodeURIComponent(normalizedQuery)}`,
+          `/api/cities/search?q=${encodeURIComponent(debouncedQuery)}`,
           { signal: controller.signal },
         );
         if (!response.ok) {
           if (!controller.signal.aborted) {
             setResults([]);
-            setSettledQuery(normalizedQuery);
+            setSettledQuery(debouncedQuery);
           }
           return;
         }
@@ -51,24 +67,24 @@ export function CityCombobox({
         if (!Array.isArray(json.cities)) {
           if (!controller.signal.aborted) {
             setResults([]);
-            setSettledQuery(normalizedQuery);
+            setSettledQuery(debouncedQuery);
           }
           return;
         }
         if (!controller.signal.aborted) {
           setResults(json.cities);
-          setSettledQuery(normalizedQuery);
+          setSettledQuery(debouncedQuery);
         }
       } catch {
         if (!controller.signal.aborted) {
           setResults([]);
-          setSettledQuery(normalizedQuery);
+          setSettledQuery(debouncedQuery);
         }
       }
     })();
 
     return () => controller.abort();
-  }, [normalizedQuery]);
+  }, [debouncedQuery]);
 
   useEffect(() => {
     const normalized = query.trim();
@@ -91,13 +107,26 @@ export function CityCombobox({
         onChange={(event) => {
           const nextQuery = event.target.value;
           setQuery(nextQuery);
+          setResults([]);
+          setSettledQuery("");
           if (!nextQuery.trim()) {
-            setResults([]);
-            setSettledQuery("");
+            setDebouncedQuery("");
           }
           if (value && nextQuery !== value.name) onChange(null);
         }}
       />
+      {searching && (
+        <p
+          className={
+            isAtmosphere
+              ? "text-sm text-[var(--atmosphere-muted)]"
+              : "text-sm text-gray-500"
+          }
+          role="status"
+        >
+          正在查找城市…
+        </p>
+      )}
       {showResults && (
         <div
           className={

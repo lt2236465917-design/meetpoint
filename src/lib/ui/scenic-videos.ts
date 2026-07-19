@@ -21,5 +21,14 @@ export const SCENIC_VIDEOS = [
   },
 ] as const;
 
+export const SCENIC_SCENES = {
+  goldenHour: SCENIC_VIDEOS[0],
+  stillWater: SCENIC_VIDEOS[1],
+  forest: SCENIC_VIDEOS[2],
+  dawn: SCENIC_VIDEOS[3],
+} as const;
+
+export type ScenicSceneId = keyof typeof SCENIC_SCENES;
+
 /** Calm single scene for wait / reveal peaks (phase 4). */
 export const PEAK_SCENIC_VIDEO = SCENIC_VIDEOS[1];

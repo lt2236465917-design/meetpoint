@@ -1,5 +1,7 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import {
   getEmptyMeetingRecordsSnapshot,
@@ -66,6 +68,24 @@ describe("RecentMeetingRecords", () => {
 
     expect(html).toContain("查看");
     expect(html).toContain('aria-label="查看上海周末见面填写情况"');
+  });
+
+  it("shows immediate feedback while a plan route is opening", () => {
+    const source = readFileSync(
+      path.join(
+        process.cwd(),
+        "src/components/plan/RecentMeetingRecords.tsx",
+      ),
+      "utf8",
+    );
+    const loadingSource = readFileSync(
+      path.join(process.cwd(), "src/app/p/[code]/loading.tsx"),
+      "utf8",
+    );
+
+    expect(source).toContain("useLinkStatus");
+    expect(source).toContain("正在打开…");
+    expect(loadingSource).toContain("正在打开计划");
   });
 
   it("shows copy-link actions for every local meeting record", () => {

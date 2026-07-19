@@ -74,8 +74,11 @@ Branch: `task-1-scaffold`
 
 - Phase 1–4 + adaptive shell: **shipped and committed** (`a2d6908`, 2026-07-18).
 - Inner atmosphere + meetup copy (Tasks 1–7): **shipped and committed** through `4972560` (2026-07-18). Spec/plan marked shipped in authority docs.
-- Post-ship smoke hardening (2026-07-18, included in the recovery batch): home brand `meetpoint`; hydrate-safe scenic preference; remount any-scene ready; readable shell scrim; decorative video `pointer-events: none` (fixes multi-click on records「查看」/plan CTAs when Next hydration overlay was also present).
-- Recovery Next (product UI): merge/PR `task-1-scaffold` when ready; alternatives/manage remain shell-only unless a later IA pass is approved.
+- Post-ship smoke recovery (2026-07-19): complete locally. Home retains four-clip continuous cycling with eager loading only for the active clip. Functional routes use one root-mounted fixed loop (create/join/alternatives=静水, plan/manage=密林, result/records=破晓), a moderate readable scrim, `pointer-events: none`, and per-scene playback checkpoints; records navigation gives immediate loading feedback and single-click activation. Alternatives/manage IA remains unchanged beyond the shared backdrop.
+- Departure-city hardening (2026-07-19): complete locally. Canonical Amap administrative-district lookup, one bounded retry, and the server-memory China administrative-tree index cover prefecture and province-administered cities. Amap origin names persist into Manager/Query gateway requests; meeting candidates remain built-in hubs.
+- Recommendation policy `2026-07-19.v2`: complete in code and tests. Saving selects the exact lowest verified direct-first fare across accepted modes, including direct normal train; fast stays within 130% of the saving total. Remote Supabase migration `202607190001_recommendation_policy_v2.sql` is **not applied**: CLI database authentication failed on 2026-07-19. Rotate the exposed database password before retrying, then run migration list, dry-run, push, and verify the remote default.
+- Final local gates (2026-07-19): post-neat root lint passed; 64 test files / 372 tests passed; production build passed; `git diff --check` and staged-secret review remain required immediately before commit.
+- Recovery Next: apply the v2 Supabase migration after credential rotation. Merge/PR or push only by explicit user direction.
 
 # Inner Atmosphere + Meetup Copy SDD Progress
 
@@ -91,4 +94,4 @@ Shipped HEAD (Tasks 1–7 + final copy fix): `4972560`
 - Task 5: complete (`7e1681e..d1fdba6`)
 - Task 6: complete (`d1fdba6..35bae2e`)
 - Task 7: complete (`35bae2e..a49b554` incl. CityCombobox lint fix + authority docs)
-- Final review: Ready to merge after the post-ship smoke recovery batch (see UI Progress Recovery Next)
+- Final review: post-ship recovery is locally complete; remote v2 migration remains the only blocking operational follow-up (see UI Progress Recovery Next).
