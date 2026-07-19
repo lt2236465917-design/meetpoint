@@ -127,7 +127,13 @@ export class RunOrchestrator {
 
     try {
       return await this.advanceOwnedRun(run);
-    } catch {
+    } catch (error) {
+      console.error("[recommendation-run] advance failed", {
+        runId: run.id,
+        traceId: run.traceId,
+        status: run.status,
+        error,
+      });
       const failed = await this.repository.failAdvance(run.id, leaseToken, "RUN_ADVANCE_FAILED");
       if (failed) return "failed";
       return (await this.repository.getRun(run.id))?.status ?? run.status;

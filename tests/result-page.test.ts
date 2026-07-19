@@ -4,7 +4,10 @@ import path from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { ResultContent } from "@/app/p/[code]/result/page";
-import { advanceAutomaticRun } from "@/components/result/RefreshingResultNotice";
+import {
+  advanceAutomaticRun,
+  restartAutomaticRun,
+} from "@/components/result/RefreshingResultNotice";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: vi.fn() }),
@@ -53,6 +56,23 @@ describe("result page public states", () => {
     })).resolves.toBe(true);
     expect(request).toHaveBeenCalledWith(
       "/api/plans/ABC123/runs/run-12345678/advance",
+      {
+        method: "POST",
+        headers: { "x-participant-token": "participant-token" },
+      },
+    );
+  });
+
+  it("creates a fresh automatic run when retrying a terminal result", async () => {
+    const request = vi.fn(async () => new Response(null, { status: 202 }));
+
+    await expect(restartAutomaticRun({
+      code: "ABC123",
+      participantToken: "participant-token",
+      request,
+    })).resolves.toBe(true);
+    expect(request).toHaveBeenCalledWith(
+      "/api/plans/ABC123/calculate",
       {
         method: "POST",
         headers: { "x-participant-token": "participant-token" },
@@ -109,7 +129,9 @@ describe("result page public states", () => {
     });
 
     expect(html).toContain("有几位朋友的票价没查全，过一会再试一次");
-    expect(html).not.toContain("再算一次试试");
+    expect(html).toContain("重新查询");
+    expect(html).toContain("返回计划页");
+    expect(html).not.toContain("刷新结果");
     expect(html).toContain("诊断编号 RUN-12345678");
     expect(html).not.toContain("省钱方案");
   });
@@ -122,6 +144,9 @@ describe("result page public states", () => {
     expect(html).toContain("这次没安排成，稍后再试一次");
     expect(html).toContain("把下面这串编号发给发起人");
     expect(html).toContain("诊断编号 RUN-12345678");
+    expect(html).toContain("重新查询");
+    expect(html).toContain("返回计划页");
+    expect(html).not.toContain("刷新结果");
     expect(html).not.toContain("省钱方案");
   });
 

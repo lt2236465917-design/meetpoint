@@ -1,4 +1,10 @@
 import { z } from "zod";
+import {
+  calendarDateInShanghai,
+  isCalendarDateOnOrAfter,
+} from "@/lib/validation/calendar-date";
+
+export { calendarDateInShanghai } from "@/lib/validation/calendar-date";
 
 export const transportModeSchema = z.enum([
   "flight",
@@ -8,11 +14,18 @@ export const transportModeSchema = z.enum([
 
 export const calendarDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
-export const createPlanSchema = z.object({
-  title: z.string().trim().min(1).max(60),
-  arrivalDate: calendarDateSchema,
-  participantLimit: z.number().int().min(2).max(6),
-}).strict();
+export function createPlanSchema(
+  minimumArrivalDate = calendarDateInShanghai(),
+) {
+  return z.object({
+    title: z.string().trim().min(1).max(60),
+    arrivalDate: calendarDateSchema.refine(
+      (value) => isCalendarDateOnOrAfter(value, minimumArrivalDate),
+      "Arrival date cannot be in the past",
+    ),
+    participantLimit: z.number().int().min(2).max(6),
+  }).strict();
+}
 
 export const participantInputSchema = z.object({
   name: z.string().trim().min(1).max(20),

@@ -1,3 +1,8 @@
+import {
+  calendarDateInShanghai,
+  isCalendarDateOnOrAfter,
+} from "@/lib/validation/calendar-date";
+
 export type CreatePlanFormData = {
   title: string;
   arrivalDate: string;
@@ -15,6 +20,7 @@ function formValue(formData: FormData, key: string) {
 
 export function parseCreatePlanForm(
   formData: FormData,
+  minimumArrivalDate = calendarDateInShanghai(),
 ): ParseCreatePlanFormResult {
   const title = formValue(formData, "title");
   const arrivalDate = formValue(formData, "arrivalDate");
@@ -25,6 +31,9 @@ export function parseCreatePlanForm(
   }
   if (!arrivalDate) {
     return { ok: false, error: "请选择计划到达日期" };
+  }
+  if (!isCalendarDateOnOrAfter(arrivalDate, minimumArrivalDate)) {
+    return { ok: false, error: "请选择今天或之后的到达日期" };
   }
   if (
     !Number.isInteger(participantLimit) ||

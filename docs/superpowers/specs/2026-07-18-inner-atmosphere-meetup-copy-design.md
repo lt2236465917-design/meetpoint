@@ -10,6 +10,12 @@ Records navigation feedback (2026-07-18): clicking「查看」must immediately s
 
 Approved follow-up (2026-07-18): home keeps all four `SCENIC_VIDEOS` in continuous sequence plus manual selection. Every functional route uses exactly one deterministic looping clip under the shared shell scrim: create=静水, join=静水, plan=密林, result=破晓, records=破晓, alternatives=静水, manage=密林. Functional routes do not inherit or cycle the home selection. This background-only change does not reopen alternatives/manage IA.
 
+Approved follow-up (2026-07-19): wait/reveal `PeakScenicAccent` remains as the emotional-peak glass container, but it reveals the route-fixed page scene instead of mounting a second `静水` video. A functional page must render exactly one scenic video so the scene cannot conflict or drift inside the glass frame.
+
+Approved mobile playback recovery (2026-07-19): all scenic videos keep `muted`, `playsInline`, and autoplay. When mobile WebKit or an in-app browser rejects autoplay, the active home or functional scenic video retries synchronously on the first user pointer/touch gesture. The gradient remains visible until a frame is ready. This recovery must not override `prefers-reduced-motion: reduce`, which intentionally keeps functional pages static.
+
+Approved China Android delivery follow-up (2026-07-19): scenic media is served from the app origin as fast-start H.264 MP4 rather than fetched from CloudFront at runtime. Desktop retains the original high-quality 1920×1080 footage. Viewports up to 767px select a separate 1920×1080 encode around 6–8 Mbps so mobile keeps full resolution without requiring the original 11–19 Mbps throughput. Video elements include the TBS same-layer H5 playback attribute for Android WeChat while retaining standard `playsInline`. The opening scene alone may preload eagerly; inactive home scenes must not compete for the initial mobile connection.
+
 Extends `2026-07-17-ui-copy-and-visual-direction.md` and `2026-07-17-desktop-adaptive-shell-design.md`. Does **not** reopen alternatives / manage IA.
 
 ## Problem
@@ -63,14 +69,16 @@ Extends `2026-07-17-ui-copy-and-visual-direction.md` and `2026-07-17-desktop-ada
 - Approved readability adjustment: functional-route media opacity remains **0.72**. Use a moderate dual scrim (linear alpha about **0.14–0.26**, radial edge about **0.12**) so white copy stays legible while motion remains visible; form panels keep their own dark glass contrast for text and controls.
 - No train-window chrome; no in-shell scene switcher (switching remains home-only).
 - `prefers-reduced-motion: reduce` → static deepened canvas (same as create/join family).
-- Video error / blocked autoplay → scenic gradient fallback; never blank/white.
+- Video error → scenic gradient fallback; never blank/white. Do not write a permanent inline hide style when a media error fires: source selection may recover, and the recovered video must remain visible on every functional route. Blocked autoplay → keep the gradient, then retry the active video on the first user gesture.
 
 ### Home reliability and continuity
 
 - Home scene changes persist to `localStorage` key `meetpoint:scenic-scene` (store stable scene id / index aligned with `SCENIC_VIDEOS`).
 - Home continues through all four clips via `onEnded`; only the active clip may use eager `preload="auto"` so four simultaneous downloads do not delay the opening scene.
+- If the initial home autoplay promise rejects, the active scene retries on the first pointer/touch gesture and removes the recovery listeners after playback starts.
+- Home cycling does not rely solely on `ended`: a bounded near-end progress guard activates the next scene before the current clip can remain paused on its final frame. The newly active scene then switches to `preload="auto"`; inactive scenes remain `preload="none"`.
 - Functional routes ignore the home preference and use their route-fixed mapping.
-- Peak wait/reveal `PeakScenicAccent` remains for emotional peaks; shell light video provides page-level continuity. They do not replace each other.
+- Peak wait/reveal `PeakScenicAccent` remains for emotional peaks as transparent glass over the shell scene. It does not mount its own video; the route-fixed shell scene is the single scenic source for the page.
 
 ### Spec redline update
 

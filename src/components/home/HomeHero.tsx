@@ -7,7 +7,15 @@ import {
   subscribeScenicSceneIndex,
   writeScenicSceneIndex,
 } from "@/lib/ui/scenic-preference";
-import { SCENIC_VIDEOS as videos } from "@/lib/ui/scenic-videos";
+import { startScenicPlayback } from "@/lib/ui/scenic-autoplay";
+import {
+  nextScenicVideoIndex,
+  shouldAdvanceScenicVideo,
+} from "@/lib/ui/scenic-cycle";
+import {
+  MOBILE_INLINE_VIDEO_ATTRIBUTES,
+  SCENIC_VIDEOS as videos,
+} from "@/lib/ui/scenic-videos";
 
 const overlayImage =
   "https://soft-zoom-63098134.figma.site/_assets/v11/0b4a435b2df2747593c43d7a1c9b4578f7d8d90c.png";
@@ -137,13 +145,7 @@ export function HomeHero() {
   }, []);
 
   useEffect(() => {
-    videoRefs.current.forEach((video, index) => {
-      if (!video || index === 0) return;
-      seekToSceneStart(video, videos[index].startAt);
-    });
-  }, []);
-
-  useEffect(() => {
+    const playbackCleanups: Array<() => void> = [];
     videoRefs.current.forEach((video, index) => {
       if (!video) return;
       if (index !== activeVideo) {
@@ -156,23 +158,17 @@ export function HomeHero() {
         video,
         shouldUseOpeningStart ? 0 : videos[index].startAt,
       );
-      try {
-        const playResult = video.play();
-        if (playResult) {
-          void playResult
-            .then(() => {
-              setSceneReady(true);
-            })
-            .catch(() => {
-              setSceneReady(true);
-            });
-        } else {
+      const stopPlaybackRecovery = startScenicPlayback(video, {
+        onStarted: () => {
           setSceneReady(true);
-        }
-      } catch {
-        setSceneReady(true);
-      }
+        },
+      });
+      playbackCleanups.push(() => {
+        stopPlaybackRecovery();
+        video.pause();
+      });
     });
+    return () => playbackCleanups.forEach((cleanup) => cleanup());
   }, [activeVideo]);
 
   const releaseSwitchLockAfterFade = () => {
@@ -226,8 +222,11 @@ export function HomeHero() {
     });
   };
 
-  const switchToNextVideo = (index: number) => {
-    switchVideo((index + 1) % videos.length);
+  const advanceToNextVideo = (index: number) => {
+    if (index !== activeVideo || switchLockRef.current) return;
+    switchLockRef.current = true;
+    hasSceneChanged.current = true;
+    activateVideo(nextScenicVideoIndex(index, videos.length));
   };
 
   return (
@@ -246,20 +245,32 @@ export function HomeHero() {
                   ? "opacity-100"
                   : "opacity-0"
               }`}
-              src={video.src}
-              preload={activeVideo === index ? "auto" : "metadata"}
+              preload={activeVideo === index ? "auto" : "none"}
               autoPlay={activeVideo === index}
               muted
               playsInline
+              {...MOBILE_INLINE_VIDEO_ATTRIBUTES}
               onCanPlay={() => {
                 if (index === activeVideo) setSceneReady(true);
               }}
               onPlaying={() => {
                 if (index === activeVideo) setSceneReady(true);
               }}
-              onEnded={() => switchToNextVideo(index)}
+              onTimeUpdate={(event) => {
+                if (shouldAdvanceScenicVideo(event.currentTarget)) {
+                  advanceToNextVideo(index);
+                }
+              }}
+              onEnded={() => advanceToNextVideo(index)}
               aria-label={`${video.label}背景`}
-            />
+            >
+              <source
+                media="(max-width: 767px)"
+                src={video.mobileSrc}
+                type="video/mp4"
+              />
+              <source src={video.src} type="video/mp4" />
+            </video>
           ))}
         </div>
       </div>
@@ -292,9 +303,9 @@ export function HomeHero() {
             </div>
 
             <h1 className="font-display readable-title text-[1.75rem] leading-[1.3] sm:text-[2rem]">
-              散在几座城的朋友，
+              散在几座城的朋友
               <br />
-              这次在哪儿见？
+              这次在哪儿见
             </h1>
 
             <p className="readable-body font-sans-sc mt-5 max-w-xs text-sm leading-relaxed text-white">
@@ -308,7 +319,7 @@ export function HomeHero() {
               >
                 发起见面计划
               </Link>
-              <p className="readable-body font-sans-sc max-w-sm text-center text-xs text-white/85">
+              <p className="readable-body font-sans-sc max-w-sm text-center text-xs text-white/95">
                 建好计划把链接丢进群里，人齐了就知道该去哪儿见
               </p>
             </div>
@@ -326,7 +337,7 @@ export function HomeHero() {
                     className={`readable-body border-b pb-1.5 text-sm text-white transition-all duration-300 ${
                       isActive
                         ? "border-white opacity-100"
-                        : "border-transparent opacity-55 hover:opacity-85"
+                        : "border-transparent opacity-72 hover:opacity-90"
                     }`}
                     onClick={() => switchVideo(index)}
                     aria-pressed={isActive}

@@ -1,25 +1,35 @@
 export const SCENIC_VIDEOS = [
   {
     label: "金色黄昏",
-    src: "https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260702_081127_0992a171-d3c6-4978-8213-0ec5df8b6d63.mp4",
+    src: "/scenic/golden-hour.mp4",
+    mobileSrc: "/scenic/golden-hour-mobile.mp4",
     startAt: 2.8,
   },
   {
     label: "静水",
-    src: "https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260702_092026_dd05b805-ea0f-40b2-8c52-332b88502592.mp4",
+    src: "/scenic/still-water.mp4",
+    mobileSrc: "/scenic/still-water-mobile.mp4",
     startAt: 2.8,
   },
   {
     label: "密林",
-    src: "https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260702_081042_df7202bf-bd80-4b2b-bbc6-1f09ba2870e9.mp4",
+    src: "/scenic/forest.mp4",
+    mobileSrc: "/scenic/forest-mobile.mp4",
     startAt: 2.8,
   },
   {
     label: "破晓",
-    src: "https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260702_080959_4cac5234-3573-464e-a5b7-76b94b8a7d61.mp4",
+    src: "/scenic/dawn.mp4",
+    mobileSrc: "/scenic/dawn-mobile.mp4",
     startAt: 5.2,
   },
 ] as const;
+
+export const MOBILE_INLINE_VIDEO_ATTRIBUTES = {
+  "webkit-playsinline": "true",
+  "x5-video-player-type": "h5-page",
+  "x5-video-player-fullscreen": "false",
+} as const;
 
 export const SCENIC_SCENES = {
   goldenHour: SCENIC_VIDEOS[0],
@@ -29,6 +39,3 @@ export const SCENIC_SCENES = {
 } as const;
 
 export type ScenicSceneId = keyof typeof SCENIC_SCENES;
-
-/** Calm single scene for wait / reveal peaks (phase 4). */
-export const PEAK_SCENIC_VIDEO = SCENIC_VIDEOS[1];

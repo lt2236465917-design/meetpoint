@@ -223,13 +223,25 @@ describe("RunOrchestrator", () => {
 
   it("marks unexpected query failures as failed instead of leaving a retryable active run", async () => {
     const store = repository({ current: run("collecting"), tasks: [task()] });
+    const error = new Error("network exploded");
+    const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
 
     await expect(new RunOrchestrator({
       repository: store,
-      query: { execute: async () => { throw new Error("network exploded"); } },
+      query: { execute: async () => { throw error; } },
     }).advanceRun("run-1")).resolves.toBe("failed");
 
     expect(store.current.status).toBe("failed");
+    expect(log).toHaveBeenCalledWith(
+      "[recommendation-run] advance failed",
+      expect.objectContaining({
+        runId: "run-1",
+        traceId: "11111111-1111-4111-8111-111111111111",
+        status: "collecting",
+        error,
+      }),
+    );
+    log.mockRestore();
   });
 
   it("marks repeated MODEL_INVALID_OUTPUT as AGENT_PROPOSAL_INVALID instead of RUN_ADVANCE_FAILED", async () => {

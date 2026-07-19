@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { ResponsiveShell } from "@/components/layout/ResponsiveShell";
 import { getApiErrorMessage } from "@/lib/ui/api-error-message";
 import { copyTextToClipboard } from "@/lib/ui/clipboard";
 import { parseCreatePlanForm } from "@/lib/ui/create-plan-form";
 import { rememberMeetingHistoryItem } from "@/lib/ui/meeting-history";
+import { calendarDateInShanghai } from "@/lib/validation/calendar-date";
 
 type CreatePlanResult = {
   code: string;
@@ -13,9 +14,27 @@ type CreatePlanResult = {
   hostToken: string;
 };
 
+function subscribeMinimumArrivalDate(onStoreChange: () => void) {
+  const timer = window.setInterval(onStoreChange, 60_000);
+  return () => window.clearInterval(timer);
+}
+
+function getMinimumArrivalDateSnapshot() {
+  return calendarDateInShanghai();
+}
+
+function getServerMinimumArrivalDateSnapshot() {
+  return "";
+}
+
 export default function CreatePlanPage() {
   const [title, setTitle] = useState("");
   const [arrivalDate, setArrivalDate] = useState("");
+  const minimumArrivalDate = useSyncExternalStore(
+    subscribeMinimumArrivalDate,
+    getMinimumArrivalDateSnapshot,
+    getServerMinimumArrivalDateSnapshot,
+  );
   const [participantLimit, setParticipantLimit] = useState(4);
   const [participantLimitOpen, setParticipantLimitOpen] = useState(false);
   const arrivalDateInputRef = useRef<HTMLInputElement>(null);
@@ -57,6 +76,7 @@ export default function CreatePlanPage() {
 
     const parsed = parseCreatePlanForm(
       new FormData(event.currentTarget),
+      minimumArrivalDate || calendarDateInShanghai(),
     );
     if (!parsed.ok) {
       setError(parsed.error);
@@ -147,6 +167,7 @@ export default function CreatePlanPage() {
               <input
                 aria-labelledby="arrival-date-label"
                 className="atmosphere-field native-picker-hit-area w-full rounded-lg px-4 py-3 pr-12 font-normal"
+                min={minimumArrivalDate || undefined}
                 name="arrivalDate"
                 ref={arrivalDateInputRef}
                 type="date"

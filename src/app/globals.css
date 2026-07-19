@@ -67,31 +67,32 @@ body {
 
 .readable-title {
   text-shadow:
-    0 0 1px rgba(0, 0, 0, 0.55),
-    0 1px 2px rgba(0, 0, 0, 0.65),
-    0 2px 8px rgba(0, 0, 0, 0.45),
-    0 8px 24px rgba(0, 0, 0, 0.35);
+    0 0 1px rgba(0, 0, 0, 0.72),
+    0 1px 3px rgba(0, 0, 0, 0.9),
+    0 3px 10px rgba(0, 0, 0, 0.72),
+    0 9px 28px rgba(0, 0, 0, 0.58);
 }
 
 .readable-body {
   text-shadow:
-    0 0 1px rgba(0, 0, 0, 0.5),
-    0 1px 3px rgba(0, 0, 0, 0.55),
-    0 4px 14px rgba(0, 0, 0, 0.35);
+    0 0 1px rgba(0, 0, 0, 0.72),
+    0 1px 3px rgba(0, 0, 0, 0.9),
+    0 3px 9px rgba(0, 0, 0, 0.76),
+    0 7px 20px rgba(0, 0, 0, 0.62);
 }
 
 .hero-cta {
-  background: rgba(255, 255, 255, 0.16);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.38);
+  background: rgba(7, 12, 20, 0.4);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.48);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.28),
-    0 10px 28px rgba(0, 0, 0, 0.22);
+    inset 0 1px 0 rgba(255, 255, 255, 0.24),
+    0 12px 32px rgba(0, 0, 0, 0.32);
 }
 
 .hero-cta:hover {
-  background: rgba(255, 255, 255, 0.24);
+  background: rgba(7, 12, 20, 0.52);
 }
 
 .hero-chip {
@@ -249,38 +250,14 @@ body {
   }
 }
 
-/* Phase 4 — light scenic video on wait / reveal peaks only */
+/* Wait / reveal peaks — transparent glass over the route-fixed page scene */
 .peak-scenic {
   isolation: isolate;
+  background: rgba(10, 14, 20, 0.18);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   border: 1px solid var(--atmosphere-line);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.12),
     0 12px 32px rgba(0, 0, 0, 0.28);
-}
-
-.peak-scenic-media {
-  opacity: 0.42;
-}
-
-.peak-scenic-media::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background:
-    linear-gradient(
-      180deg,
-      rgba(8, 12, 18, 0.28) 0%,
-      rgba(8, 12, 18, 0.55) 55%,
-      rgba(8, 12, 18, 0.72) 100%
-    );
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .peak-scenic-media video {
-    display: none;
-  }
-
-  .peak-scenic-media {
-    opacity: 1;
-  }
 }

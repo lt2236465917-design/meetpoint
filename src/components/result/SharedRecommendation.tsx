@@ -18,7 +18,7 @@ export function SharedRecommendation({ result }: { result: SharedResult }) {
 
   return (
     <section className="space-y-4">
-      <PeakScenicAccent className="rounded-xl p-5" label="结果揭晓">
+      <PeakScenicAccent className="rounded-xl p-5">
         <p className="readable-body text-xs text-white/85">这次的见面城市</p>
         <h2 className="readable-title mt-1 font-display text-2xl font-semibold text-white">
           {result.cityName}

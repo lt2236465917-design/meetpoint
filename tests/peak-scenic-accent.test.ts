@@ -7,7 +7,6 @@ import { ResultContent } from "@/app/p/[code]/result/page";
 import { PeakScenicAccent } from "@/components/result/PeakScenicAccent";
 import { SharedRecommendation } from "@/components/result/SharedRecommendation";
 import { functionalScenicScene } from "@/lib/ui/functional-scenic";
-import { SCENIC_VIDEOS } from "@/lib/ui/scenic-videos";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: vi.fn() }),
@@ -78,23 +77,19 @@ const result = {
 };
 
 describe("PeakScenicAccent (phase 4)", () => {
-  it("renders a single muted looping scenic video over scenic-fallback", () => {
+  it("renders transparent glass without a nested scenic source", () => {
     const html = renderToStaticMarkup(
-      createElement(PeakScenicAccent, { label: "算票等待" }, "内容"),
+      createElement(PeakScenicAccent, null, "内容"),
     );
 
     expect(html).toContain("peak-scenic");
-    expect(html).toContain("scenic-fallback");
-    expect(html).toContain("<video");
-    expect(html).toContain('muted=""');
-    expect(html).toContain('playsInline=""');
-    expect(html).toContain('loop=""');
-    expect(html).toContain(SCENIC_VIDEOS[1].src);
     expect(html).toContain("内容");
-    expect(html).not.toContain("train-bob");
+    expect(html).not.toContain("scenic-fallback");
+    expect(html).not.toContain("<video");
+    expect(html).not.toContain("peak-scenic-media");
   });
 
-  it("shows light scenic video on calculation-wait peaks only", () => {
+  it("shows scenic glass without another video on calculation-wait peaks only", () => {
     const waitHtml = renderToStaticMarkup(
       createElement(ResultContent, {
         code: "ABC123",
@@ -112,7 +107,7 @@ describe("PeakScenicAccent (phase 4)", () => {
     );
 
     expect(waitHtml).toContain("peak-scenic");
-    expect(waitHtml).toContain("<video");
+    expect(waitHtml).not.toContain("<video");
     expect(waitHtml).toContain("正在挑一座对每个人都公平的城市");
 
     const failedHtml = renderToStaticMarkup(
@@ -135,13 +130,13 @@ describe("PeakScenicAccent (phase 4)", () => {
     expect(failedHtml).not.toContain("<video");
   });
 
-  it("shows light scenic video on the shared city reveal panel", () => {
+  it("shows scenic glass without another video on the shared city reveal panel", () => {
     const html = renderToStaticMarkup(
       createElement(SharedRecommendation, { result }),
     );
 
     expect(html).toContain("peak-scenic");
-    expect(html).toContain("<video");
+    expect(html).not.toContain("<video");
     expect(html).toContain("这次的见面城市");
     expect(html).toContain("南京");
   });
@@ -165,14 +160,14 @@ describe("PeakScenicAccent (phase 4)", () => {
     expect(functionalScenicScene("/p/ABCD/result")).toBe("dawn");
   });
 
-  it("defines peak-scenic styles and reduced-motion fallback in globals.css", () => {
+  it("defines page-scene glass without nested scenic-media styles", () => {
     const css = readFileSync(
       path.join(process.cwd(), "src/app/globals.css"),
       "utf8",
     );
 
     expect(css).toContain(".peak-scenic");
-    expect(css).toContain(".peak-scenic-media");
-    expect(css).toContain("prefers-reduced-motion");
+    expect(css).toContain("backdrop-filter: blur(10px)");
+    expect(css).not.toContain(".peak-scenic-media");
   });
 });

@@ -14,7 +14,7 @@ function generateCode(): string {
 
 export async function POST(req: Request) {
   const body = await req.json().catch(() => ({}));
-  const parsed = createPlanSchema.safeParse(body);
+  const parsed = createPlanSchema().safeParse(body);
 
   if (!parsed.success) {
     return NextResponse.json({ error: "INVALID_INPUT" }, { status: 400 });

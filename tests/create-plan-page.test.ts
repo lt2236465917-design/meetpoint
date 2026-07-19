@@ -11,6 +11,7 @@ describe("CreatePlanPage native input controls", () => {
 
     expect(pageSource).toContain("ref={arrivalDateInputRef}");
     expect(pageSource).toContain('type="date"');
+    expect(pageSource).toContain("min={minimumArrivalDate || undefined}");
     expect(pageSource).not.toContain('type="time"');
     expect(pageSource).not.toContain("targetArrivalTime");
     expect(pageSource).not.toContain("ClockIcon");

@@ -12,7 +12,7 @@ This guide is the quick reference for running and calling the MVP locally.
 
 The same user-facing routes must remain usable on phones (shareable plan links) and on desktop. Shipped UI uses a true adaptive layout without fake phone chrome — see `docs/superpowers/specs/2026-07-17-desktop-adaptive-shell-design.md`.
 
-For local browser testing, open `http://127.0.0.1:<port>`; for real-phone testing, open the Network URL printed by `npm run dev`, for example `http://192.168.31.69:3000`. Both origins are allowed in `next.config.ts` so the browser can load Next.js development resources and keep client-side form submission behavior.
+For local browser testing, open `http://127.0.0.1:<port>`; for real-phone testing, open the current Network URL printed by `npm run dev`. `next.config.ts` discovers active LAN IPv4 addresses at startup so the browser can load Next.js development resources after switching Wi-Fi networks.
 
 ## Local Fallback Mode
 
@@ -69,7 +69,7 @@ Returns:
 ```json
 {
   "code": "ABC123",
-  "shareUrl": "http://192.168.31.69:3000/p/ABC123",
+  "shareUrl": "http://<current-lan-ip>:3000/p/ABC123",
   "hostToken": "returned-once-secret"
 }
 ```
@@ -230,12 +230,14 @@ Use these checks after layout or component changes:
 
 1. Open `/` at a desktop viewport around `1440x1000`; confirm a full-bleed train-window hero (brand `meetpoint`, no fake phone chrome), zero-scroll opening with “发起见面计划” → `/create` and “最近记录” → `/records`, and no bottom-left Next.js `N` indicator. Confirm all four clips continuously cycle and manual scene selection still works; only the active clip should load eagerly.
 2. Open `/create` at a mobile viewport around `390x844`; confirm the `ResponsiveShell` fills the visible screen height with glass form panels, a usable single-column workflow, and the fixed 静水 clip under a readable dark scrim.
-3. Open `/p/[code]`, `/p/[code]/join`, `/p/[code]/result`, `/records`, `/p/[code]/alternatives`, and `/p/[code]/manage`; confirm each route uses its fixed scene (plan=密林, join=静水, result=破晓, records=破晓, alternatives=静水, manage=密林) and never cycles all four. On the public plan page expect one StatusLane panel (status +「开始见面」CTA + `已填写` list). On the result page expect glass `.atmosphere-panel` scheme cards (no nested white route cards); while arranging or on city reveal, expect light `PeakScenicAccent` video. Contracts: `docs/superpowers/specs/2026-07-18-inner-atmosphere-meetup-copy-design.md`, `docs/superpowers/specs/2026-07-17-plan-result-ia-design.md`, adaptive shell in `docs/superpowers/specs/2026-07-17-desktop-adaptive-shell-design.md`.
+3. Open `/p/[code]`, `/p/[code]/join`, `/p/[code]/result`, `/records`, `/p/[code]/alternatives`, and `/p/[code]/manage`; confirm each route uses its fixed scene (plan=密林, join=静水, result=破晓, records=破晓, alternatives=静水, manage=密林) and never cycles all four. On the public plan page expect one StatusLane panel (status +「开始见面」CTA + `已填写` list). On the result page expect glass `.atmosphere-panel` scheme cards (no nested white route cards); while arranging or on city reveal, `PeakScenicAccent` must remain transparent glass over the one route-fixed video. Contracts: `docs/superpowers/specs/2026-07-18-inner-atmosphere-meetup-copy-design.md`, `docs/superpowers/specs/2026-07-17-plan-result-ia-design.md`, adaptive shell in `docs/superpowers/specs/2026-07-17-desktop-adaptive-shell-design.md`.
 4. Open `/records` and confirm recent meeting records render in the adaptive shell with a back link to `/`. 「查看」/「复制链接」should activate on a single click; a slow dynamic plan route must immediately change「查看」to「正在打开…」and show the plan loading shell. Browser translation cards are not app UI and should be disabled for localhost if they cover controls.
 5. On `/p/[code]/join`, type a departure city, confirm city candidates do not cover the transport-mode buttons, then select a city and confirm the candidates disappear. Searching a prefecture such as「湛江」should be selectable when `AMAP_API_KEY` is configured.
 6. Confirm no browser or framework overlay visually covers the right side of the app. If a red overlay appears while the DOM has no app-level fixed red element, check browser extensions / Next.js issue badge before changing app CSS.
 7. On `/create` in a WebKit/Chrome browser, click the middle of the “计划到达日期” field, then confirm the platform-native date picker opens and the selected value appears. The native picker controls its own closing behavior.
 8. On `/create`, click "参与人数上限". Confirm the app-styled 2–6 person panel expands in normal document flow below the trigger, pushes「生成邀请链接」down instead of covering it, and closes after selecting an option.
+
+If a device still shows a static fallback, append `?videoDebug=1` to that route. The opt-in panel reports H.264 support, selected source, media/network state, dimensions, and playback errors; use「手动播放」to distinguish autoplay rejection from loading or decoding failure. The panel is absent without this query parameter.
 
 ## Gateway Setup And Contract (internal service)
 
@@ -280,6 +282,8 @@ PROBE_TRAVEL_DATE=2026-08-20 npm run probe:providers
 The probe outputs only redacted status/count/latency/field-name summaries. It is not supplier acceptance evidence: coverage remains unverified until a new full plan has produced route-fingerprint diagnostics after cooldown, and neither `/healthz` nor a single successful fare row proves supplier-wide authorization, quota recovery, or production readiness.
 
 After a supplier cooldown, use a new full plan for a live-ticket check. Confirm both the Next.js app and `services/travel-provider-gateway` are reachable first (`GET /healthz` → `{ "status": "ok" }`); runs that end with `GATEWAY_UNAVAILABLE` and zero verified quotes are operator setup failures, not supplier-cooldown evidence. Prefer `npm run build && npm run start` for live publication when sandboxed `next dev` is unstable. A completed shared result must contain verified FlyAI routes for every participant in both schemes; any coverage gap must remain unpublished and end with retry/diagnostic guidance.
+
+An `incomplete` or `failed` automatic run is terminal and is never resumed in place. The result page's retry action creates a new run through `POST /api/plans/{code}/calculate` using the browser-local participant credential. `RUN_ADVANCE_FAILED` remains the public diagnostic code; inspect the server log entry tagged `[recommendation-run] advance failed` for the original exception and its run/trace context.
 
 Treat any future Fliggy/FlyAI MCP as a gateway-side provider adapter. Before enabling it for recommendation runs, compare it against FlyAI with the same fixed origin/candidate/mode probe set and verify stable price units, China-time timestamps, safe booking URLs, error classifications, and production authorization.
 

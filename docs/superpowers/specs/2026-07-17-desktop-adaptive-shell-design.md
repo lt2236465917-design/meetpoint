@@ -39,7 +39,7 @@ The phone-canvas approach made desktop look sparse and forced the home opening s
 
 - Chinese friend-tone copy; no calculator CTA framing on primary actions.
 - No looping scenic video behind create/join/plan forms.
-- Phase 4: light `PeakScenicAccent` only on wait / reveal peaks.
+- `PeakScenicAccent` glass only on wait / reveal peaks; it reveals the route-fixed scene and must not mount another video.
 - Plan StatusLane + glass schemes IA (`2026-07-17-plan-result-ia-design.md`).
 - Publication / host-token / recommendation guards unchanged.
 

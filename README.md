@@ -50,10 +50,10 @@ Local policy `2026-07-19.v2` defines saving as the exact lowest verified fare in
 - `src/lib/agent/run-orchestrator.ts`: creates and incrementally advances durable runs with a persisted lease; it dispatches to the guarded in-memory fallback when Supabase is absent.
 - `src/lib/recommendation/alternative-preview.ts` and `src/lib/security/host-confirmation.ts`: bind a private run to one canonical city and requesting participant, authorize private reads, and pass the exact Supervisor-approved proposal to host-only atomic confirmation.
 - `src/components/result/SharedRecommendation.tsx` and `SchemeCard.tsx`: render the published city once and map persisted participant routes directly on `.atmosphere-panel` glass (no nested white route cards), including team totals, route facts, quote fingerprints, and China-time freshness; they never render booking links or client-side route selection.
-- `src/components/result/RefreshingResultNotice.tsx`: maps every run status to Chinese progress/retry guidance and, when the device holds a local participant token, posts one bounded authenticated run advance before refreshing.
-- `src/components/home/HomeHero.tsx`: product `/` full-bleed train-window hero (brand `meetpoint`, scenic video, train overlay, glass CTA to `/create`, entry to `/records`).
-- `src/components/layout/FunctionalScenicBackdrop.tsx`, `ShellScenicBackdrop.tsx`, `ResponsiveShell.tsx`, and `src/app/globals.css`: one root-mounted route-fixed clip stays alive through functional-page loading/navigation, with playback checkpoints after unavoidable remounts; `ResponsiveShell` renders adaptive `max-w-2xl` content above it. Only home cycles all four clips. Phase 4 `PeakScenicAccent` remains on wait/reveal peaks.
-- `src/components/result/PeakScenicAccent.tsx` + `src/lib/ui/scenic-videos.ts`: light muted scenic accent for wait/reveal only.
+- `src/components/result/RefreshingResultNotice.tsx`: maps every run status to Chinese progress/retry guidance. Nonterminal runs can post one bounded authenticated advance; terminal `incomplete` / `failed` runs create a fresh automatic run when the device still holds a participant token, instead of presenting a no-op refresh.
+- `src/components/home/HomeHero.tsx`: product `/` full-bleed train-window hero (brand `meetpoint`, train overlay, glass CTA to `/create`, entry to `/records`). It continuously cycles all four scenic clips, uses a near-end guard when a browser misses `ended`, and still supports manual scene selection.
+- `src/components/layout/FunctionalScenicBackdrop.tsx`, `ShellScenicBackdrop.tsx`, `ResponsiveShell.tsx`, and `src/app/globals.css`: one root-mounted route-fixed clip stays alive through functional-page loading/navigation, with playback checkpoints after unavoidable remounts; a transient media error falls through to the static fallback without permanently hiding a recovered video. `ResponsiveShell` renders adaptive `max-w-2xl` content above it.
+- `src/components/result/PeakScenicAccent.tsx` + `src/lib/ui/scenic-videos.ts`: transparent wait/reveal glass over the single route-fixed scene, plus the same-origin desktop/mobile scenic source catalog. `PeakScenicAccent` does not mount another video.
 - `src/lib/ui/meeting-history.ts`: browser-only local recent-record storage; it caches `useSyncExternalStore` snapshots so the records page does not trigger React update loops.
 
 ## Environment
@@ -62,7 +62,7 @@ Copy `.env.example` to `.env.local` and fill server-side keys locally for persis
 
 If `NEXT_PUBLIC_SUPABASE_URL` or `SUPABASE_SERVICE_ROLE_KEY` is missing, the app uses the in-memory fallback store. It is only for local smoke testing, is cleared when the server restarts, and cannot obtain supplier quotes; an unseeded fallback run therefore ends as `incomplete` rather than publishing estimates.
 
-For local browser testing, use `http://127.0.0.1:<port>`; for mobile-device testing, use the Network URL printed by `npm run dev`, such as `http://192.168.31.69:3000`. `next.config.ts` allows both development origins so Next.js client resources and interactive forms load correctly.
+For local browser testing, use `http://127.0.0.1:<port>`; for mobile-device testing, use the current Network URL printed by `npm run dev`. `next.config.ts` discovers active non-internal IPv4 addresses at server start instead of retaining a historical Wi-Fi address, so Next.js client resources and interactive forms load after network changes.
 
 Supabase variables:
 

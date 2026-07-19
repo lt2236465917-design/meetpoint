@@ -10,5 +10,8 @@ describe("Next development configuration", () => {
     );
 
     expect(config).toContain('"127.0.0.1"');
+    expect(config).toContain("networkInterfaces");
+    expect(config).toContain("family === \"IPv4\"");
+    expect(config).not.toContain('"192.168.31.69"');
   });
 });

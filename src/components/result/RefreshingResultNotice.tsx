@@ -39,6 +39,25 @@ export async function advanceAutomaticRun({
   return response.ok;
 }
 
+export async function restartAutomaticRun({
+  code,
+  participantToken,
+  request = fetch,
+}: {
+  code: string;
+  participantToken: string;
+  request?: typeof fetch;
+}) {
+  const response = await request(
+    `/api/plans/${encodeURIComponent(code)}/calculate`,
+    {
+      method: "POST",
+      headers: { "x-participant-token": participantToken },
+    },
+  );
+  return response.ok;
+}
+
 export function RefreshingResultNotice({
   code,
   progress,
@@ -50,7 +69,10 @@ export function RefreshingResultNotice({
 }) {
   const router = useRouter();
   const [refreshCount, setRefreshCount] = useState(0);
+  const [restarting, setRestarting] = useState(false);
+  const [restartMessage, setRestartMessage] = useState("");
   const autoRefresh = isNonterminal(progress.status);
+  const terminalFailure = progress.status === "incomplete" || progress.status === "failed";
   const delay = REFRESH_DELAYS_MS[refreshCount];
 
   const refresh = useCallback(async () => {
@@ -70,6 +92,30 @@ export function RefreshingResultNotice({
     router.refresh();
   }, [autoRefresh, code, progress.runId, router]);
 
+  const restart = useCallback(async () => {
+    if (!code || restarting) return;
+    const participantToken = readMeetingHistory()
+      .find((item) => item.code === code)
+      ?.participantEditToken;
+    if (!participantToken) {
+      setRestartMessage("这台设备没有重新查询权限，请返回计划页让已填写的朋友发起。");
+      return;
+    }
+
+    setRestarting(true);
+    setRestartMessage("");
+    const restarted = await restartAutomaticRun({
+      code,
+      participantToken,
+    }).catch(() => false);
+    if (restarted) {
+      router.refresh();
+    } else {
+      setRestartMessage("重新查询没有启动，请检查服务后再试一次。");
+    }
+    setRestarting(false);
+  }, [code, restarting, router]);
+
   useEffect(() => {
     if (!autoRefresh || delay === undefined) return;
     const timer = window.setTimeout(() => void refresh(), delay);
@@ -84,13 +130,29 @@ export function RefreshingResultNotice({
           诊断编号 {diagnosticRunId(progress.runId)}
         </p>
       ) : null}
+      {restartMessage ? (
+        <p className="text-xs leading-5 text-[var(--atmosphere-muted)]" role="alert">
+          {restartMessage}
+        </p>
+      ) : null}
       <button
         className="atmosphere-ghost w-full rounded-xl py-3 text-sm font-medium"
-        onClick={() => void refresh()}
+        disabled={restarting}
+        onClick={() => void (terminalFailure ? restart() : refresh())}
         type="button"
       >
-        刷新结果
+        {terminalFailure
+          ? restarting ? "正在重新查询" : "重新查询"
+          : "刷新结果"}
       </button>
+      {terminalFailure && code ? (
+        <a
+          className="block text-center text-xs leading-5 text-[var(--atmosphere-muted)] underline underline-offset-4"
+          href={`/p/${encodeURIComponent(code)}`}
+        >
+          返回计划页
+        </a>
+      ) : null}
     </div>
   );
 
@@ -99,7 +161,7 @@ export function RefreshingResultNotice({
   }
 
   return (
-    <PeakScenicAccent className="rounded-xl p-4" label="算票等待">
+    <PeakScenicAccent className="rounded-xl p-4">
       {body}
     </PeakScenicAccent>
   );

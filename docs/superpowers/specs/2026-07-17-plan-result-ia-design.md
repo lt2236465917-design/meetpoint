@@ -85,6 +85,10 @@ Keep city name + `explanationZh`. Restyle the hero block onto `.atmosphere-panel
 
 Align Notice / refresh button / diagnostic id with atmosphere (ghost or CTA button classes, muted diagnostic). Do not change advance / poll logic.
 
+For nonterminal runs, keep the bounded advance + refresh behavior. For terminal `incomplete` / `failed` runs, the action is not a page refresh: when the device still has its participant edit credential, post to the existing calculate boundary to create a fresh automatic run, then refresh into that run. While the request is in flight, disable the action and show progress copy. If no participant credential exists, link back to the public plan instead of presenting a non-functional retry.
+
+Unexpected advance exceptions retain the public safe code `RUN_ADVANCE_FAILED`, and additionally emit a server-only structured error containing the run ID, trace ID, run status, and original exception. Tokens, prompts, participant names, and supplier raw payloads must never enter the public diagnostic record.
+
 ## Files
 
 | File | Change |

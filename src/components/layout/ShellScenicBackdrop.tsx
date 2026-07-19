@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useSyncExternalStore } from "react";
 import {
+  MOBILE_INLINE_VIDEO_ATTRIBUTES,
   SCENIC_SCENES,
   type ScenicSceneId,
 } from "@/lib/ui/scenic-videos";
@@ -9,6 +10,7 @@ import {
   readScenicPlaybackPosition,
   recordScenicPlaybackPosition,
 } from "@/lib/ui/scenic-playback";
+import { startScenicPlayback } from "@/lib/ui/scenic-autoplay";
 
 function subscribeReducedMotion(onStoreChange: () => void) {
   const media = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -37,18 +39,10 @@ export function ShellScenicBackdrop({ scene }: { scene: ScenicSceneId }) {
     const video = videoRef.current;
     if (!video || !videoSrc) return;
 
-    try {
-      const playResult = video.play();
-      if (playResult) {
-        void playResult.catch(() => {
-          // Autoplay can be blocked; muted loop + attribute still try on next paint.
-        });
-      }
-    } catch {
-      // ignore
-    }
+    const stopPlaybackRecovery = startScenicPlayback(video);
 
     return () => {
+      stopPlaybackRecovery();
       recordScenicPlaybackPosition(scene, video.currentTime);
     };
   }, [scene, videoSrc]);
@@ -69,20 +63,24 @@ export function ShellScenicBackdrop({ scene }: { scene: ScenicSceneId }) {
           <video
             ref={videoRef}
             className="pointer-events-none"
-            src={videoSrc}
             muted
             autoPlay
             loop
             playsInline
+            {...MOBILE_INLINE_VIDEO_ATTRIBUTES}
             preload="auto"
             onLoadedMetadata={(event) => restorePlaybackPosition(event.currentTarget)}
             onTimeUpdate={(event) => {
               recordScenicPlaybackPosition(scene, event.currentTarget.currentTime);
             }}
-            onError={(event) => {
-              event.currentTarget.style.display = "none";
-            }}
-          />
+          >
+            <source
+              media="(max-width: 767px)"
+              src={SCENIC_SCENES[scene].mobileSrc}
+              type="video/mp4"
+            />
+            <source src={videoSrc} type="video/mp4" />
+          </video>
         ) : null}
       </div>
     </div>

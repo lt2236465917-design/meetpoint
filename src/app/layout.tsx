@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { FunctionalScenicBackdrop } from "@/components/layout/FunctionalScenicBackdrop";
+import { ScenicVideoDiagnostics } from "@/components/layout/ScenicVideoDiagnostics";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -27,6 +28,7 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col" suppressHydrationWarning>
         <FunctionalScenicBackdrop />
         {children}
+        <ScenicVideoDiagnostics />
       </body>
     </html>
   );

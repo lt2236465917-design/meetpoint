@@ -8,9 +8,11 @@ Approved product-facing direction for Chinese copy and home-hero visual language
 - Home hero visual (phase 1): ported from the external MeetpointPreview into product `/` (train-window hero, text-shadow readability, glass CTA → `/create`; no Lumora/preview chrome).
 - Phase 2 (atmosphere tokens → ResponsiveShell / create / join / plan): **shipped**.
 - Phase 3 (plan/result IA): **shipped** (StatusLane on public plan + glass schemes on shared result; see `2026-07-17-plan-result-ia-design.md`).
-- Phase 4 (optional wait/reveal video): **shipped** — light muted looping scenic video on calculation-wait (`RefreshingResultNotice` nonterminal) and city-reveal (`SharedRecommendation`); `prefers-reduced-motion` falls back to scenic gradient.
+- Phase 4 (wait/reveal accent): **shipped, revised 2026-07-19** — calculation-wait (`RefreshingResultNotice` nonterminal) and city-reveal (`SharedRecommendation`) use transparent glass over the route-fixed scene; no nested scenic video.
 - Adaptive shell (approved 2026-07-17): **shipped** — no fake H5 phone frame; true adaptive layout; home opening zero-scroll; 最近见面记录 on `/records` — see `2026-07-17-desktop-adaptive-shell-design.md`.
 - Inner atmosphere continuity + meetup copy: **shipped** 2026-07-18, with 2026-07-19 smoke hardening — home continuously cycles all four clips; each functional route uses one root-mounted deterministic clip under the shared scrim; host CTA「开始见面」/「见面安排中」; departure prefecture search hardening; create participant menu expands inline without covering the CTA. Home hero brand mark: `meetpoint`. See `2026-07-18-inner-atmosphere-meetup-copy-design.md`. This **supersedes** older “plan/shell stay video-free”, “create/join static only”, and “算出见面城市” wording.
+- Home readability follow-up (revised 2026-07-19): use stronger layered text shadows, a darker translucent hero CTA, and higher supporting-copy / inactive-scene opacity. Do not place a local or full-screen dark veil behind the copy; bounded overlays create visible blocks on bright moving scenery.
+- Home hero headline punctuation follow-up (approved 2026-07-19): render「散在几座城的朋友」and「这次在哪儿见」as two clean lines without the comma or question mark.
 
 ## Copy principles
 
@@ -42,28 +44,29 @@ External preview (reference only; not the live product entry):
 Shared decisions:
 
 - Metaphor: train window = on the way to meet friends
-- Readability: prefer **text-shadow** over a full-screen dark scrim (scrim kills scenery)
-- Primary CTA: semi-transparent glass pill, slightly shorter than full content column (`~18–19.5rem`), larger white label text
+- Readability: use layered text-shadow only; do not add a bounded local veil or a full-screen dark scrim that interrupts or kills the scenery
+- Primary CTA: dark semi-transparent glass pill, slightly shorter than full content column (`~18–19.5rem`), larger white label text; it must remain distinct on both snow-bright and forest-dark frames
+- Supporting copy stays near-opaque white, and inactive scene labels remain at least `0.72` opacity so moving bright frames do not erase them
 - Functional pages use one route-fixed muted looping clip under the readable shell scrim; only home cycles all four clips
-- Phase 4: light scenic video at emotional peaks (calculation wait, result reveal) via `PeakScenicAccent` (shipped)
+- Phase 4: transparent scenic glass at emotional peaks (calculation wait, result reveal) via `PeakScenicAccent`; it reveals the route-fixed page scene.
 - Route-fixed shell scenic mapping: create=静水, join=静水, plan=密林, result=破晓, records=破晓, alternatives=静水, manage=密林 (`2026-07-18-inner-atmosphere-meetup-copy-design.md`)
 
-## Phase 4 — Wait / reveal light scenic video
+## Phase 4 — Wait / reveal scenic glass
 
 **Status:** shipped 2026-07-17 in the product repo.
 
 ### Goal
 
-Add a light train-window scenic accent only at calculation-wait and result-reveal emotional peaks, without putting looping video behind create / join / plan forms or deep-restyling alternatives / manage IA.
+Emphasize calculation-wait and result-reveal emotional peaks with a transparent glass container that keeps the route-fixed page scene visually continuous.
 
 ### Chosen approach
 
-Shared catalog `src/lib/ui/scenic-videos.ts` (same CloudFront clips as `HomeHero`). New `PeakScenicAccent` wraps:
+`PeakScenicAccent` wraps:
 
 - Nonterminal wait UI in `RefreshingResultNotice` (not incomplete / failed diagnostics)
 - City reveal panel in `SharedRecommendation` (scheme cards stay glass-only)
 
-Single calm scene (`静水`), muted + loop + `playsInline`, soft opacity + gradient scrim for copy readability. CSS `.peak-scenic` / `.peak-scenic-media`; `prefers-reduced-motion: reduce` hides the `<video>` and keeps `.scenic-fallback`. No train-frame overlay, no multi-scene switcher (home-only).
+The container uses translucent glass, a subtle border, and backdrop blur. It mounts no `<video>` and no `.scenic-fallback`; the route-fixed shell scene is the only scenic source. No train-frame overlay and no scene switcher (home-only).
 
 ### Out of scope
 
@@ -73,7 +76,7 @@ Single calm scene (`静水`), muted + loop + `playsInline`, soft opacity + gradi
 
 ### Acceptance
 
-- Wait (nonterminal) and shared city reveal show light scenic video; incomplete / failed do not
+- Wait (nonterminal) and shared city reveal show transparent scenic glass with no nested video; incomplete / failed do not use the peak container
 - Create / join / plan / `ResponsiveShell` sources contain no peak video
 - `npm run lint`, `npm run test`, and `npm run build` pass
 
@@ -82,7 +85,7 @@ Single calm scene (`静水`), muted + loop + `playsInline`, soft opacity + gradi
 1. ~~Port approved home hero into product `/` (Meetpoint copy + train/scenery; CTA → `/create`)~~ **done**
 2. Extract design tokens into `ResponsiveShell` / globals so create/join/plan do not feel like a different product — **done (Approach A)**
 3. ~~Interaction/IA pass on plan and result pages (less card stacking; clearer “who’s missing / ready / result”)~~ **done** (StatusLane + glass schemes; `2026-07-17-plan-result-ia-design.md`)
-4. ~~Optional light video only on wait / reveal moments~~ **done** (`PeakScenicAccent` + shared `SCENIC_VIDEOS`; later route-fixed shell scenic does not replace peak accents)
+4. ~~Optional wait / reveal accent~~ **done, revised 2026-07-19** (`PeakScenicAccent` reveals the route-fixed scene without nested scenic media)
 5. ~~Inner atmosphere continuity + meetup copy~~ **done** (home four-clip loop; functional route-fixed shell scenic;「开始见面」; departure search merge; upward participant menu — `2026-07-18-inner-atmosphere-meetup-copy-design.md`)
 
 ## Phase 2 — Shared atmosphere tokens (Approach A)
