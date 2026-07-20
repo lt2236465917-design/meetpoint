@@ -53,6 +53,31 @@ const liveFlightItem = {
   }],
 };
 
+const connectingFlightItem = {
+  ticketPrice: "980",
+  totalDuration: "05:00:00",
+  jumpUrl: "https://a.feizhu.com/flight/MU5101-MU2305",
+  journeys: [{
+    segments: [{
+      depDateTime: "2026-08-20 08:00:00",
+      arrDateTime: "2026-08-20 10:00:00",
+      duration: "02:00:00",
+      marketingTransportNo: "MU5101",
+      transportType: "flight",
+      depStationName: "北京首都",
+      arrStationName: "武汉天河",
+    }, {
+      depDateTime: "2026-08-20 11:30:00",
+      arrDateTime: "2026-08-20 13:00:00",
+      duration: "01:30:00",
+      marketingTransportNo: "MU2305",
+      transportType: "flight",
+      depStationName: "武汉天河",
+      arrStationName: "上海虹桥",
+    }],
+  }],
+};
+
 function executorReturning(payload: unknown) {
   return vi.fn((_file: string, _args: readonly string[], _options: object, callback: ExecCallback) => {
     callback(null, JSON.stringify(payload), "");
@@ -154,6 +179,188 @@ describe("searchFlyAI", () => {
     }]);
   });
 
+  it("normalizes every segment of a connecting flight itinerary", async () => {
+    const result = await searchFlyAI(baseInput, {
+      execFile: executorReturning({ data: { itemList: [connectingFlightItem] } }),
+      executable: "/safe/flyai",
+    });
+
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({
+      mode: "flight",
+      departAt: "2026-08-20T08:00:00+08:00",
+      arriveAt: "2026-08-20T13:00:00+08:00",
+      durationMinutes: 300,
+      isDirect: false,
+      hasTransfer: true,
+      transferCount: 1,
+      serviceName: "MU5101 → MU2305",
+      departureStationName: "北京首都",
+      arrivalStationName: "上海虹桥",
+    });
+  });
+
+  it("normalizes supplier timestamps that already include an explicit offset", async () => {
+    const item = {
+      ...liveFlightItem,
+      journeys: [{ segments: [{
+        ...liveFlightItem.journeys[0].segments[0],
+        depDateTime: "2026-08-20 08:00:00+08:00",
+        arrDateTime: "2026-08-20 10:15:00+08:00",
+      }] }],
+    };
+
+    const result = await searchFlyAI(baseInput, {
+      execFile: executorReturning({ data: { itemList: [item] } }),
+      executable: "/safe/flyai",
+    });
+
+    expect(result[0]).toMatchObject({
+      departAt: "2026-08-20T08:00:00+08:00",
+      arriveAt: "2026-08-20T10:15:00+08:00",
+    });
+  });
+
+  it("flattens multiple journey segment groups in supplier array order", async () => {
+    const thirdSegment = {
+      depDateTime: "2026-08-20 14:00:00",
+      arrDateTime: "2026-08-20 15:00:00",
+      duration: "01:00:00",
+      marketingTransportNo: "MU5203",
+      transportType: "flight",
+      depStationName: "上海虹桥",
+      arrStationName: "杭州萧山",
+    };
+    const groupedItem = {
+      ...connectingFlightItem,
+      journeys: [
+        { segments: connectingFlightItem.journeys[0].segments },
+        { segments: [thirdSegment] },
+      ],
+    };
+
+    const result = await searchFlyAI(baseInput, {
+      execFile: executorReturning({ data: { itemList: [groupedItem] } }),
+      executable: "/safe/flyai",
+    });
+
+    expect(result[0]).toMatchObject({
+      departAt: "2026-08-20T08:00:00+08:00",
+      arriveAt: "2026-08-20T15:00:00+08:00",
+      durationMinutes: 420,
+      transferCount: 2,
+      serviceName: "MU5101 → MU2305 → MU5203",
+      arrivalStationName: "杭州萧山",
+    });
+  });
+
+  it.each([
+    ["overlapping", {
+      ...connectingFlightItem.journeys[0].segments[1],
+      depDateTime: "2026-08-20 09:30:00",
+    }],
+    ["invalid", {
+      ...connectingFlightItem.journeys[0].segments[1],
+      arrDateTime: "2026-08-20 11:00:00",
+    }],
+    ["out-of-order", {
+      ...connectingFlightItem.journeys[0].segments[1],
+      depDateTime: "2026-08-20 06:00:00",
+      arrDateTime: "2026-08-20 07:00:00",
+    }],
+  ])("rejects %s live segment sequences without leaking supplier facts", async (_label, secondSegment) => {
+    const diagnostics: unknown[] = [];
+    const item = {
+      ...connectingFlightItem,
+      journeys: [{ segments: [connectingFlightItem.journeys[0].segments[0], secondSegment] }],
+    };
+
+    await expect(searchFlyAI(baseInput, {
+      execFile: executorReturning({ data: { itemList: [item] } }),
+      executable: "/safe/flyai",
+      diagnosticLogger: (event) => diagnostics.push(event),
+    })).rejects.toMatchObject({ code: "PROVIDER_INVALID_RESPONSE" });
+
+    expect(diagnostics).toEqual([expect.objectContaining({
+      outcome: "PROVIDER_INVALID_RESPONSE",
+      droppedReasons: ["invalid_segment_sequence"],
+    })]);
+    const serialized = JSON.stringify(diagnostics);
+    for (const supplierFact of ["北京首都", "武汉天河", "上海虹桥", "MU5101", "MU2305", "980", "2026-08-20 08:00:00"]) {
+      expect(serialized).not.toContain(supplierFact);
+    }
+  });
+
+  it("rejects live itineraries with more than eight total segments", async () => {
+    const diagnostics: unknown[] = [];
+    const segments = Array.from({ length: 9 }, (_, index) => ({
+      depDateTime: `2026-08-20 ${String(index * 2).padStart(2, "0")}:00:00`,
+      arrDateTime: `2026-08-20 ${String(index * 2 + 1).padStart(2, "0")}:00:00`,
+      duration: "01:00:00",
+      marketingTransportNo: `MU${5100 + index}`,
+      transportType: "flight",
+      depStationName: `出发站${index}`,
+      arrStationName: `到达站${index}`,
+    }));
+
+    await expect(searchFlyAI(baseInput, {
+      execFile: executorReturning({ data: { itemList: [{ ...connectingFlightItem, journeys: [{ segments }] }] } }),
+      executable: "/safe/flyai",
+      diagnosticLogger: (event) => diagnostics.push(event),
+    })).rejects.toMatchObject({ code: "PROVIDER_INVALID_RESPONSE" });
+    expect(diagnostics).toEqual([expect.objectContaining({
+      droppedReasons: ["invalid_segment_sequence"],
+    })]);
+  });
+
+  it("rejects a high-speed rail item containing a normal-train segment without leaking supplier facts", async () => {
+    const diagnostics: unknown[] = [];
+    const segments = connectingFlightItem.journeys[0].segments.map((segment, index) => ({
+      ...segment,
+      transportType: "train",
+      marketingTransportNo: index === 0 ? "G1" : "K123",
+    }));
+
+    await expect(searchFlyAI({ ...baseInput, mode: "high_speed_rail" }, {
+      execFile: executorReturning({ data: { itemList: [{ ...connectingFlightItem, journeys: [{ segments }] }] } }),
+      executable: "/safe/flyai",
+      diagnosticLogger: (event) => diagnostics.push(event),
+    })).rejects.toMatchObject({ code: "PROVIDER_INVALID_RESPONSE" });
+
+    expect(diagnostics).toEqual([expect.objectContaining({
+      outcome: "PROVIDER_INVALID_RESPONSE",
+      droppedReasons: ["mixed_transport_category"],
+    })]);
+    const serialized = JSON.stringify(diagnostics);
+    for (const supplierFact of ["北京首都", "武汉天河", "上海虹桥", "G1", "K123", "980", "2026-08-20 08:00:00"]) {
+      expect(serialized).not.toContain(supplierFact);
+    }
+  });
+
+  it("changes the evidence ID when an internal segment changes", async () => {
+    const changedInternalSegment = {
+      ...connectingFlightItem,
+      journeys: [{ segments: [
+        connectingFlightItem.journeys[0].segments[0],
+        {
+          ...connectingFlightItem.journeys[0].segments[1],
+          depStationName: "武汉天河 T2",
+        },
+      ] }],
+    };
+
+    const baseline = await searchFlyAI(baseInput, {
+      execFile: executorReturning({ data: { itemList: [connectingFlightItem] } }),
+      executable: "/safe/flyai",
+    });
+    const changed = await searchFlyAI(baseInput, {
+      execFile: executorReturning({ data: { itemList: [changedInternalSegment] } }),
+      executable: "/safe/flyai",
+    });
+
+    expect(changed[0]?.quoteId).not.toBe(baseline[0]?.quoteId);
+  });
+
   it.each([
     ["flight", "MU5101", "flight"],
     ["high_speed_rail", "G1", "train"],
@@ -184,16 +391,11 @@ describe("searchFlyAI", () => {
     expect(result[0]).toMatchObject({ mode, priceCny: 400, serviceName });
   });
 
-  it("issues stable evidence IDs and retains a provider-native itemId", async () => {
+  it("keeps evidence IDs stable across booking URL changes and retains a provider-native itemId", async () => {
     const nativeItem = { ...liveFlightItem, itemId: "native-item-42" };
     const renamed = {
       ...nativeItem,
       jumpUrl: "https://a.feizhu.com/flight/another-booking-path",
-      journeys: [{ segments: [{
-        ...nativeItem.journeys[0].segments[0],
-        depStationName: "首都机场 T2",
-        arrStationName: "虹桥机场 T2",
-      }] }],
     };
 
     const first = await searchFlyAI(baseInput, {

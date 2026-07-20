@@ -35,6 +35,7 @@ This project is a mobile-usable Web app for multi-person cross-city meeting plan
 - The travel gateway owns FlyAI credentials, CLI/MCP execution, input validation, timeouts, retries, caching, and stable error mapping.
 - The travel gateway cannot generate candidate cities, select routes, score cities, call DeepSeek, or persist participant identity.
 - Execute gateway CLI commands with argument arrays and shell execution disabled.
+- FlyAI connecting itineraries must normalize the complete ordered segment set: first departure, final arrival, full elapsed duration, all service identities, and segmentCount - 1 transfers. Reject overlapping, out-of-order, over-eight-segment, or mixed requested-mode evidence instead of publishing a first-segment summary.
 - Run the gateway lint, test, and build commands before reporting gateway changes complete.
 - Ignore generated gateway `dist`, coverage, probe output, and cache artifacts.
 - Live supplier publication requires a reachable travel gateway at `TRAVEL_GATEWAY_URL`; do not treat `GATEWAY_UNAVAILABLE` with zero verified quotes as supplier cooldown evidence.

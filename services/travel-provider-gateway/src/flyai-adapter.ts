@@ -32,6 +32,7 @@ const rawRowSchema = z.object({
   isDirect: z.boolean().optional(),
   transferCount: z.number().int().nonnegative().optional(),
   hasTransfer: z.boolean().optional(),
+  segmentSignature: z.string().max(80).nullable().optional(),
   bookingUrl: z.string().nullable(),
 }).passthrough().superRefine((row, context) => {
   if ((row.flightNumber === undefined) === (row.trainNumber === undefined)) {
@@ -242,20 +243,6 @@ function execute(execFile: ExecFile, executable: string, args: string[]): Promis
   });
 }
 
-function parseDurationMinutes(value: string): number | null {
-  const hourMinute = /^(\d{1,2}):(\d{2})(?::\d{2})?$/.exec(value);
-  if (hourMinute) {
-    return Number(hourMinute[1]) * 60 + Number(hourMinute[2]);
-  }
-  const hours = /(\d+(?:\.\d+)?)\s*(?:h|hour|小时)/i.exec(value);
-  const minutes = /(\d+)\s*(?:m|min|分钟|分)/i.exec(value);
-  if (hours || minutes) {
-    return Math.round(Number(hours?.[1] ?? 0) * 60 + Number(minutes?.[1] ?? 0));
-  }
-  const numeric = Number(value);
-  return Number.isFinite(numeric) && numeric > 0 ? Math.round(numeric) : null;
-}
-
 function firstPriceCny(...values: Array<string | undefined>): number | null {
   for (const value of values) {
     if (value === undefined) continue;
@@ -270,10 +257,10 @@ function firstPriceCny(...values: Array<string | undefined>): number | null {
 }
 
 function withChinaOffset(value: string): string {
-  if (/([+-]\d{2}:?\d{2}|Z)$/i.test(value)) {
-    return value;
-  }
   const normalized = value.includes("T") ? value : value.replace(" ", "T");
+  if (/([+-]\d{2}:?\d{2}|Z)$/i.test(normalized)) {
+    return normalized;
+  }
   return `${normalized}+08:00`;
 }
 
@@ -285,47 +272,134 @@ function firstStringValue(source: Record<string, unknown>, keys: string[]): stri
   return null;
 }
 
+const DEPARTURE_STATION_KEYS = [
+  "depStationName",
+  "departureStationName",
+  "departureStation",
+  "depAirportName",
+  "departureAirportName",
+  "fromStationName",
+  "fromAirportName",
+];
+
+const ARRIVAL_STATION_KEYS = [
+  "arrStationName",
+  "arrivalStationName",
+  "arrivalStation",
+  "arrAirportName",
+  "arrivalAirportName",
+  "toStationName",
+  "toAirportName",
+];
+
+type LiveNormalizationFailureReason =
+  | "mixed_transport_category"
+  | "invalid_segment_sequence"
+  | "missing_required_route_fact";
+
+type LiveNormalizationResult =
+  | { ok: true; row: z.infer<typeof rawRowSchema> }
+  | { ok: false; reason: LiveNormalizationFailureReason };
+
+function classifyLiveSegment(
+  segment: z.infer<typeof liveSegmentSchema>,
+): GatewaySearchRequest["mode"] | null {
+  if (/(?:flight|air|plane|航空|飞机)/i.test(segment.transportType)) {
+    return "flight";
+  }
+  if (/(?:train|rail|火车|铁路|高铁)/i.test(segment.transportType)) {
+    return /^[GCD]/i.test(segment.marketingTransportNo) ? "high_speed_rail" : "normal_train";
+  }
+  return null;
+}
+
 function normalizeLiveItem(
   item: z.infer<typeof liveItemSchema>,
   mode: GatewaySearchRequest["mode"],
-): z.infer<typeof rawRowSchema> | null {
-  const segment = item.journeys[0]?.segments[0];
-  if (!segment) return null;
-  const firstJourney = item.journeys[0]!;
+): LiveNormalizationResult {
+  const segments = item.journeys.flatMap((journey) => journey.segments);
+  if (segments.length < 1 || segments.length > 8) {
+    return { ok: false, reason: "invalid_segment_sequence" };
+  }
+
+  const normalizedSegments: Array<{
+    serviceName: string;
+    departAt: string;
+    arriveAt: string;
+    departTime: number;
+    arriveTime: number;
+    departureStationName: string | null;
+    arrivalStationName: string | null;
+  }> = [];
+  let previousArrival = Number.NEGATIVE_INFINITY;
+
+  for (const segment of segments) {
+    if (classifyLiveSegment(segment) !== mode) {
+      return { ok: false, reason: "mixed_transport_category" };
+    }
+    const departAt = withChinaOffset(segment.depDateTime);
+    const arriveAt = withChinaOffset(segment.arrDateTime);
+    const departTime = Date.parse(departAt);
+    const arriveTime = Date.parse(arriveAt);
+    if (!Number.isFinite(departTime) || !Number.isFinite(arriveTime)
+      || arriveTime <= departTime || departTime < previousArrival) {
+      return { ok: false, reason: "invalid_segment_sequence" };
+    }
+    normalizedSegments.push({
+      serviceName: segment.marketingTransportNo,
+      departAt,
+      arriveAt,
+      departTime,
+      arriveTime,
+      departureStationName: firstStringValue(segment, DEPARTURE_STATION_KEYS),
+      arrivalStationName: firstStringValue(segment, ARRIVAL_STATION_KEYS),
+    });
+    previousArrival = arriveTime;
+  }
+
+  const firstSegment = normalizedSegments[0]!;
+  const lastSegment = normalizedSegments.at(-1)!;
+  const durationMinutes = (lastSegment.arriveTime - firstSegment.departTime) / 60_000;
+  if (!Number.isInteger(durationMinutes) || durationMinutes <= 0) {
+    return { ok: false, reason: "invalid_segment_sequence" };
+  }
+
   const price = mode === "flight"
     ? firstPriceCny(item.ticketPrice, item.adultPrice)
     : firstPriceCny(item.price, item.adultPrice);
-  const durationMinutes = parseDurationMinutes(segment.duration) ?? parseDurationMinutes(item.totalDuration ?? "");
-  if (price === null || durationMinutes === null) return null;
+  if (price === null) return { ok: false, reason: "missing_required_route_fact" };
   const category = mode === "flight" ? "flight" : "train";
+  const serviceName = normalizedSegments.map((segment) => segment.serviceName).join(" → ");
+  const canonicalSegments = normalizedSegments.map((segment) => [
+    segment.serviceName,
+    segment.departAt,
+    segment.arriveAt,
+    segment.departureStationName,
+    segment.arrivalStationName,
+  ]);
+  const segmentSignature = `sha256:${createHash("sha256")
+    .update(JSON.stringify(canonicalSegments))
+    .digest("hex")}`;
+
   return {
-    category,
-    price: Math.round(price),
-    departureTime: withChinaOffset(segment.depDateTime),
-    arrivalTime: withChinaOffset(segment.arrDateTime),
-    durationMinutes,
-    flightNumber: category === "flight" ? segment.marketingTransportNo : undefined,
-    trainNumber: category === "train" ? segment.marketingTransportNo : undefined,
-    departureStationName: firstStringValue(segment, [
-      "depStationName",
-      "departureStationName",
-      "departureStation",
-      "depAirportName",
-      "departureAirportName",
-      "fromStationName",
-      "fromAirportName",
-    ]),
-    arrivalStationName: firstStringValue(segment, [
-      "arrStationName",
-      "arrivalStationName",
-      "arrivalStation",
-      "arrAirportName",
-      "arrivalAirportName",
-      "toStationName",
-      "toAirportName",
-    ]),
-    direct: item.journeys.length === 1 && firstJourney.segments.length === 1,
-    bookingUrl: item.jumpUrl ?? null,
+    ok: true,
+    row: {
+      category,
+      price: Math.round(price),
+      departureTime: firstSegment.departAt,
+      arrivalTime: lastSegment.arriveAt,
+      durationMinutes,
+      flightNumber: category === "flight" ? serviceName : undefined,
+      trainNumber: category === "train" ? serviceName : undefined,
+      departureStationName: firstSegment.departureStationName,
+      arrivalStationName: lastSegment.arrivalStationName,
+      direct: segments.length === 1,
+      isDirect: segments.length === 1,
+      transferCount: segments.length - 1,
+      hasTransfer: segments.length > 1,
+      segmentSignature,
+      bookingUrl: item.jumpUrl ?? null,
+    },
   };
 }
 
@@ -336,6 +410,7 @@ type EvidenceFields = {
   arriveAt: string;
   priceCny: number;
   transferCount: number;
+  segmentSignature: string | null;
 };
 
 function evidenceId(input: GatewaySearchRequest, option: EvidenceFields): string {
@@ -351,6 +426,7 @@ function evidenceId(input: GatewaySearchRequest, option: EvidenceFields): string
     option.arriveAt,
     option.priceCny,
     option.transferCount,
+    option.segmentSignature,
   ]);
   return `flyai:${createHash("sha256").update(canonical).digest("hex")}`;
 }
@@ -380,6 +456,7 @@ function normalizeRow(
     arriveAt: row.arrivalTime,
     priceCny: row.price,
     transferCount,
+    segmentSignature: row.segmentSignature ?? null,
   };
   return gatewayTravelOptionSchema.parse({
     quoteId: evidenceId(input, evidence),
@@ -442,8 +519,12 @@ export async function searchFlyAI(
           continue;
         }
         const normalized = normalizeLiveItem(liveItem.data, input.mode);
-        const rawRow = normalized === null ? null : rawRowSchema.safeParse(normalized);
-        if (rawRow === null || !rawRow.success) {
+        if (!normalized.ok) {
+          droppedReasons.add(normalized.reason);
+          continue;
+        }
+        const rawRow = rawRowSchema.safeParse(normalized.row);
+        if (!rawRow.success) {
           droppedReasons.add("missing_required_route_fact");
           continue;
         }
