@@ -76,9 +76,9 @@ Branch: `task-1-scaffold`
 - Inner atmosphere + meetup copy (Tasks 1–7): **shipped and committed** through `4972560` (2026-07-18). Spec/plan marked shipped in authority docs.
 - Post-ship smoke recovery (2026-07-19): complete locally. Home retains four-clip continuous cycling with eager loading only for the active clip. Functional routes use one root-mounted fixed loop (create/join/alternatives=静水, plan/manage=密林, result/records=破晓), a moderate readable scrim, `pointer-events: none`, and per-scene playback checkpoints; records navigation gives immediate loading feedback and single-click activation. Alternatives/manage IA remains unchanged beyond the shared backdrop.
 - Departure-city hardening (2026-07-19): complete locally. Canonical Amap administrative-district lookup, one bounded retry, and the server-memory China administrative-tree index cover prefecture and province-administered cities. Amap origin names persist into Manager/Query gateway requests; meeting candidates remain built-in hubs.
-- Recommendation policy `2026-07-19.v2`: complete in code and tests. Saving selects the exact lowest verified direct-first fare across accepted modes, including direct normal train; fast stays within 130% of the saving total. Remote Supabase migration `202607190001_recommendation_policy_v2.sql` is **not applied**: CLI database authentication failed on 2026-07-19. Rotate the exposed database password before retrying, then run migration list, dry-run, push, and verify the remote default.
+- Recommendation policy `2026-07-19.v2`: complete in code and tests. Saving selects the exact lowest verified direct-first fare across accepted modes, including direct normal train; fast stays within 130% of the saving total. Remote Supabase migration `202607190001_recommendation_policy_v2.sql` has **not been verified as applied**: CLI database authentication failed on 2026-07-19, so local files cannot establish the remote state. Verify the remote migration list and default before any new durable-run acceptance; if it is absent, rotate the exposed database password before dry-run and push.
 - Final local gates (2026-07-19): post-neat root lint passed; 69 test files / 386 tests passed; production build passed outside the restricted sandbox after the expected Turbopack local-port denial; `git diff --check` passed. Staged-secret review remains required immediately before commit.
-- Recovery Next: apply the v2 Supabase migration after credential rotation. Merge/PR or push only by explicit user direction.
+- Recovery Next: verify the remote v2 Supabase migration state. If it is absent, rotate the exposed database password, apply the migration, and verify the remote default. Merge/PR or push only by explicit user direction.
 
 # Inner Atmosphere + Meetup Copy SDD Progress
 
@@ -94,7 +94,7 @@ Shipped HEAD (Tasks 1–7 + final copy fix): `4972560`
 - Task 5: complete (`7e1681e..d1fdba6`)
 - Task 6: complete (`d1fdba6..35bae2e`)
 - Task 7: complete (`35bae2e..a49b554` incl. CityCombobox lint fix + authority docs)
-- Final review: post-ship recovery is locally complete; remote v2 migration remains the only blocking operational follow-up (see UI Progress Recovery Next).
+- Final review: post-ship recovery is locally complete; remote v2 migration verification remains an operational follow-up (see UI Progress Recovery Next).
 
 # FlyAI Quote Normalization And Six-Person Publication Regression
 
@@ -105,3 +105,18 @@ Date: 2026-07-20
 - Live recheck: incomplete for supplier reasons. A fresh six-person plan `S00HIY` / run `af3cdd3c-6982-4abe-b10e-5e3f8d1f2f13` safely ended `incomplete` after repeated `PROVIDER_RATE_LIMITED`; it did not exercise completed publication after the fix.
 - Final local gates: root lint, 69-file/389-test suite, and production build pass; gateway lint, 7-file/92-test suite, and build pass. The root build required an unrestricted rerun only because the managed sandbox forbids Turbopack's local port binding.
 - Next: after supplier recovery, create a new six-person repeated-origin plan and confirm `completed`, exactly two schemes, and six participant-owned route rows in each scheme. Do not treat the current incomplete run as live publication acceptance.
+
+# Repository Security And State-Machine Audit
+
+Date: 2026-07-20
+Reviewed HEAD: `7797e99`
+
+- Evidence baseline: root lint, 69-file/389-test suite, and production build pass; gateway lint, 7-file/92-test suite, and build pass. Passing gates do not clear the findings below.
+- Critical: FlyAI connecting itineraries can be normalized from only the first segment, so a multi-segment journey may publish the wrong destination and arrival time while still passing the gateway schema.
+- Critical: current Supabase read policies use broad anonymous access. A redacted anon-key probe enumerated plan identifiers/codes/titles, participant names/departures/modes, and recommendation-run kind/requester/requested-city metadata, including data belonging to private alternative previews.
+- Batch A — publication safety and state-machine recovery: fix multi-segment fact normalization, restrict anonymous database reads to an intentional public projection, require an existing shared result before alternative creation, keep recovering pending route tasks after one task exhausts recovery, provide bounded stale-run recovery, and prevent hidden automatic runs after a shared result already exists.
+- Batch B — publication integrity: make result/scheme/route materialization atomic and make the database publication guard replay direct-first eligibility, saving/fast selection, and winning-city ranking rather than trusting application-supplied totals.
+- Batch C — input and terminal UX hardening: validate Amap adcode/name pairs and real calendar dates, compare arrival instants as timestamps, keep private preview terminal failures visible to the requester, prevent private runs from replacing public automatic progress, and replace collision-prone plan-code creation with retry-safe generation.
+- Batch A design: approved and committed in `7021f0e` — `docs/superpowers/specs/2026-07-20-publication-safety-and-run-recovery-design.md`.
+- Batch A implementation plan: reviewed and committed in `8d760ed` — `docs/superpowers/plans/2026-07-21-publication-safety-and-run-recovery.md`.
+- Implementation status: no audit finding above has been fixed yet. Batch A is ready for failing-first execution; Batch B and Batch C still require their own approved design/spec. Do not weaken private-preview or participant-owned quote requirements while tightening RLS. Batch A execution must not query/apply remote migrations or run live supplier acceptance.
