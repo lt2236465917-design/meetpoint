@@ -538,11 +538,18 @@ export class SupabaseRecommendationRepository
     if (existingError) throw new Error(`Failed to load draft recommendation result: ${existingError.message}`);
     if (existing) return;
 
-    const quoteById = new Map(input.quotes.map((quote) => [quote.quoteId, quote]));
+    const quotesByParticipant = new Map<string, Map<string, VerifiedQuote>>();
+    for (const quote of input.quotes) {
+      const participantQuotes = quotesByParticipant.get(quote.participantId) ?? new Map<string, VerifiedQuote>();
+      participantQuotes.set(quote.quoteId, quote);
+      quotesByParticipant.set(quote.participantId, participantQuotes);
+    }
     const schemeRows = input.proposal.output.schemes.map((scheme) => {
       const selected = input.run.participantIds.map((participantId) => {
-        const quote = quoteById.get(scheme.quoteIdsByParticipant[participantId] ?? "");
-        if (!quote || quote.participantId !== participantId || quote.cityCode !== input.proposal.output.cityCode) {
+        const quote = quotesByParticipant
+          .get(participantId)
+          ?.get(scheme.quoteIdsByParticipant[participantId] ?? "");
+        if (!quote || quote.cityCode !== input.proposal.output.cityCode) {
           throw new Error("Approved proposal references invalid verified quote");
         }
         return quote;

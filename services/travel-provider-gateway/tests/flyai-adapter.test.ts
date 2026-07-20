@@ -154,6 +154,36 @@ describe("searchFlyAI", () => {
     }]);
   });
 
+  it.each([
+    ["flight", "MU5101", "flight"],
+    ["high_speed_rail", "G1", "train"],
+  ] as const)("normalizes documented adultPrice currency strings for %s", async (mode, serviceName, transportType) => {
+    const execFile = executorReturning({
+      data: {
+        itemList: [{
+          adultPrice: "¥400.0",
+          totalDuration: "02:15:00",
+          jumpUrl: `https://a.feizhu.com/${transportType}/${serviceName}`,
+          journeys: [{
+            segments: [{
+              ...liveFlightItem.journeys[0].segments[0],
+              marketingTransportNo: serviceName,
+              transportType,
+            }],
+          }],
+        }],
+      },
+    });
+
+    const result = await searchFlyAI(
+      { ...baseInput, mode },
+      { execFile, executable: "/safe/flyai" },
+    );
+
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({ mode, priceCny: 400, serviceName });
+  });
+
   it("issues stable evidence IDs and retains a provider-native itemId", async () => {
     const nativeItem = { ...liveFlightItem, itemId: "native-item-42" };
     const renamed = {

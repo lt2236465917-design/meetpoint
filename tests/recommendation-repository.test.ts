@@ -245,6 +245,94 @@ describe("SupabaseRecommendationRepository", () => {
     expect(maybeSingle).toHaveBeenCalledOnce();
   });
 
+  it("materializes the participant-owned quote when participants share a quoteId", async () => {
+    const resultInsert = vi.fn().mockResolvedValue({ error: null });
+    const schemeInsert = vi.fn().mockResolvedValue({ error: null });
+    const routeInsert = vi.fn().mockResolvedValue({ error: null });
+    const existingMaybeSingle = vi.fn().mockResolvedValue({ data: null, error: null });
+    const proposalEq = vi.fn().mockReturnValue({ maybeSingle: existingMaybeSingle });
+    const runEq = vi.fn().mockReturnValue({ eq: proposalEq });
+    const resultSelect = vi.fn().mockReturnValue({ eq: runEq });
+    mocks.from.mockImplementation((table: string) => {
+      if (table === "recommendation_results") return { select: resultSelect, insert: resultInsert };
+      if (table === "recommendation_schemes") return { insert: schemeInsert };
+      if (table === "recommendation_scheme_routes") return { insert: routeInsert };
+      throw new Error(`Unexpected table: ${table}`);
+    });
+
+    const sharedQuoteId = `flyai:${"a".repeat(64)}`;
+    const quote = (participantId: string, id: string) => ({
+      id,
+      quoteId: sharedQuoteId,
+      providerQuoteId: "provider-item-1",
+      participantId,
+      cityCode: "wuhan",
+      mode: "high_speed_rail" as const,
+      searchDate: "2026-08-20",
+      queriedAt: "2026-07-20T10:00:00+08:00",
+      priceCny: 100,
+      departAt: "2026-08-20T08:00:00+08:00",
+      arriveAt: "2026-08-20T12:00:00+08:00",
+      durationMinutes: 240,
+      transferCount: 0,
+      isDirect: true,
+      serviceName: "G1",
+    });
+
+    await new SupabaseRecommendationRepository().materializeApprovedProposal({
+      run: {
+        id: "11111111-1111-4111-8111-111111111111",
+        planId: "22222222-2222-4222-8222-222222222222",
+        status: "validating",
+        traceId: "33333333-3333-4333-8333-333333333333",
+        retryAfter: null,
+        errorCode: null,
+        policyVersion: "2026-07-19.v2",
+        kind: "automatic",
+        arrivalDate: "2026-08-20",
+        participantIds: ["p1", "p2"],
+      },
+      proposal: {
+        id: "44444444-4444-4444-8444-444444444444",
+        version: 1,
+        output: {
+          status: "proposal",
+          cityCode: "wuhan",
+          schemes: [
+            {
+              kind: "saving",
+              quoteIdsByParticipant: { p1: sharedQuoteId, p2: sharedQuoteId },
+              totalFareCny: 200,
+            },
+            {
+              kind: "fast",
+              quoteIdsByParticipant: { p1: sharedQuoteId, p2: sharedQuoteId },
+              totalFareCny: 200,
+            },
+          ],
+          comparisonEvidence: {
+            eligibleCityCodes: ["wuhan"],
+            orderedCityCodes: ["wuhan"],
+          },
+          explanationZh: "这座城市按真实票价和统一规则为全员选出，每一程都有据可查。",
+        },
+      },
+      quotes: [quote("p1", "quote-row-p1"), quote("p2", "quote-row-p2")],
+    });
+
+    const insertedRoutes = routeInsert.mock.calls[0]?.[0] as Array<{
+      participant_id: string;
+      verified_quote_id: string;
+    }>;
+    expect(insertedRoutes).toHaveLength(4);
+    expect(insertedRoutes.filter((route) =>
+      route.participant_id === "p1" && route.verified_quote_id === "quote-row-p1"))
+      .toHaveLength(2);
+    expect(insertedRoutes.filter((route) =>
+      route.participant_id === "p2" && route.verified_quote_id === "quote-row-p2"))
+      .toHaveLength(2);
+  });
+
   it("accepts the UUID returned by the atomic publication RPC", async () => {
     mocks.rpc.mockResolvedValue({
       data: "11111111-1111-4111-8111-111111111111",

@@ -45,6 +45,7 @@ Pre-migration `city_recommendations` and `travel_options` are historical read-on
 | `DEEPSEEK_MODEL` | Server only | Optional server-side model override; defaults to `deepseek-v4-flash`. |
 | `FLYAI_PROBE_CLI_PATH` | Server only | Optional operator-only executable override for the redacted FlyAI probe. |
 | `PROBE_TRAVEL_DATE` | Operator shell only | Optional `YYYY-MM-DD` provider-probe date; defaults to the next UTC date. |
+| `PROBE_FLYAI_SORT_TYPE` | Operator shell only | Optional redacted FlyAI probe sort: `3` for price ascending (default) or `8` for direct first. It never changes gateway production queries. |
 | `TRAVEL_GATEWAY_URL` | Server only | Internal gateway URL used by the main-app travel provider. |
 | `TRAVEL_GATEWAY_TOKEN` | Server only | Bearer token for the internal gateway. |
 | `TRAVEL_GATEWAY_TIMEOUT_MS` | Server only | Main-app gateway request timeout; defaults to `30000` ms. |
@@ -276,10 +277,11 @@ set -a
 source .env.local
 source services/travel-provider-gateway/.env
 set +a
-PROBE_TRAVEL_DATE=2026-08-20 npm run probe:providers
+PROBE_TRAVEL_DATE=2026-08-20 PROBE_FLYAI_SORT_TYPE=3 npm run probe:providers
+PROBE_TRAVEL_DATE=2026-08-20 PROBE_FLYAI_SORT_TYPE=8 npm run probe:providers
 ```
 
-The probe outputs only redacted status/count/latency/field-name summaries. It is not supplier acceptance evidence: coverage remains unverified until a new full plan has produced route-fingerprint diagnostics after cooldown, and neither `/healthz` nor a single successful fare row proves supplier-wide authorization, quota recovery, or production readiness.
+The FlyAI probe leaves journey type unfiltered to mirror production route discovery and outputs only redacted status/count/latency/field-name plus direct/connecting/unclassified-count summaries. The sort switch exists only for fixed-route operator comparisons. It is not supplier acceptance evidence: coverage remains unverified until a new full plan has produced route-fingerprint diagnostics after cooldown, and neither `/healthz` nor a single successful fare row proves supplier-wide authorization, quota recovery, or production readiness.
 
 After a supplier cooldown, use a new full plan for a live-ticket check. Confirm both the Next.js app and `services/travel-provider-gateway` are reachable first (`GET /healthz` → `{ "status": "ok" }`); runs that end with `GATEWAY_UNAVAILABLE` and zero verified quotes are operator setup failures, not supplier-cooldown evidence. Prefer `npm run build && npm run start` for live publication when sandboxed `next dev` is unstable. A completed shared result must contain verified FlyAI routes for every participant in both schemes; any coverage gap must remain unpublished and end with retry/diagnostic guidance.
 
@@ -292,7 +294,7 @@ Treat any future Fliggy/FlyAI MCP as a gateway-side provider adapter. Before ena
 Use these checks after wiring FlyAI/Fliggy or another ticket source and Amap city data. Until a human confirms authorization, quota, real fields, price units, timestamp semantics, and booking-link behavior, treat supplier acceptance as unverified even when fixture tests pass.
 
 1. Create a full plan with at least two departure cities and both flight and high-speed-rail preferences.
-2. Confirm normalized supplier facts persist in `verified_quotes`, and each `recommendation_scheme_routes` row points to the exact verified quote selected for that participant.
+2. Confirm normalized supplier facts persist in `verified_quotes`, and each `recommendation_scheme_routes` row points to the exact verified quote owned by that participant. The same physical `quoteId` may legitimately repeat across participants; publication must resolve it by `(participant_id, quote_id)`, not by quote ID alone.
 3. Open `/p/[code]/result` and confirm all viewers see one shared city, exactly “省钱方案” and “省时方案”, team total fare/duration/transfers, and every participant route.
 4. Confirm each route shows participant, departure city or station, transport/service, China-time departure and arrival, duration, transfer count, fare, provider label, short quote fingerprint, and China-time query timestamp.
 5. Confirm the page contains no estimated fare, average fare, fairness/three-city ranking, or booking URL/action. If any participant lacks real coverage, confirm the run is `incomplete` and no scheme card is published.

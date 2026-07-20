@@ -95,3 +95,13 @@ Shipped HEAD (Tasks 1–7 + final copy fix): `4972560`
 - Task 6: complete (`d1fdba6..35bae2e`)
 - Task 7: complete (`35bae2e..a49b554` incl. CityCombobox lint fix + authority docs)
 - Final review: post-ship recovery is locally complete; remote v2 migration remains the only blocking operational follow-up (see UI Progress Recovery Next).
+
+# FlyAI Quote Normalization And Six-Person Publication Regression
+
+Date: 2026-07-20
+
+- Adapter hardening: complete in code and regression tests. Live FlyAI prices now normalize `ticketPrice`, `price`, and documented `adultPrice`, including currency-prefixed values. The operator probe reports direct, connecting, and unclassified counts without forcing a journey-type filter; sort types `3` and `8` remain diagnostics only.
+- Six-person ownership regression: complete in code and regression tests. Plan `3QTCG4` / run `b353d7d1-3ec7-465b-8c02-4c255193bf06` exposed `PUBLICATION_GUARD_REJECTED` because repeated physical quote IDs across same-origin participants were materialized through a global quote-ID map. Durable materialization now resolves selected evidence by `(participantId, quoteId)`.
+- Live recheck: incomplete for supplier reasons. A fresh six-person plan `S00HIY` / run `af3cdd3c-6982-4abe-b10e-5e3f8d1f2f13` safely ended `incomplete` after repeated `PROVIDER_RATE_LIMITED`; it did not exercise completed publication after the fix.
+- Final local gates: root lint, 69-file/389-test suite, and production build pass; gateway lint, 7-file/92-test suite, and build pass. The root build required an unrestricted rerun only because the managed sandbox forbids Turbopack's local port binding.
+- Next: after supplier recovery, create a new six-person repeated-origin plan and confirm `completed`, exactly two schemes, and six participant-owned route rows in each scheme. Do not treat the current incomplete run as live publication acceptance.

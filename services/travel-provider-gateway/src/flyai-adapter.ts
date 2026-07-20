@@ -75,6 +75,7 @@ const liveItemSchema = z.object({
     segments: z.array(liveSegmentSchema).min(1),
   })).min(1),
   jumpUrl: z.string().nullable().optional(),
+  adultPrice: z.string().optional(),
   price: z.string().optional(),
   ticketPrice: z.string().optional(),
   totalDuration: z.string().optional(),
@@ -255,6 +256,19 @@ function parseDurationMinutes(value: string): number | null {
   return Number.isFinite(numeric) && numeric > 0 ? Math.round(numeric) : null;
 }
 
+function firstPriceCny(...values: Array<string | undefined>): number | null {
+  for (const value of values) {
+    if (value === undefined) continue;
+    const normalized = value.trim()
+      .replace(/^(?:¥|￥|cny|rmb)\s*/i, "")
+      .replaceAll(",", "");
+    if (!/^\d+(?:\.\d+)?$/.test(normalized)) continue;
+    const price = Number(normalized);
+    if (Number.isFinite(price) && price >= 0) return Math.round(price);
+  }
+  return null;
+}
+
 function withChinaOffset(value: string): string {
   if (/([+-]\d{2}:?\d{2}|Z)$/i.test(value)) {
     return value;
@@ -278,9 +292,11 @@ function normalizeLiveItem(
   const segment = item.journeys[0]?.segments[0];
   if (!segment) return null;
   const firstJourney = item.journeys[0]!;
-  const price = Number(mode === "flight" ? item.ticketPrice : item.price);
+  const price = mode === "flight"
+    ? firstPriceCny(item.ticketPrice, item.adultPrice)
+    : firstPriceCny(item.price, item.adultPrice);
   const durationMinutes = parseDurationMinutes(segment.duration) ?? parseDurationMinutes(item.totalDuration ?? "");
-  if (!Number.isFinite(price) || price < 0 || durationMinutes === null) return null;
+  if (price === null || durationMinutes === null) return null;
   const category = mode === "flight" ? "flight" : "train";
   return {
     category,

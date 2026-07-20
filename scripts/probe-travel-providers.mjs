@@ -17,6 +17,33 @@ export function summarizeProbeResult(provider, latencyMs, rows) {
   };
 }
 
+export function summarizeFlyAIProbeResult(latencyMs, rows) {
+  let directCount = 0;
+  let connectingCount = 0;
+  let unclassifiedCount = 0;
+
+  for (const row of rows) {
+    const journeys = Array.isArray(row?.journeys) ? row.journeys : null;
+    const segments = journeys?.length === 1 && Array.isArray(journeys[0]?.segments)
+      ? journeys[0].segments
+      : null;
+    if (journeys === null || journeys.length === 0 || segments === null || segments.length === 0) {
+      unclassifiedCount += 1;
+    } else if (journeys.length === 1 && segments?.length === 1) {
+      directCount += 1;
+    } else {
+      connectingCount += 1;
+    }
+  }
+
+  return {
+    ...summarizeProbeResult("flyai", latencyMs, rows),
+    directCount,
+    connectingCount,
+    unclassifiedCount,
+  };
+}
+
 function summarizeFailure(provider, status, latencyMs = 0) {
   return { provider, status, latencyMs, resultCount: 0, fieldNames: [] };
 }
@@ -45,6 +72,10 @@ export function resolveProbeTravelDate(now = new Date()) {
   const date = new Date(now.getTime());
   date.setUTCDate(date.getUTCDate() + 1);
   return date.toISOString().slice(0, 10);
+}
+
+export function resolveFlyAIProbeSortType() {
+  return process.env.PROBE_FLYAI_SORT_TYPE === "8" ? "8" : "3";
 }
 
 function classifyFailure(error) {
@@ -78,18 +109,14 @@ export async function probeFlyAI({ exec = execFile } = {}) {
     const executable = resolveFlyAIProbeExecutable();
     const { stdout } = await exec(executable, [
       "search-train", "--origin", "北京", "--destination", "上海",
-      "--dep-date", resolveProbeTravelDate(), "--journey-type", "1", "--sort-type", "3",
+      "--dep-date", resolveProbeTravelDate(), "--sort-type", resolveFlyAIProbeSortType(),
     ], { shell: false, timeout: 12_000, maxBuffer: 1_000_000 });
     const parsed = JSON.parse(stdout.trim());
     const rows = rowsFromProviderOutput(parsed);
     if (rows === null) {
       return summarizeFailure("flyai", "provider_unconfigured", Date.now() - startedAt);
     }
-    return summarizeProbeResult(
-      "flyai",
-      Date.now() - startedAt,
-      rows,
-    );
+    return summarizeFlyAIProbeResult(Date.now() - startedAt, rows);
   } catch (error) {
     return summarizeFailure("flyai", classifyFailure(error), Date.now() - startedAt);
   }
