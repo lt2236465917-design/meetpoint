@@ -22,6 +22,41 @@ const gatewaySearchRequest = {
 };
 
 describe("searchGateway", () => {
+  it("accepts a bounded eight-segment service name from the gateway", async () => {
+    const serviceName = Array.from({ length: 8 }, (_, index) => `MU${5100 + index}`).join(" → ");
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      options: [{
+        quoteId: `flyai:${"a".repeat(64)}`,
+        providerQuoteId: null,
+        mode: "flight",
+        source: "real",
+        provider: "flyai",
+        priceCny: 980,
+        departAt: "2026-08-20T00:00:00+08:00",
+        arriveAt: "2026-08-20T15:00:00+08:00",
+        durationMinutes: 900,
+        isDirect: false,
+        hasTransfer: true,
+        transferCount: 7,
+        serviceName,
+        departureStationName: "北京首都",
+        arrivalStationName: "上海虹桥",
+        bookingUrl: null,
+      }],
+      queriedAt: "2026-08-01T08:00:00+08:00",
+      traceId: "550e8400-e29b-41d4-a716-446655440000",
+      cache: "miss",
+    }), { status: 200 })));
+
+    const result = await searchGateway(gatewaySearchRequest, {
+      gatewayUrl: "http://gateway.internal:8080",
+      token: "gateway-secret-token",
+    });
+
+    expect(serviceName.length).toBeGreaterThan(64);
+    expect(result.options[0]).toMatchObject({ serviceName, transferCount: 7 });
+  });
+
   it("uses a token-safe timeout error for a fetch timeout", async () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(Object.assign(
       new Error("gateway-secret-token timed out"), { name: "TimeoutError" },

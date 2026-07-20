@@ -6,6 +6,9 @@ import { z } from "zod";
 
 import {
   gatewayTravelOptionSchema,
+  MAX_FLYAI_SEGMENT_COUNT,
+  MAX_FLYAI_SERVICE_IDENTITY_LENGTH,
+  MAX_ITINERARY_SERVICE_NAME_LENGTH,
   type GatewayErrorCode,
   type GatewaySearchRequest,
   type GatewayTravelOption,
@@ -24,8 +27,8 @@ const rawRowSchema = z.object({
   departureTime: z.iso.datetime({ offset: true }),
   arrivalTime: z.iso.datetime({ offset: true }),
   durationMinutes: z.number().int().positive(),
-  flightNumber: z.string().trim().min(1).max(64).optional(),
-  trainNumber: z.string().trim().min(1).max(64).optional(),
+  flightNumber: z.string().trim().min(1).max(MAX_ITINERARY_SERVICE_NAME_LENGTH).optional(),
+  trainNumber: z.string().trim().min(1).max(MAX_ITINERARY_SERVICE_NAME_LENGTH).optional(),
   departureStationName: z.string().trim().min(1).max(64).nullable().optional(),
   arrivalStationName: z.string().trim().min(1).max(64).nullable().optional(),
   direct: z.boolean(),
@@ -67,7 +70,7 @@ const liveSegmentSchema = z.object({
   depDateTime: z.string().trim().min(1),
   arrDateTime: z.string().trim().min(1),
   duration: z.string().trim().min(1),
-  marketingTransportNo: z.string().trim().min(1),
+  marketingTransportNo: z.string().trim().min(1).max(MAX_FLYAI_SERVICE_IDENTITY_LENGTH),
   transportType: z.string().trim().min(1),
 }).passthrough();
 
@@ -110,9 +113,6 @@ export type FlyAIDiagnostic = {
   routeFingerprint: string;
   mode: GatewaySearchRequest["mode"];
   outcome: "SUCCESS" | GatewayErrorCode;
-  topLevelKeys: string[];
-  dataKeys: string[];
-  itemKeys: string[];
   itemCount: number;
   normalizedCount: number;
   droppedCount: number;
@@ -147,11 +147,6 @@ function emitDiagnostic(
   }
 }
 
-function objectKeys(value: unknown): string[] {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return [];
-  return Object.keys(value).sort().slice(0, 32);
-}
-
 function diagnosticFor(
   input: GatewaySearchRequest,
   outcome: FlyAIDiagnostic["outcome"],
@@ -161,9 +156,6 @@ function diagnosticFor(
     routeFingerprint: routeFingerprint(input),
     mode: input.mode,
     outcome,
-    topLevelKeys: details.topLevelKeys ?? [],
-    dataKeys: details.dataKeys ?? [],
-    itemKeys: details.itemKeys ?? [],
     itemCount: details.itemCount ?? 0,
     normalizedCount: details.normalizedCount ?? 0,
     droppedCount: details.droppedCount ?? 0,
@@ -318,7 +310,7 @@ function normalizeLiveItem(
   mode: GatewaySearchRequest["mode"],
 ): LiveNormalizationResult {
   const segments = item.journeys.flatMap((journey) => journey.segments);
-  if (segments.length < 1 || segments.length > 8) {
+  if (segments.length < 1 || segments.length > MAX_FLYAI_SEGMENT_COUNT) {
     return { ok: false, reason: "invalid_segment_sequence" };
   }
 
@@ -495,20 +487,18 @@ export async function searchFlyAI(
 
   try {
     const parsed: unknown = JSON.parse(stdout);
-    const topLevelKeys = objectKeys(parsed);
     const legacy = z.array(rawRowSchema).safeParse(parsed);
     if (legacy.success) {
       const result = legacy.data
         .map((row) => normalizeRow(row, input, firstStringValue(row, ["itemId", "quoteId", "id"])))
         .filter((row): row is GatewayTravelOption => row !== null);
-      emitDiagnostic(dependencies.diagnosticLogger, diagnosticFor(input, "SUCCESS", { topLevelKeys }));
+      emitDiagnostic(dependencies.diagnosticLogger, diagnosticFor(input, "SUCCESS"));
       return result;
     }
 
     const live = liveResponseSchema.safeParse(parsed);
     if (live.success) {
       const items = live.data.data.itemList;
-      const itemKeys = [...new Set(items.flatMap((item) => objectKeys(item)))].sort().slice(0, 32);
       const droppedReasons = new Set<string>();
       const result: GatewayTravelOption[] = [];
 
@@ -542,9 +532,6 @@ export async function searchFlyAI(
       }
 
       const details = {
-        topLevelKeys,
-        dataKeys: objectKeys(live.data.data),
-        itemKeys,
         itemCount: items.length,
         normalizedCount: result.length,
         droppedCount: items.length - result.length,
@@ -566,7 +553,7 @@ export async function searchFlyAI(
       .filter((value): value is string => typeof value === "string")
       .join("\n");
     const code = classifyProviderText(providerText) ?? "PROVIDER_INVALID_RESPONSE";
-    emitDiagnostic(dependencies.diagnosticLogger, diagnosticFor(input, code, { topLevelKeys }));
+    emitDiagnostic(dependencies.diagnosticLogger, diagnosticFor(input, code));
     throw new FlyAIAdapterError(code, "FlyAI returned an invalid response");
   } catch (error) {
     if (error instanceof FlyAIAdapterError) {

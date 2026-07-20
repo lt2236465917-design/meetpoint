@@ -1,5 +1,11 @@
 import { z } from "zod";
 
+export const MAX_FLYAI_SEGMENT_COUNT = 8;
+export const MAX_FLYAI_SERVICE_IDENTITY_LENGTH = 64;
+export const MAX_ITINERARY_SERVICE_NAME_LENGTH =
+  MAX_FLYAI_SEGMENT_COUNT * MAX_FLYAI_SERVICE_IDENTITY_LENGTH
+  + (MAX_FLYAI_SEGMENT_COUNT - 1) * " → ".length;
+
 const calendarDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine((value) => {
   const [year, month, day] = value.split("-").map(Number);
   const date = new Date(Date.UTC(year!, month! - 1, day));
@@ -39,7 +45,7 @@ export const gatewayTravelOptionSchema = z.object({
   isDirect: z.boolean(),
   hasTransfer: z.boolean(),
   transferCount: z.number().int().nonnegative(),
-  serviceName: z.string().trim().min(1).max(64),
+  serviceName: z.string().trim().min(1).max(MAX_ITINERARY_SERVICE_NAME_LENGTH),
   departureStationName: z.string().trim().min(1).max(64).nullable(),
   arrivalStationName: z.string().trim().min(1).max(64).nullable(),
   bookingUrl: bookingUrlSchema.nullable(),

@@ -291,6 +291,40 @@ describe("searchFlyAI", () => {
     }
   });
 
+  it("normalizes a valid eight-segment itinerary without losing service identities", async () => {
+    const segments = Array.from({ length: 8 }, (_, index) => ({
+      depDateTime: `2026-08-20 ${String(index * 2).padStart(2, "0")}:00:00`,
+      arrDateTime: `2026-08-20 ${String(index * 2 + 1).padStart(2, "0")}:00:00`,
+      duration: "01:00:00",
+      marketingTransportNo: `MU${String(5100 + index)}`,
+      transportType: "flight",
+      depStationName: index === 0 ? "北京首都" : `中转站${index}`,
+      arrStationName: index === 7 ? "上海虹桥" : `中转站${index + 1}`,
+    }));
+    const serviceName = segments.map((segment) => segment.marketingTransportNo).join(" → ");
+
+    const result = await searchFlyAI(baseInput, {
+      execFile: executorReturning({
+        data: { itemList: [{ ...connectingFlightItem, journeys: [{ segments }] }] },
+      }),
+      executable: "/safe/flyai",
+    });
+
+    expect(serviceName.length).toBeGreaterThan(64);
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({
+      departAt: "2026-08-20T00:00:00+08:00",
+      arriveAt: "2026-08-20T15:00:00+08:00",
+      durationMinutes: 900,
+      transferCount: 7,
+      isDirect: false,
+      hasTransfer: true,
+      serviceName,
+      departureStationName: "北京首都",
+      arrivalStationName: "上海虹桥",
+    });
+  });
+
   it("rejects live itineraries with more than eight total segments", async () => {
     const diagnostics: unknown[] = [];
     const segments = Array.from({ length: 9 }, (_, index) => ({
@@ -467,6 +501,47 @@ describe("searchFlyAI", () => {
       droppedReasons: ["invalid_item_shape"],
       cliErrorCode: null,
     })]);
+  });
+
+  it("does not expose supplier-controlled keys or values in malformed sibling diagnostics", async () => {
+    const secret = "supplier-secret-MU9999-北京-2026-08-20-¥980";
+    const maliciousKey = `https://supplier.example/${secret}`;
+    const diagnostics: unknown[] = [];
+    const execFile = executorReturning({
+      [maliciousKey]: "top-level supplier value",
+      data: {
+        [maliciousKey]: "data supplier value",
+        itemList: [
+          liveFlightItem,
+          {
+            journeys: "not-an-array",
+            [maliciousKey]: `raw-value-${secret}`,
+          },
+        ],
+      },
+    });
+
+    const result = await searchFlyAI(baseInput, {
+      execFile,
+      executable: "/safe/flyai",
+      diagnosticLogger: (event) => diagnostics.push(event),
+    });
+
+    expect(result).toHaveLength(1);
+    expect(diagnostics).toEqual([{
+      routeFingerprint: "155ffddad0a91392",
+      mode: "flight",
+      outcome: "SUCCESS",
+      itemCount: 2,
+      normalizedCount: 1,
+      droppedCount: 1,
+      droppedReasons: ["invalid_item_shape"],
+      cliErrorCode: null,
+    }]);
+    const serialized = JSON.stringify(diagnostics);
+    for (const supplierText of [maliciousKey, secret, "raw-value", "supplier value"]) {
+      expect(serialized).not.toContain(supplierText);
+    }
   });
 
   it("classifies a live error envelope without leaking its text into diagnostics", async () => {

@@ -2,6 +2,8 @@ import { z } from "zod";
 
 import type { GatewaySearchRequest } from "./types";
 
+const MAX_ITINERARY_SERVICE_NAME_LENGTH = 8 * 64 + 7 * " → ".length;
+
 const bookingUrlSchema = z.url().refine((value) => {
   const url = new URL(value);
   const approvedHosts = ["fliggy.com", "alitrip.com", "feizhu.com"];
@@ -22,7 +24,7 @@ const gatewayOptionSchema = z.object({
   isDirect: z.boolean(),
   hasTransfer: z.boolean(),
   transferCount: z.number().int().nonnegative(),
-  serviceName: z.string().trim().min(1).max(64),
+  serviceName: z.string().trim().min(1).max(MAX_ITINERARY_SERVICE_NAME_LENGTH),
   departureStationName: z.string().trim().min(1).max(64).nullable(),
   arrivalStationName: z.string().trim().min(1).max(64).nullable(),
   bookingUrl: bookingUrlSchema.nullable(),
