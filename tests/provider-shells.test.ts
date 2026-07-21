@@ -21,40 +21,120 @@ const gatewaySearchRequest = {
   mode: "flight" as const,
 };
 
+const validGatewayOption = {
+  quoteId: `flyai:${"a".repeat(64)}`,
+  providerQuoteId: null,
+  mode: "flight",
+  source: "real",
+  provider: "flyai",
+  priceCny: 980,
+  departAt: "2026-08-20T00:00:00+08:00",
+  arriveAt: "2026-08-20T15:00:00+08:00",
+  durationMinutes: 900,
+  isDirect: true,
+  hasTransfer: false,
+  transferCount: 0,
+  serviceName: "MU5101",
+  departureStationName: "北京首都",
+  arrivalStationName: "上海虹桥",
+  bookingUrl: null,
+} as const;
+
+function serviceNameFor(segmentCount: number, segmentLength = 8): string {
+  return Array.from(
+    { length: segmentCount },
+    (_, index) => `${String(index + 1).padStart(2, "0")}${"X".repeat(segmentLength - 2)}`,
+  ).join(" → ");
+}
+
+function stubGatewayOption(overrides: Record<string, unknown>): void {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
+    options: [{ ...validGatewayOption, ...overrides }],
+    queriedAt: "2026-08-01T08:00:00+08:00",
+    traceId: "550e8400-e29b-41d4-a716-446655440000",
+    cache: "miss",
+  }), { status: 200 })));
+}
+
+async function searchStubbedGateway(): Promise<Awaited<ReturnType<typeof searchGateway>>> {
+  return searchGateway(gatewaySearchRequest, {
+    gatewayUrl: "http://gateway.internal:8080",
+    token: "gateway-secret-token",
+  });
+}
+
+async function expectInvalidGatewayOption(overrides: Record<string, unknown>): Promise<void> {
+  stubGatewayOption(overrides);
+  await expect(searchStubbedGateway()).rejects.toMatchObject({ code: "GATEWAY_INVALID_RESPONSE" });
+}
+
 describe("searchGateway", () => {
-  it("accepts a bounded eight-segment service name from the gateway", async () => {
-    const serviceName = Array.from({ length: 8 }, (_, index) => `MU${5100 + index}`).join(" → ");
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
-      options: [{
-        quoteId: `flyai:${"a".repeat(64)}`,
-        providerQuoteId: null,
-        mode: "flight",
-        source: "real",
-        provider: "flyai",
-        priceCny: 980,
-        departAt: "2026-08-20T00:00:00+08:00",
-        arriveAt: "2026-08-20T15:00:00+08:00",
-        durationMinutes: 900,
+  it("accepts canonical service names for two through eight segments from the gateway", async () => {
+    for (let segmentCount = 2; segmentCount <= 8; segmentCount += 1) {
+      const serviceName = serviceNameFor(segmentCount, 64);
+      stubGatewayOption({
         isDirect: false,
         hasTransfer: true,
-        transferCount: 7,
+        transferCount: segmentCount - 1,
         serviceName,
-        departureStationName: "北京首都",
-        arrivalStationName: "上海虹桥",
-        bookingUrl: null,
-      }],
-      queriedAt: "2026-08-01T08:00:00+08:00",
-      traceId: "550e8400-e29b-41d4-a716-446655440000",
-      cache: "miss",
-    }), { status: 200 })));
+      });
 
-    const result = await searchGateway(gatewaySearchRequest, {
-      gatewayUrl: "http://gateway.internal:8080",
-      token: "gateway-secret-token",
+      const result = await searchStubbedGateway();
+
+      expect(result.options[0]).toMatchObject({ serviceName, transferCount: segmentCount - 1 });
+    }
+  });
+
+  it("rejects a direct service identity longer than 64 characters from the gateway", async () => {
+    await expectInvalidGatewayOption({ serviceName: "X".repeat(65) });
+  });
+
+  it("rejects a connecting service identity with an oversized segment from the gateway", async () => {
+    await expectInvalidGatewayOption({
+      isDirect: false,
+      hasTransfer: true,
+      transferCount: 1,
+      serviceName: `${"X".repeat(65)} → MU5202`,
     });
+  });
 
-    expect(serviceName.length).toBeGreaterThan(64);
-    expect(result.options[0]).toMatchObject({ serviceName, transferCount: 7 });
+  it("rejects more than eight service identity segments from the gateway", async () => {
+    await expectInvalidGatewayOption({
+      isDirect: false,
+      hasTransfer: true,
+      transferCount: 8,
+      serviceName: serviceNameFor(9),
+    });
+  });
+
+  it("rejects a noncanonical service identity separator from the gateway", async () => {
+    await expectInvalidGatewayOption({
+      isDirect: false,
+      hasTransfer: true,
+      transferCount: 1,
+      serviceName: "MU5101→MU5202",
+    });
+  });
+
+  it("rejects a service segment count that disagrees with transferCount from the gateway", async () => {
+    await expectInvalidGatewayOption({
+      isDirect: false,
+      hasTransfer: true,
+      transferCount: 2,
+      serviceName: "MU5101 → MU5202",
+    });
+  });
+
+  it.each([
+    { isDirect: true, hasTransfer: true, transferCount: 0 },
+    { isDirect: true, hasTransfer: false, transferCount: 1 },
+    { isDirect: false, hasTransfer: false, transferCount: 1 },
+    { isDirect: false, hasTransfer: true, transferCount: 0 },
+  ])("rejects inconsistent direct and transfer indicators from the gateway: %j", async (indicators) => {
+    await expectInvalidGatewayOption({
+      ...indicators,
+      serviceName: indicators.isDirect ? "MU5101" : "MU5101 → MU5202",
+    });
   });
 
   it("uses a token-safe timeout error for a fetch timeout", async () => {

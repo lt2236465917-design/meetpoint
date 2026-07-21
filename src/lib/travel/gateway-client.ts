@@ -2,7 +2,12 @@ import { z } from "zod";
 
 import type { GatewaySearchRequest } from "./types";
 
-const MAX_ITINERARY_SERVICE_NAME_LENGTH = 8 * 64 + 7 * " → ".length;
+const MAX_SERVICE_IDENTITY_SEGMENT_COUNT = 8;
+const MAX_SERVICE_IDENTITY_LENGTH = 64;
+const SERVICE_NAME_SEPARATOR = " → ";
+const MAX_ITINERARY_SERVICE_NAME_LENGTH =
+  MAX_SERVICE_IDENTITY_SEGMENT_COUNT * MAX_SERVICE_IDENTITY_LENGTH
+  + (MAX_SERVICE_IDENTITY_SEGMENT_COUNT - 1) * SERVICE_NAME_SEPARATOR.length;
 
 const bookingUrlSchema = z.url().refine((value) => {
   const url = new URL(value);
@@ -28,7 +33,32 @@ const gatewayOptionSchema = z.object({
   departureStationName: z.string().trim().min(1).max(64).nullable(),
   arrivalStationName: z.string().trim().min(1).max(64).nullable(),
   bookingUrl: bookingUrlSchema.nullable(),
-}).strict();
+}).strict().superRefine((option, context) => {
+  const segments = option.serviceName.split(SERVICE_NAME_SEPARATOR);
+  const hasInvalidSegment = segments.length > MAX_SERVICE_IDENTITY_SEGMENT_COUNT
+    || segments.some((segment) => segment.length === 0
+      || segment.length > MAX_SERVICE_IDENTITY_LENGTH
+      || segment !== segment.trim()
+      || segment.includes("→"));
+  if (hasInvalidSegment) {
+    context.addIssue({
+      code: "custom",
+      path: ["serviceName"],
+      message: "Service name must use one to eight canonical service identity segments",
+    });
+  }
+
+  const expectedTransferCount = segments.length - 1;
+  const expectedIsDirect = expectedTransferCount === 0;
+  if (option.transferCount !== expectedTransferCount
+    || option.isDirect !== expectedIsDirect
+    || option.hasTransfer === expectedIsDirect) {
+    context.addIssue({
+      code: "custom",
+      message: "Transfer metadata must match the service identity segment count",
+    });
+  }
+});
 
 const gatewayResponseSchema = z.object({
   options: z.array(gatewayOptionSchema),

@@ -36,6 +36,13 @@ const validOption = {
   bookingUrl: "https://www.fliggy.com/booking/flight",
 } as const;
 
+function serviceNameFor(segmentCount: number, segmentLength = 8): string {
+  return Array.from(
+    { length: segmentCount },
+    (_, index) => `${String(index + 1).padStart(2, "0")}${"X".repeat(segmentLength - 2)}`,
+  ).join(" → ");
+}
+
 describe("gatewaySearchRequestSchema", () => {
   it("accepts a valid normalized search", () => {
     expect(gatewaySearchRequestSchema.parse(validRequest)).toEqual(validRequest);
@@ -80,6 +87,80 @@ describe("gatewayTravelOptionSchema", () => {
     expect(gatewayTravelOptionSchema.parse({ ...validOption, bookingUrl: "https://a.feizhu.com/booking" }).bookingUrl)
       .toBe("https://a.feizhu.com/booking");
     expect(gatewayTravelOptionSchema.parse({ ...validOption, bookingUrl: null }).bookingUrl).toBeNull();
+  });
+
+  it("rejects a direct service identity longer than 64 characters", () => {
+    expect(() => gatewayTravelOptionSchema.parse({
+      ...validOption,
+      serviceName: "X".repeat(65),
+    })).toThrow();
+  });
+
+  it("accepts canonical service names for two through eight segments", () => {
+    for (let segmentCount = 2; segmentCount <= 8; segmentCount += 1) {
+      const option = {
+        ...validOption,
+        isDirect: false,
+        hasTransfer: true,
+        transferCount: segmentCount - 1,
+        serviceName: serviceNameFor(segmentCount, 64),
+      };
+
+      expect(gatewayTravelOptionSchema.parse(option)).toEqual(option);
+    }
+  });
+
+  it("rejects a connecting service identity with an oversized segment", () => {
+    expect(() => gatewayTravelOptionSchema.parse({
+      ...validOption,
+      isDirect: false,
+      hasTransfer: true,
+      transferCount: 1,
+      serviceName: `${"X".repeat(65)} → MU5202`,
+    })).toThrow();
+  });
+
+  it("rejects more than eight service identity segments", () => {
+    expect(() => gatewayTravelOptionSchema.parse({
+      ...validOption,
+      isDirect: false,
+      hasTransfer: true,
+      transferCount: 8,
+      serviceName: serviceNameFor(9),
+    })).toThrow();
+  });
+
+  it("rejects a noncanonical service identity separator", () => {
+    expect(() => gatewayTravelOptionSchema.parse({
+      ...validOption,
+      isDirect: false,
+      hasTransfer: true,
+      transferCount: 1,
+      serviceName: "MU5101→MU5202",
+    })).toThrow();
+  });
+
+  it("rejects a segment count that disagrees with transferCount", () => {
+    expect(() => gatewayTravelOptionSchema.parse({
+      ...validOption,
+      isDirect: false,
+      hasTransfer: true,
+      transferCount: 2,
+      serviceName: "MU5101 → MU5202",
+    })).toThrow();
+  });
+
+  it.each([
+    { isDirect: true, hasTransfer: true, transferCount: 0 },
+    { isDirect: true, hasTransfer: false, transferCount: 1 },
+    { isDirect: false, hasTransfer: false, transferCount: 1 },
+    { isDirect: false, hasTransfer: true, transferCount: 0 },
+  ])("rejects inconsistent direct and transfer indicators: %j", (indicators) => {
+    expect(() => gatewayTravelOptionSchema.parse({
+      ...validOption,
+      ...indicators,
+      serviceName: indicators.isDirect ? "MU5101" : "MU5101 → MU5202",
+    })).toThrow();
   });
 });
 
