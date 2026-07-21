@@ -31,6 +31,7 @@ This project is a mobile-usable Web app for multi-person cross-city meeting plan
 - Keep the agent model provider-neutral behind an `AgentModel` boundary. The DeepSeek adapter retries once on `MODEL_INVALID_OUTPUT`; orchestrator retryable model or Supervisor-review persist failures stay inside the two-attempt proposal loop. Calculation and Supervisor still cannot invent supplier facts; deterministic validators and publication guards remain decisive.
 - Keep secrets in server-side environment variables only.
 - Keep browser Supabase access limited to the anon client; use the service-role client only in server-side code.
+- Public plan and shared-result reads go through server-rendered pages or `GET /api/plans/[code]`; browser `anon` / `authenticated` roles have no direct business-table or Realtime read access. Private previews remain available only through their credentialed server API.
 - Run `npm run lint`, `npm run test`, and `npm run build` before reporting completion after code changes.
 - The travel gateway owns FlyAI credentials, CLI/MCP execution, input validation, timeouts, retries, caching, and stable error mapping.
 - The travel gateway cannot generate candidate cities, select routes, score cities, call DeepSeek, or persist participant identity.

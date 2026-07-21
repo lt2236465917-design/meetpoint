@@ -4,6 +4,8 @@ import { describe, expect, it } from "vitest";
 
 const migrationPath =
   "supabase/migrations/202607150001_multi_agent_recommendation.sql";
+const hardeningMigrationPath =
+  "supabase/migrations/202607210001_publication_safety_and_run_recovery.sql";
 
 describe("multi-agent migration", () => {
   it("stores normalized evidence and recommendation records", async () => {
@@ -108,6 +110,34 @@ describe("multi-agent migration", () => {
       }
       expect(sql).toContain("jsonb_to_recordset");
       expect(sql).toContain("route task must be running");
+    }
+  });
+
+  it("preserves service-only authority in the hardening migration and canonical schema", async () => {
+    for (const path of [hardeningMigrationPath, "supabase/schema.sql"]) {
+      const sql = (await readFile(path, "utf8")).toLowerCase();
+
+      for (const name of [
+        "create_recommendation_run_matrix",
+        "save_route_task_outcome",
+        "publish_shared_result",
+        "confirm_alternative_result",
+      ]) {
+        expect(sql).toMatch(
+          new RegExp(
+            `revoke execute on function ${name}[\\s\\S]*?from public, anon, authenticated`,
+          ),
+        );
+        expect(sql).toMatch(
+          new RegExp(
+            `grant execute on function ${name}[\\s\\S]*?to service_role`,
+          ),
+        );
+      }
+
+      expect(sql).not.toMatch(
+        /grant\s+(?:select|all)[\s\S]*?to\s+(?:anon|authenticated)/,
+      );
     }
   });
 

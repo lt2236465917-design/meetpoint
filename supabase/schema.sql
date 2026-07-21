@@ -406,47 +406,22 @@ alter table recommendation_results enable row level security;
 alter table recommendation_schemes enable row level security;
 alter table recommendation_scheme_routes enable row level security;
 
-create policy "public read plan by code" on plans for select using (true);
-create policy "public read participants" on participants for select using (true);
-create policy "public read candidate cities" on candidate_cities for select using (true);
-create policy "public read runs" on recommendation_runs for select using (true);
-create policy "public read travel options" on travel_options for select using (true);
-create policy "public read city recommendations" on city_recommendations for select using (true);
-create policy "public read shared recommendation results"
-  on recommendation_results for select using (is_shared);
-create policy "public read shared recommendation schemes"
-  on recommendation_schemes for select
-  using (
-    exists (
-      select 1 from recommendation_results
-      where recommendation_results.id = recommendation_schemes.result_id
-        and recommendation_results.is_shared
-    )
-  );
-create policy "public read shared recommendation scheme routes"
-  on recommendation_scheme_routes for select
-  using (
-    exists (
-      select 1
-      from recommendation_schemes
-      join recommendation_results
-        on recommendation_results.id = recommendation_schemes.result_id
-      where recommendation_schemes.id = recommendation_scheme_routes.scheme_id
-        and recommendation_results.is_shared
-    )
-  );
-
-revoke all on table plan_credentials from public, anon, authenticated;
-revoke all on table participant_credentials from public, anon, authenticated;
-revoke all on table route_tasks from public, anon, authenticated;
-revoke all on table verified_quotes from public, anon, authenticated;
-revoke all on table agent_events from public, anon, authenticated;
-revoke all on table recommendation_proposals from public, anon, authenticated;
-
-alter publication supabase_realtime add table participants;
-alter publication supabase_realtime add table candidate_cities;
-alter publication supabase_realtime add table recommendation_runs;
-alter publication supabase_realtime add table city_recommendations;
+revoke all on table public.plans from public, anon, authenticated;
+revoke all on table public.participants from public, anon, authenticated;
+revoke all on table public.candidate_cities from public, anon, authenticated;
+revoke all on table public.recommendation_runs from public, anon, authenticated;
+revoke all on table public.travel_options from public, anon, authenticated;
+revoke all on table public.city_recommendations from public, anon, authenticated;
+revoke all on table public.ai_explanations from public, anon, authenticated;
+revoke all on table public.plan_credentials from public, anon, authenticated;
+revoke all on table public.participant_credentials from public, anon, authenticated;
+revoke all on table public.route_tasks from public, anon, authenticated;
+revoke all on table public.verified_quotes from public, anon, authenticated;
+revoke all on table public.agent_events from public, anon, authenticated;
+revoke all on table public.recommendation_proposals from public, anon, authenticated;
+revoke all on table public.recommendation_results from public, anon, authenticated;
+revoke all on table public.recommendation_schemes from public, anon, authenticated;
+revoke all on table public.recommendation_scheme_routes from public, anon, authenticated;
 
 create function create_recommendation_run_matrix(
   p_run_id uuid,
