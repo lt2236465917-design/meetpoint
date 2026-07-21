@@ -21,50 +21,55 @@ const EXECUTION_OPTIONS = {
   encoding: "utf8",
 } as const;
 
-const rawRowSchema = z.object({
-  category: z.enum(["flight", "train"]),
-  price: z.number().int().nonnegative(),
-  departureTime: z.iso.datetime({ offset: true }),
-  arrivalTime: z.iso.datetime({ offset: true }),
-  durationMinutes: z.number().int().positive(),
-  flightNumber: z.string().trim().min(1).max(MAX_ITINERARY_SERVICE_NAME_LENGTH).optional(),
-  trainNumber: z.string().trim().min(1).max(MAX_ITINERARY_SERVICE_NAME_LENGTH).optional(),
-  departureStationName: z.string().trim().min(1).max(64).nullable().optional(),
-  arrivalStationName: z.string().trim().min(1).max(64).nullable().optional(),
-  direct: z.boolean(),
-  isDirect: z.boolean().optional(),
-  transferCount: z.number().int().nonnegative().optional(),
-  hasTransfer: z.boolean().optional(),
-  segmentSignature: z.string().max(80).nullable().optional(),
-  bookingUrl: z.string().nullable(),
-}).passthrough().superRefine((row, context) => {
-  if ((row.flightNumber === undefined) === (row.trainNumber === undefined)) {
-    context.addIssue({ code: "custom", message: "Exactly one service identity is required" });
-  }
-  if ((row.category === "flight") !== (row.flightNumber !== undefined)) {
-    context.addIssue({ code: "custom", message: "Category must match service identity" });
-  }
-  if (row.isDirect !== undefined && row.isDirect !== row.direct) {
-    context.addIssue({ code: "custom", message: "Direct indicators must agree" });
-  }
+function createRawRowSchema(maxServiceIdentityLength: number) {
+  return z.object({
+    category: z.enum(["flight", "train"]),
+    price: z.number().int().nonnegative(),
+    departureTime: z.iso.datetime({ offset: true }),
+    arrivalTime: z.iso.datetime({ offset: true }),
+    durationMinutes: z.number().int().positive(),
+    flightNumber: z.string().trim().min(1).max(maxServiceIdentityLength).optional(),
+    trainNumber: z.string().trim().min(1).max(maxServiceIdentityLength).optional(),
+    departureStationName: z.string().trim().min(1).max(64).nullable().optional(),
+    arrivalStationName: z.string().trim().min(1).max(64).nullable().optional(),
+    direct: z.boolean(),
+    isDirect: z.boolean().optional(),
+    transferCount: z.number().int().nonnegative().optional(),
+    hasTransfer: z.boolean().optional(),
+    segmentSignature: z.string().max(80).nullable().optional(),
+    bookingUrl: z.string().nullable(),
+  }).passthrough().superRefine((row, context) => {
+    if ((row.flightNumber === undefined) === (row.trainNumber === undefined)) {
+      context.addIssue({ code: "custom", message: "Exactly one service identity is required" });
+    }
+    if ((row.category === "flight") !== (row.flightNumber !== undefined)) {
+      context.addIssue({ code: "custom", message: "Category must match service identity" });
+    }
+    if (row.isDirect !== undefined && row.isDirect !== row.direct) {
+      context.addIssue({ code: "custom", message: "Direct indicators must agree" });
+    }
 
-  const expectedHasTransfer = !row.direct;
-  if (row.transferCount !== undefined && (row.transferCount > 0) !== expectedHasTransfer) {
-    context.addIssue({ code: "custom", message: "Transfer count must agree with direct indicator" });
-  }
-  if (row.hasTransfer !== undefined && row.hasTransfer !== expectedHasTransfer) {
-    context.addIssue({ code: "custom", message: "Transfer indicator must agree with direct indicator" });
-  }
+    const expectedHasTransfer = !row.direct;
+    if (row.transferCount !== undefined && (row.transferCount > 0) !== expectedHasTransfer) {
+      context.addIssue({ code: "custom", message: "Transfer count must agree with direct indicator" });
+    }
+    if (row.hasTransfer !== undefined && row.hasTransfer !== expectedHasTransfer) {
+      context.addIssue({ code: "custom", message: "Transfer indicator must agree with direct indicator" });
+    }
 
-  const departure = Date.parse(row.departureTime);
-  const arrival = Date.parse(row.arrivalTime);
-  const actualDurationMilliseconds = arrival - departure;
-  if (actualDurationMilliseconds <= 0) {
-    context.addIssue({ code: "custom", message: "Arrival must be later than departure" });
-  } else if (actualDurationMilliseconds !== row.durationMinutes * 60_000) {
-    context.addIssue({ code: "custom", message: "Duration must match timestamp interval" });
-  }
-});
+    const departure = Date.parse(row.departureTime);
+    const arrival = Date.parse(row.arrivalTime);
+    const actualDurationMilliseconds = arrival - departure;
+    if (actualDurationMilliseconds <= 0) {
+      context.addIssue({ code: "custom", message: "Arrival must be later than departure" });
+    } else if (actualDurationMilliseconds !== row.durationMinutes * 60_000) {
+      context.addIssue({ code: "custom", message: "Duration must match timestamp interval" });
+    }
+  });
+}
+
+const legacyRawRowSchema = createRawRowSchema(MAX_FLYAI_SERVICE_IDENTITY_LENGTH);
+const normalizedRawRowSchema = createRawRowSchema(MAX_ITINERARY_SERVICE_NAME_LENGTH);
 
 const liveSegmentSchema = z.object({
   depDateTime: z.string().trim().min(1),
@@ -250,10 +255,11 @@ function firstPriceCny(...values: Array<string | undefined>): number | null {
 
 function withChinaOffset(value: string): string {
   const normalized = value.includes("T") ? value : value.replace(" ", "T");
-  if (/([+-]\d{2}:?\d{2}|Z)$/i.test(normalized)) {
-    return normalized;
+  const normalizedOffset = normalized.replace(/([+-]\d{2})(\d{2})$/, "$1:$2");
+  if (/([+-]\d{2}:\d{2}|Z)$/i.test(normalizedOffset)) {
+    return normalizedOffset;
   }
-  return `${normalized}+08:00`;
+  return `${normalizedOffset}+08:00`;
 }
 
 function firstStringValue(source: Record<string, unknown>, keys: string[]): string | null {
@@ -290,7 +296,7 @@ type LiveNormalizationFailureReason =
   | "missing_required_route_fact";
 
 type LiveNormalizationResult =
-  | { ok: true; row: z.infer<typeof rawRowSchema> }
+  | { ok: true; row: z.infer<typeof normalizedRawRowSchema> }
   | { ok: false; reason: LiveNormalizationFailureReason };
 
 function classifyLiveSegment(
@@ -424,7 +430,7 @@ function evidenceId(input: GatewaySearchRequest, option: EvidenceFields): string
 }
 
 function normalizeRow(
-  row: z.infer<typeof rawRowSchema>,
+  row: z.infer<typeof normalizedRawRowSchema>,
   input: GatewaySearchRequest,
   providerQuoteId: string | null,
 ): GatewayTravelOption | null {
@@ -487,7 +493,7 @@ export async function searchFlyAI(
 
   try {
     const parsed: unknown = JSON.parse(stdout);
-    const legacy = z.array(rawRowSchema).safeParse(parsed);
+    const legacy = z.array(legacyRawRowSchema).safeParse(parsed);
     if (legacy.success) {
       const result = legacy.data
         .map((row) => normalizeRow(row, input, firstStringValue(row, ["itemId", "quoteId", "id"])))
@@ -513,7 +519,7 @@ export async function searchFlyAI(
           droppedReasons.add(normalized.reason);
           continue;
         }
-        const rawRow = rawRowSchema.safeParse(normalized.row);
+        const rawRow = normalizedRawRowSchema.safeParse(normalized.row);
         if (!rawRow.success) {
           droppedReasons.add("missing_required_route_fact");
           continue;

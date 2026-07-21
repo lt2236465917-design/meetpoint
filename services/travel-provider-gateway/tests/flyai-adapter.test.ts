@@ -221,6 +221,48 @@ describe("searchFlyAI", () => {
     });
   });
 
+  it("normalizes supplier timestamps with an explicit offset without a colon", async () => {
+    const item = {
+      ...liveFlightItem,
+      journeys: [{ segments: [{
+        ...liveFlightItem.journeys[0].segments[0],
+        depDateTime: "2026-08-20 08:00:00+0800",
+        arrDateTime: "2026-08-20 10:15:00+0800",
+      }] }],
+    };
+
+    const result = await searchFlyAI(baseInput, {
+      execFile: executorReturning({ data: { itemList: [item] } }),
+      executable: "/safe/flyai",
+    });
+
+    expect(result[0]).toMatchObject({
+      departAt: "2026-08-20T08:00:00+08:00",
+      arriveAt: "2026-08-20T10:15:00+08:00",
+    });
+  });
+
+  it("preserves supplier timestamps that use the UTC Z designator", async () => {
+    const item = {
+      ...liveFlightItem,
+      journeys: [{ segments: [{
+        ...liveFlightItem.journeys[0].segments[0],
+        depDateTime: "2026-08-20 08:00:00Z",
+        arrDateTime: "2026-08-20 10:15:00Z",
+      }] }],
+    };
+
+    const result = await searchFlyAI(baseInput, {
+      execFile: executorReturning({ data: { itemList: [item] } }),
+      executable: "/safe/flyai",
+    });
+
+    expect(result[0]).toMatchObject({
+      departAt: "2026-08-20T08:00:00Z",
+      arriveAt: "2026-08-20T10:15:00Z",
+    });
+  });
+
   it("flattens multiple journey segment groups in supplier array order", async () => {
     const thirdSegment = {
       depDateTime: "2026-08-20 14:00:00",
@@ -296,7 +338,7 @@ describe("searchFlyAI", () => {
       depDateTime: `2026-08-20 ${String(index * 2).padStart(2, "0")}:00:00`,
       arrDateTime: `2026-08-20 ${String(index * 2 + 1).padStart(2, "0")}:00:00`,
       duration: "01:00:00",
-      marketingTransportNo: `MU${String(5100 + index)}`,
+      marketingTransportNo: `MU${String(index).padStart(62, "0")}`,
       transportType: "flight",
       depStationName: index === 0 ? "北京首都" : `中转站${index}`,
       arrStationName: index === 7 ? "上海虹桥" : `中转站${index + 1}`,
@@ -310,7 +352,8 @@ describe("searchFlyAI", () => {
       executable: "/safe/flyai",
     });
 
-    expect(serviceName.length).toBeGreaterThan(64);
+    expect(segments.every((segment) => segment.marketingTransportNo.length === 64)).toBe(true);
+    expect(serviceName).toHaveLength(533);
     expect(result).toHaveLength(1);
     expect(result[0]).toMatchObject({
       departAt: "2026-08-20T00:00:00+08:00",
@@ -323,6 +366,21 @@ describe("searchFlyAI", () => {
       departureStationName: "北京首都",
       arrivalStationName: "上海虹桥",
     });
+  });
+
+  it("rejects a live itinerary containing a service identity longer than 64 characters", async () => {
+    const item = {
+      ...liveFlightItem,
+      journeys: [{ segments: [{
+        ...liveFlightItem.journeys[0].segments[0],
+        marketingTransportNo: "M".repeat(65),
+      }] }],
+    };
+
+    await expect(searchFlyAI(baseInput, {
+      execFile: executorReturning({ data: { itemList: [item] } }),
+      executable: "/safe/flyai",
+    })).rejects.toMatchObject({ code: "PROVIDER_INVALID_RESPONSE" });
   });
 
   it("rejects live itineraries with more than eight total segments", async () => {
@@ -602,6 +660,13 @@ describe("searchFlyAI", () => {
       { ...baseInput, mode: "high_speed_rail" },
       { execFile, executable: "/safe/flyai" },
     )).rejects.toMatchObject({ code: "PROVIDER_INVALID_RESPONSE" });
+  });
+
+  it("rejects a legacy direct row with a service identity longer than 64 characters", async () => {
+    const execFile = executorReturning([{ ...flightRow, flightNumber: "M".repeat(65) }]);
+
+    await expect(searchFlyAI(baseInput, { execFile, executable: "/safe/flyai" }))
+      .rejects.toMatchObject({ code: "PROVIDER_INVALID_RESPONSE" });
   });
 
   it.each([
