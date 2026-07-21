@@ -7,6 +7,40 @@ const atomicRunCreationPaths = [
   "supabase/migrations/202607210001_publication_safety_and_run_recovery.sql",
 ];
 
+const lockOrderCases = atomicRunCreationPaths.flatMap((path) => [
+  [path, "create_recommendation_run_matrix"],
+  [path, "publish_shared_result"],
+  [path, "confirm_alternative_result"],
+] as const);
+
+function extractFunction(sql: string, functionName: string) {
+  const declaration = new RegExp(
+    `create(?: or replace)? function\\s+(?:public\\.)?${functionName}\\s*\\(`,
+    "i",
+  );
+  const start = sql.search(declaration);
+  if (start < 0) throw new Error(`Missing function: ${functionName}`);
+  const end = sql.indexOf("\n$$;", start);
+  if (end < 0) throw new Error(`Unterminated function: ${functionName}`);
+  return sql.slice(start, end + "\n$$;".length).toLowerCase();
+}
+
+function findRowLock(functionSql: string, tableName: string) {
+  let statementStart = 0;
+  for (const terminator of functionSql.matchAll(/;/g)) {
+    const statementEnd = terminator.index ?? -1;
+    const statement = functionSql.slice(statementStart, statementEnd);
+    if (
+      statement.includes(`from public.${tableName}`)
+      && statement.includes("for update")
+    ) {
+      return statementStart + statement.lastIndexOf("for update");
+    }
+    statementStart = statementEnd + 1;
+  }
+  return -1;
+}
+
 describe("active recommendation run database guard", () => {
   it("replaces the historical running-only index with the active-state guard", async () => {
     const [schema, legacyMigration, multiAgentMigration] = await Promise.all([
@@ -75,4 +109,18 @@ describe("active recommendation run database guard", () => {
       expect(planLock).toBeLessThan(requesterValidation);
     }
   });
+
+  it.each(lockOrderCases)(
+    "%s locks the plan before recommendation runs in %s",
+    async (path, functionName) => {
+      const sql = await readFile(path, "utf8");
+      const functionSql = extractFunction(sql, functionName);
+      const planLock = findRowLock(functionSql, "plans");
+      const runLock = findRowLock(functionSql, "recommendation_runs");
+
+      expect(planLock).toBeGreaterThan(-1);
+      expect(runLock).toBeGreaterThan(-1);
+      expect(planLock).toBeLessThan(runLock);
+    },
+  );
 });

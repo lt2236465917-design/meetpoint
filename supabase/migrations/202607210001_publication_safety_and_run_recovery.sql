@@ -278,6 +278,325 @@ begin
 end;
 $$;
 
+create or replace function publish_shared_result(p_run_id uuid, p_proposal_id uuid)
+returns uuid
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  v_run public.recommendation_runs%rowtype;
+  v_proposal public.recommendation_proposals%rowtype;
+  v_result public.recommendation_results%rowtype;
+  v_plan_id uuid;
+  v_meeting_date date;
+  v_participant_count integer;
+begin
+  select public.recommendation_runs.plan_id into v_plan_id
+  from public.recommendation_runs
+  where public.recommendation_runs.id = p_run_id;
+  if not found then raise exception 'run not found'; end if;
+
+  select public.plans.meeting_date into v_meeting_date
+  from public.plans
+  where public.plans.id = v_plan_id
+  for update;
+
+  select * into v_run
+  from public.recommendation_runs
+  where public.recommendation_runs.id = p_run_id
+  for update;
+  if not found or v_run.plan_id is distinct from v_plan_id then
+    raise exception 'run not found';
+  end if;
+  if v_run.kind <> 'automatic' then
+    raise exception 'automatic publication requires an automatic run';
+  end if;
+  if v_run.status <> 'validating' then
+    raise exception 'automatic run must be validating';
+  end if;
+
+  select * into v_proposal
+  from public.recommendation_proposals
+  where public.recommendation_proposals.id = p_proposal_id
+    and public.recommendation_proposals.run_id = p_run_id
+  for update;
+  if not found
+    or v_proposal.status <> 'approved'
+    or v_proposal.policy_version <> v_run.policy_version
+    or v_proposal.supervisor_approved_version is distinct from v_proposal.version
+    or not (v_proposal.validation_decision @> '{"ok": true}'::jsonb)
+  then
+    raise exception 'proposal is not approved for this run and policy';
+  end if;
+
+  select * into v_result
+  from public.recommendation_results
+  where public.recommendation_results.run_id = p_run_id
+    and public.recommendation_results.proposal_id = p_proposal_id
+  for update;
+  if not found
+    or v_result.plan_id <> v_run.plan_id
+    or v_result.is_shared
+    or v_proposal.output_json ->> 'status' is distinct from 'proposal'
+    or v_result.city_code is distinct from v_proposal.output_json ->> 'cityCode'
+    or coalesce(jsonb_array_length(v_proposal.output_json -> 'schemes'), 0) <> 2
+    or v_proposal.output_json #>> '{schemes,0,kind}' is distinct from 'saving'
+    or v_proposal.output_json #>> '{schemes,1,kind}' is distinct from 'fast'
+  then
+    raise exception 'exactly one matching result is required';
+  end if;
+  if exists (
+    select 1 from public.recommendation_results
+    where public.recommendation_results.plan_id = v_run.plan_id
+      and public.recommendation_results.is_shared
+      and public.recommendation_results.superseded_at is null
+  ) then
+    raise exception 'shared result already exists';
+  end if;
+
+  select count(*) into v_participant_count
+  from public.participants
+  where public.participants.plan_id = v_run.plan_id;
+  if v_participant_count = 0
+    or (select count(*) from public.recommendation_schemes where result_id = v_result.id) <> 2
+    or (select count(distinct kind) from public.recommendation_schemes where result_id = v_result.id) <> 2
+    or exists (
+      select 1 from public.recommendation_schemes as scheme
+      where scheme.result_id = v_result.id
+        and (select count(*) from public.recommendation_scheme_routes as scheme_route
+          where scheme_route.scheme_id = scheme.id) <> v_participant_count
+    )
+    or exists (
+      select 1
+      from public.recommendation_scheme_routes as scheme_route
+      join public.recommendation_schemes as scheme on scheme.id = scheme_route.scheme_id
+      left join public.participants as participant
+        on participant.id = scheme_route.participant_id
+        and participant.plan_id = v_run.plan_id
+      left join public.verified_quotes as quote on quote.id = scheme_route.verified_quote_id
+      where scheme.result_id = v_result.id
+        and (participant.id is null
+          or quote.id is null
+          or quote.run_id <> p_run_id
+          or quote.participant_id <> scheme_route.participant_id
+          or quote.city_code <> v_result.city_code
+          or not (quote.mode = any (participant.accepted_modes))
+          or (quote.arrive_at at time zone 'Asia/Shanghai')::date <> v_meeting_date
+          or quote.quote_id is distinct from v_proposal.output_json #>> array[
+            'schemes',
+            case when scheme.kind = 'saving' then '0' else '1' end,
+            'quoteIdsByParticipant',
+            scheme_route.participant_id::text
+          ])
+    )
+    or exists (
+      select 1 from public.recommendation_schemes as scheme
+      where scheme.result_id = v_result.id
+        and ((select count(*) from jsonb_object_keys(
+          v_proposal.output_json -> 'schemes'
+            -> (case when scheme.kind = 'saving' then 0 else 1 end)
+            -> 'quoteIdsByParticipant'
+        )) <> v_participant_count
+        or scheme.total_fare_cny is distinct from (
+          v_proposal.output_json #>> array[
+            'schemes',
+            case when scheme.kind = 'saving' then '0' else '1' end,
+            'totalFareCny'
+          ])::integer
+        or scheme.total_fare_cny <> (
+          select coalesce(sum(quote.price_cny), 0)
+          from public.recommendation_scheme_routes as scheme_route
+          join public.verified_quotes as quote on quote.id = scheme_route.verified_quote_id
+          where scheme_route.scheme_id = scheme.id)
+        or scheme.total_duration_minutes <> (
+          select coalesce(sum(quote.duration_minutes), 0)
+          from public.recommendation_scheme_routes as scheme_route
+          join public.verified_quotes as quote on quote.id = scheme_route.verified_quote_id
+          where scheme_route.scheme_id = scheme.id))
+    )
+  then
+    raise exception 'result evidence or participant coverage is invalid';
+  end if;
+
+  update public.recommendation_results
+  set is_shared = true, published_at = now()
+  where public.recommendation_results.id = v_result.id;
+  update public.recommendation_runs
+  set status = 'completed', completed_at = now(), retry_after = null
+  where public.recommendation_runs.id = p_run_id;
+  return v_result.id;
+end;
+$$;
+
+create or replace function confirm_alternative_result(
+  p_run_id uuid,
+  p_proposal_id uuid,
+  p_host_token_hash text
+)
+returns uuid
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  v_run public.recommendation_runs%rowtype;
+  v_proposal public.recommendation_proposals%rowtype;
+  v_result public.recommendation_results%rowtype;
+  v_current_result_id uuid;
+  v_plan_id uuid;
+  v_meeting_date date;
+  v_participant_count integer;
+begin
+  select public.recommendation_runs.plan_id into v_plan_id
+  from public.recommendation_runs
+  where public.recommendation_runs.id = p_run_id;
+  if not found then raise exception 'run not found'; end if;
+
+  select public.plans.meeting_date into v_meeting_date
+  from public.plans
+  where public.plans.id = v_plan_id
+  for update;
+
+  select * into v_run
+  from public.recommendation_runs
+  where public.recommendation_runs.id = p_run_id
+  for update;
+  if not found or v_run.plan_id is distinct from v_plan_id then
+    raise exception 'run not found';
+  end if;
+  if v_run.kind <> 'alternative' then
+    raise exception 'host confirmation requires an alternative run';
+  end if;
+  if v_run.status <> 'awaiting_host_confirmation' then
+    raise exception 'alternative run must await host confirmation';
+  end if;
+
+  if p_host_token_hash is null or not exists (
+    select 1 from public.plan_credentials
+    where public.plan_credentials.plan_id = v_run.plan_id
+      and public.plan_credentials.host_token_hash = p_host_token_hash
+  ) then
+    raise exception 'invalid host credential';
+  end if;
+
+  select * into v_proposal
+  from public.recommendation_proposals
+  where public.recommendation_proposals.id = p_proposal_id
+    and public.recommendation_proposals.run_id = p_run_id
+  for update;
+  if not found
+    or v_proposal.status <> 'approved'
+    or v_proposal.policy_version <> v_run.policy_version
+    or v_proposal.supervisor_approved_version is distinct from v_proposal.version
+    or not (v_proposal.validation_decision @> '{"ok": true}'::jsonb)
+  then
+    raise exception 'proposal is not approved for this run and policy';
+  end if;
+
+  select * into v_result
+  from public.recommendation_results
+  where public.recommendation_results.run_id = p_run_id
+    and public.recommendation_results.proposal_id = p_proposal_id
+  for update;
+  if not found
+    or v_result.plan_id <> v_run.plan_id
+    or v_result.city_code <> v_run.requested_city_code
+    or v_result.is_shared
+    or v_proposal.output_json ->> 'status' is distinct from 'proposal'
+    or v_result.city_code is distinct from v_proposal.output_json ->> 'cityCode'
+    or coalesce(jsonb_array_length(v_proposal.output_json -> 'schemes'), 0) <> 2
+    or v_proposal.output_json #>> '{schemes,0,kind}' is distinct from 'saving'
+    or v_proposal.output_json #>> '{schemes,1,kind}' is distinct from 'fast'
+  then
+    raise exception 'exactly one matching alternative result is required';
+  end if;
+
+  select public.recommendation_results.id into v_current_result_id
+  from public.recommendation_results
+  where public.recommendation_results.plan_id = v_run.plan_id
+    and public.recommendation_results.is_shared
+    and public.recommendation_results.superseded_at is null
+  for update;
+  if not found then raise exception 'no shared result to replace'; end if;
+
+  select count(*) into v_participant_count
+  from public.participants
+  where public.participants.plan_id = v_run.plan_id;
+  if v_participant_count = 0
+    or (select count(*) from public.recommendation_schemes where result_id = v_result.id) <> 2
+    or (select count(distinct kind) from public.recommendation_schemes where result_id = v_result.id) <> 2
+    or exists (
+      select 1 from public.recommendation_schemes as scheme
+      where scheme.result_id = v_result.id
+        and (select count(*) from public.recommendation_scheme_routes as scheme_route
+          where scheme_route.scheme_id = scheme.id) <> v_participant_count
+    )
+    or exists (
+      select 1
+      from public.recommendation_scheme_routes as scheme_route
+      join public.recommendation_schemes as scheme on scheme.id = scheme_route.scheme_id
+      left join public.participants as participant
+        on participant.id = scheme_route.participant_id
+        and participant.plan_id = v_run.plan_id
+      left join public.verified_quotes as quote on quote.id = scheme_route.verified_quote_id
+      where scheme.result_id = v_result.id
+        and (participant.id is null
+          or quote.id is null
+          or quote.run_id <> p_run_id
+          or quote.participant_id <> scheme_route.participant_id
+          or quote.city_code <> v_result.city_code
+          or not (quote.mode = any (participant.accepted_modes))
+          or (quote.arrive_at at time zone 'Asia/Shanghai')::date <> v_meeting_date
+          or quote.quote_id is distinct from v_proposal.output_json #>> array[
+            'schemes',
+            case when scheme.kind = 'saving' then '0' else '1' end,
+            'quoteIdsByParticipant',
+            scheme_route.participant_id::text
+          ])
+    )
+    or exists (
+      select 1 from public.recommendation_schemes as scheme
+      where scheme.result_id = v_result.id
+        and ((select count(*) from jsonb_object_keys(
+          v_proposal.output_json -> 'schemes'
+            -> (case when scheme.kind = 'saving' then 0 else 1 end)
+            -> 'quoteIdsByParticipant'
+        )) <> v_participant_count
+        or scheme.total_fare_cny is distinct from (
+          v_proposal.output_json #>> array[
+            'schemes',
+            case when scheme.kind = 'saving' then '0' else '1' end,
+            'totalFareCny'
+          ])::integer
+        or scheme.total_fare_cny <> (
+          select coalesce(sum(quote.price_cny), 0)
+          from public.recommendation_scheme_routes as scheme_route
+          join public.verified_quotes as quote on quote.id = scheme_route.verified_quote_id
+          where scheme_route.scheme_id = scheme.id)
+        or scheme.total_duration_minutes <> (
+          select coalesce(sum(quote.duration_minutes), 0)
+          from public.recommendation_scheme_routes as scheme_route
+          join public.verified_quotes as quote on quote.id = scheme_route.verified_quote_id
+          where scheme_route.scheme_id = scheme.id))
+    )
+  then
+    raise exception 'result evidence or participant coverage is invalid';
+  end if;
+
+  update public.recommendation_results
+  set superseded_at = now(), superseded_by_result_id = v_result.id
+  where public.recommendation_results.id = v_current_result_id;
+  update public.recommendation_results
+  set is_shared = true, published_at = now()
+  where public.recommendation_results.id = v_result.id;
+  update public.recommendation_runs
+  set status = 'completed', completed_at = now(), retry_after = null
+  where public.recommendation_runs.id = p_run_id;
+  return v_result.id;
+end;
+$$;
+
 update public.recommendation_runs
 set stale_after = started_at + case
   when status = 'awaiting_host_confirmation' then interval '7 days'

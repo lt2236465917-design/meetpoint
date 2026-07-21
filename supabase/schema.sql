@@ -886,25 +886,33 @@ declare
   v_run public.recommendation_runs%rowtype;
   v_proposal public.recommendation_proposals%rowtype;
   v_result public.recommendation_results%rowtype;
+  v_plan_id uuid;
   v_meeting_date date;
   v_participant_count integer;
 begin
+  select public.recommendation_runs.plan_id into v_plan_id
+  from public.recommendation_runs
+  where public.recommendation_runs.id = p_run_id;
+  if not found then raise exception 'run not found'; end if;
+
+  select public.plans.meeting_date into v_meeting_date
+  from public.plans
+  where public.plans.id = v_plan_id
+  for update;
+
   select * into v_run
   from public.recommendation_runs
   where public.recommendation_runs.id = p_run_id
   for update;
-  if not found then raise exception 'run not found'; end if;
+  if not found or v_run.plan_id is distinct from v_plan_id then
+    raise exception 'run not found';
+  end if;
   if v_run.kind <> 'automatic' then
     raise exception 'automatic publication requires an automatic run';
   end if;
   if v_run.status <> 'validating' then
     raise exception 'automatic run must be validating';
   end if;
-
-  select public.plans.meeting_date into v_meeting_date
-  from public.plans
-  where public.plans.id = v_run.plan_id
-  for update;
 
   select * into v_proposal
   from public.recommendation_proposals
@@ -1034,14 +1042,27 @@ declare
   v_proposal public.recommendation_proposals%rowtype;
   v_result public.recommendation_results%rowtype;
   v_current_result_id uuid;
+  v_plan_id uuid;
   v_meeting_date date;
   v_participant_count integer;
 begin
+  select public.recommendation_runs.plan_id into v_plan_id
+  from public.recommendation_runs
+  where public.recommendation_runs.id = p_run_id;
+  if not found then raise exception 'run not found'; end if;
+
+  select public.plans.meeting_date into v_meeting_date
+  from public.plans
+  where public.plans.id = v_plan_id
+  for update;
+
   select * into v_run
   from public.recommendation_runs
   where public.recommendation_runs.id = p_run_id
   for update;
-  if not found then raise exception 'run not found'; end if;
+  if not found or v_run.plan_id is distinct from v_plan_id then
+    raise exception 'run not found';
+  end if;
   if v_run.kind <> 'alternative' then
     raise exception 'host confirmation requires an alternative run';
   end if;
@@ -1049,10 +1070,6 @@ begin
     raise exception 'alternative run must await host confirmation';
   end if;
 
-  select public.plans.meeting_date into v_meeting_date
-  from public.plans
-  where public.plans.id = v_run.plan_id
-  for update;
   if p_host_token_hash is null or not exists (
     select 1 from public.plan_credentials
     where public.plan_credentials.plan_id = v_run.plan_id

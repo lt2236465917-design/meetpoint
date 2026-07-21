@@ -127,7 +127,6 @@ describe("SupabaseRecommendationRepository", () => {
   });
 
   it.each([
-    { disposition: "created", runId: RUN_ID, status: "collecting", taskIds: [TASK_ID] },
     { disposition: "resume_existing", runId: RUN_ID, status: "collecting", taskIds: [TASK_ID] },
     { disposition: "resume_existing", runId: RUN_ID, status: "completed", taskIds: [] },
     { disposition: "rejected", code: "UNKNOWN_CODE" },
@@ -138,16 +137,31 @@ describe("SupabaseRecommendationRepository", () => {
       .rejects.toThrow("invalid RPC result");
   });
 
+  it("rejects a created status other than pending", async () => {
+    mocks.rpc.mockImplementation(async (_name, params) => ({
+      data: {
+        disposition: "created",
+        runId: params.p_run_id,
+        status: "collecting",
+        taskIds: params.p_tasks.map((task: { id: string }) => task.id),
+      },
+      error: null,
+    }));
+
+    await expect(new SupabaseRecommendationRepository().createRunMatrix(createRunInput))
+      .rejects.toThrow("invalid RPC result");
+  });
+
   it("rejects a created run ID that differs from the requested ID", async () => {
-    mocks.rpc.mockResolvedValue({
+    mocks.rpc.mockImplementation(async (_name, params) => ({
       data: {
         disposition: "created",
         runId: OTHER_RUN_ID,
         status: "pending",
-        taskIds: [TASK_ID],
+        taskIds: params.p_tasks.map((task: { id: string }) => task.id),
       },
       error: null,
-    });
+    }));
 
     await expect(new SupabaseRecommendationRepository().createRunMatrix(createRunInput))
       .rejects.toThrow("invalid RPC result");
