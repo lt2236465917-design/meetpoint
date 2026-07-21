@@ -468,24 +468,6 @@ begin
     raise exception 'invalid run matrix input';
   end if;
 
-  select public.plans.meeting_date
-  into v_meeting_date
-  from public.plans
-  where public.plans.id = p_plan_id
-  for update;
-  if not found or v_meeting_date is distinct from p_arrival_date then
-    raise exception 'plan arrival date mismatch';
-  end if;
-
-  if p_kind = 'alternative' and not exists (
-    select 1
-    from public.participants
-    where public.participants.id = p_requested_by_participant_id
-      and public.participants.plan_id = p_plan_id
-  ) then
-    raise exception 'alternative requester is not a plan participant';
-  end if;
-
   if exists (
     select 1
     from jsonb_to_recordset(p_candidates) as candidate(
@@ -538,6 +520,24 @@ begin
     from jsonb_to_recordset(p_tasks) as task(id uuid)
   ) <> jsonb_array_length(p_tasks) then
     raise exception 'invalid route task matrix';
+  end if;
+
+  select public.plans.meeting_date
+  into v_meeting_date
+  from public.plans
+  where public.plans.id = p_plan_id
+  for update;
+  if not found or v_meeting_date is distinct from p_arrival_date then
+    raise exception 'plan arrival date mismatch';
+  end if;
+
+  if p_kind = 'alternative' and not exists (
+    select 1
+    from public.participants
+    where public.participants.id = p_requested_by_participant_id
+      and public.participants.plan_id = p_plan_id
+  ) then
+    raise exception 'alternative requester is not a plan participant';
   end if;
 
   select exists (

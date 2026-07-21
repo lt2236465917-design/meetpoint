@@ -49,4 +49,30 @@ describe("active recommendation run database guard", () => {
       expect(sql).toContain("stale_after");
     }
   });
+
+  it("validates the bounded run matrix before locking and verifies plan ownership after locking", async () => {
+    for (const path of atomicRunCreationPaths) {
+      const sql = (await readFile(path, "utf8")).toLowerCase();
+      const candidateValidation = sql.indexOf("raise exception 'invalid candidate matrix'");
+      const taskValidation = sql.indexOf("raise exception 'invalid route task matrix'");
+      const planSelect = sql.indexOf("select public.plans.meeting_date");
+      const planLock = sql.indexOf("for update;", planSelect);
+      const meetingDateValidation = sql.indexOf("raise exception 'plan arrival date mismatch'");
+      const requesterValidation = sql.indexOf(
+        "raise exception 'alternative requester is not a plan participant'",
+      );
+
+      expect(candidateValidation).toBeGreaterThan(-1);
+      expect(taskValidation).toBeGreaterThan(-1);
+      expect(planSelect).toBeGreaterThan(-1);
+      expect(planLock).toBeGreaterThan(-1);
+      expect(meetingDateValidation).toBeGreaterThan(-1);
+      expect(requesterValidation).toBeGreaterThan(-1);
+      expect(candidateValidation).toBeLessThan(planSelect);
+      expect(taskValidation).toBeLessThan(planSelect);
+      expect(planSelect).toBeLessThan(planLock);
+      expect(planLock).toBeLessThan(meetingDateValidation);
+      expect(planLock).toBeLessThan(requesterValidation);
+    }
+  });
 });

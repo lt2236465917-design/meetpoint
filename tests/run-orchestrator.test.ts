@@ -17,9 +17,12 @@ import type { VerifiedQuote } from "@/lib/agent/contracts";
 import type { StoredRouteTask } from "@/lib/recommendation/repository";
 
 function run(status: StoredRun["status"]): StoredRun {
+  const staleAfter = ["completed", "incomplete", "failed"].includes(status)
+    ? null
+    : "2026-08-01T00:15:00.000Z";
   return {
     id: "run-1", planId: "plan-1", status, traceId: "11111111-1111-4111-8111-111111111111",
-    retryAfter: null, errorCode: null, policyVersion: "2026-07-19.v2", kind: "automatic",
+    retryAfter: null, staleAfter, errorCode: null, policyVersion: "2026-07-19.v2", kind: "automatic",
     arrivalDate: "2026-08-15", participantIds: ["p1", "p2"],
   };
 }

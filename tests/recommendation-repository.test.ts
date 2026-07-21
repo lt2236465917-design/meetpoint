@@ -411,6 +411,7 @@ describe("SupabaseRecommendationRepository", () => {
         status: "validating",
         traceId: "33333333-3333-4333-8333-333333333333",
         retryAfter: null,
+        staleAfter: "2026-07-20T10:15:00+08:00",
         errorCode: null,
         policyVersion: "2026-07-19.v2",
         kind: "automatic",
