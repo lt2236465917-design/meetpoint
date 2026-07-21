@@ -302,13 +302,11 @@ type LiveNormalizationResult =
 function classifyLiveSegment(
   segment: z.infer<typeof liveSegmentSchema>,
 ): GatewaySearchRequest["mode"] | null {
-  if (/(?:flight|air|plane|航空|飞机)/i.test(segment.transportType)) {
+  if (segment.transportType === "flight") {
     return "flight";
   }
-  if (/(?:train|rail|火车|铁路|高铁)/i.test(segment.transportType)) {
-    return /^[GCD]/i.test(segment.marketingTransportNo) ? "high_speed_rail" : "normal_train";
-  }
-  return null;
+  if (segment.transportType !== "train") return null;
+  return /^[GCD]/i.test(segment.marketingTransportNo) ? "high_speed_rail" : "normal_train";
 }
 
 function normalizeLiveItem(

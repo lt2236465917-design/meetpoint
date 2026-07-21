@@ -429,6 +429,104 @@ describe("searchFlyAI", () => {
     }
   });
 
+  it.each([
+    "flight/train",
+    "train/flight",
+    "not flight",
+    "非航班",
+    "hovercraft",
+  ])("rejects non-allowlisted live transport type %s without leaking supplier facts", async (transportType) => {
+    const diagnostics: unknown[] = [];
+    const item = {
+      ...liveFlightItem,
+      journeys: [{ segments: [{
+        ...liveFlightItem.journeys[0].segments[0],
+        transportType,
+      }] }],
+    };
+
+    await expect(searchFlyAI(baseInput, {
+      execFile: executorReturning({ data: { itemList: [item] } }),
+      executable: "/safe/flyai",
+      diagnosticLogger: (event) => diagnostics.push(event),
+    })).rejects.toMatchObject({ code: "PROVIDER_INVALID_RESPONSE" });
+
+    expect(diagnostics).toEqual([expect.objectContaining({
+      outcome: "PROVIDER_INVALID_RESPONSE",
+      normalizedCount: 0,
+      droppedCount: 1,
+      droppedReasons: ["mixed_transport_category"],
+    })]);
+    const serialized = JSON.stringify(diagnostics);
+    for (const supplierFact of [
+      transportType,
+      "北京首都",
+      "上海虹桥",
+      "MU5101",
+      "680",
+      "2026-08-20 08:00:00",
+    ]) {
+      expect(serialized).not.toContain(supplierFact);
+    }
+  });
+
+  it.each([
+    ["flight", "MU5101", "flight"],
+    ["high_speed_rail", "G1", "train"],
+    ["normal_train", "K123", "train"],
+  ] as const)("accepts the confirmed exact transport type for %s", async (mode, serviceName, transportType) => {
+    const item = {
+      ...liveFlightItem,
+      price: mode === "flight" ? undefined : "680",
+      journeys: [{ segments: [{
+        ...liveFlightItem.journeys[0].segments[0],
+        marketingTransportNo: serviceName,
+        transportType,
+      }] }],
+    };
+
+    const result = await searchFlyAI({ ...baseInput, mode }, {
+      execFile: executorReturning({ data: { itemList: [item] } }),
+      executable: "/safe/flyai",
+    });
+
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({ mode, serviceName });
+  });
+
+  it("drops an ambiguous transport item while retaining its valid sibling without leaking facts", async () => {
+    const ambiguousTransportType = "flight/train";
+    const diagnostics: unknown[] = [];
+    const ambiguousItem = {
+      ...liveFlightItem,
+      journeys: [{ segments: [{
+        ...liveFlightItem.journeys[0].segments[0],
+        marketingTransportNo: "MU9999",
+        transportType: ambiguousTransportType,
+      }] }],
+    };
+
+    const result = await searchFlyAI(baseInput, {
+      execFile: executorReturning({ data: { itemList: [ambiguousItem, liveFlightItem] } }),
+      executable: "/safe/flyai",
+      diagnosticLogger: (event) => diagnostics.push(event),
+    });
+
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({ serviceName: "MU5101" });
+    expect(diagnostics).toEqual([expect.objectContaining({
+      outcome: "SUCCESS",
+      itemCount: 2,
+      normalizedCount: 1,
+      droppedCount: 1,
+      droppedReasons: ["mixed_transport_category"],
+    })]);
+    const serialized = JSON.stringify(diagnostics);
+    for (const supplierFact of [ambiguousTransportType, "MU9999", "北京首都", "上海虹桥", "680"]) {
+      expect(serialized).not.toContain(supplierFact);
+    }
+  });
+
   it("changes the evidence ID when an internal segment changes", async () => {
     const changedInternalSegment = {
       ...connectingFlightItem,
