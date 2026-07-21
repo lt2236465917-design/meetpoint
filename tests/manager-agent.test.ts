@@ -27,7 +27,12 @@ function managerRepository() {
         retryAfter: null,
         errorCode: null,
       })));
-      return { runId, taskIds: tasks.map((task) => task.id) };
+      return {
+        disposition: "created" as const,
+        runId,
+        status: "pending" as const,
+        taskIds: tasks.map((task) => task.id),
+      };
     },
     async getRouteTask() { return null; },
     async markTaskRunning() { throw new Error("not used"); },
@@ -64,6 +69,12 @@ describe("ManagerAgent", () => {
 
     expect(first.candidates.length).toBeGreaterThan(0);
     expect(first.tasks.length).toBeGreaterThan(0);
+    expect(firstResult).toEqual({
+      disposition: "created",
+      runId: "11111111-1111-4111-8111-111111111111",
+      status: "pending",
+      taskIds: first.tasks.map((task) => task.id),
+    });
     expect(firstResult.taskIds).toEqual(first.tasks.map((task) => task.id));
     expect(firstResult.taskIds).toEqual(secondResult.taskIds);
     expect(first.tasks.every((task) => task.arrivalDate === "2026-08-15")).toBe(true);

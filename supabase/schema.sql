@@ -440,6 +440,8 @@ set search_path = ''
 as $$
 declare
   v_meeting_date date;
+  v_active_run public.recommendation_runs%rowtype;
+  v_has_shared_result boolean;
 begin
   if p_run_id is null
     or p_plan_id is null
@@ -538,10 +540,60 @@ begin
     raise exception 'invalid route task matrix';
   end if;
 
+  select exists (
+    select 1
+    from public.recommendation_results
+    where plan_id = p_plan_id
+      and is_shared
+      and superseded_at is null
+  ) into v_has_shared_result;
+
+  if p_kind = 'automatic' and v_has_shared_result then
+    return jsonb_build_object('disposition', 'rejected', 'code', 'SHARED_RESULT_EXISTS');
+  end if;
+  if p_kind = 'alternative' and not v_has_shared_result then
+    return jsonb_build_object('disposition', 'rejected', 'code', 'SHARED_RESULT_REQUIRED');
+  end if;
+
+  select * into v_active_run
+  from public.recommendation_runs
+  where plan_id = p_plan_id
+    and status in (
+      'pending', 'collecting', 'cooling_down', 'calculating',
+      'validating', 'awaiting_host_confirmation'
+    )
+  for update;
+
+  if found and v_active_run.stale_after <= now() then
+    update public.recommendation_runs
+    set status = 'failed', error_summary = 'RUN_STALE_EXPIRED', completed_at = now(),
+        stale_after = null, advance_lease_token = null, advance_lease_expires_at = null
+    where id = v_active_run.id and status = v_active_run.status;
+    v_active_run := null;
+  end if;
+
+  if v_active_run.id is not null then
+    if v_active_run.kind = p_kind and (
+      p_kind = 'automatic'
+      or (
+        v_active_run.requested_city_code = p_requested_city_code
+        and v_active_run.requested_by_participant_id = p_requested_by_participant_id
+      )
+    ) then
+      return jsonb_build_object(
+        'disposition', 'resume_existing', 'runId', v_active_run.id,
+        'status', v_active_run.status, 'taskIds', '[]'::jsonb
+      );
+    end if;
+    return jsonb_build_object('disposition', 'rejected', 'code', 'CALCULATION_IN_PROGRESS');
+  end if;
+
   insert into public.recommendation_runs (
-    id, plan_id, status, kind, requested_city_code, requested_by_participant_id
+    id, plan_id, status, kind, requested_city_code, requested_by_participant_id,
+    stale_after
   ) values (
-    p_run_id, p_plan_id, 'pending', p_kind, p_requested_city_code, p_requested_by_participant_id
+    p_run_id, p_plan_id, 'pending', p_kind, p_requested_city_code,
+    p_requested_by_participant_id, now() + interval '15 minutes'
   );
 
   insert into public.candidate_cities (
@@ -594,7 +646,9 @@ begin
   );
 
   return jsonb_build_object(
+    'disposition', 'created',
     'runId', p_run_id,
+    'status', 'pending',
     'taskIds', (
       select coalesce(jsonb_agg(entry.value -> 'id' order by entry.ordinality), '[]'::jsonb)
       from jsonb_array_elements(p_tasks) with ordinality as entry(value, ordinality)

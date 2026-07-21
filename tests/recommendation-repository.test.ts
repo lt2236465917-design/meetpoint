@@ -14,6 +14,24 @@ vi.mock("@/lib/supabase/server", () => ({
 
 import { SupabaseRecommendationRepository } from "@/lib/recommendation/repository";
 
+const RUN_ID = "11111111-1111-4111-8111-111111111111";
+const OTHER_RUN_ID = "22222222-2222-4222-8222-222222222222";
+const TASK_ID = "33333333-3333-4333-8333-333333333333";
+const createRunInput = {
+  planId: "plan-1",
+  arrivalDate: "2026-08-15",
+  candidates: [{ cityCode: "wuhan", cityName: "武汉", source: "system" as const }],
+  tasks: [{
+    participantId: "p1",
+    cityCode: "wuhan",
+    originCityCode: "beijing",
+    mode: "flight" as const,
+    searchDate: "2026-08-14",
+    arrivalDate: "2026-08-15",
+    physicalKey: "beijing:wuhan:flight:2026-08-14",
+  }],
+};
+
 describe("SupabaseRecommendationRepository", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -56,25 +74,14 @@ describe("SupabaseRecommendationRepository", () => {
   it("creates the entire run matrix through one atomic RPC", async () => {
     mocks.rpc.mockImplementation(async (_name, params) => ({
       data: {
+        disposition: "created",
         runId: params.p_run_id,
+        status: "pending",
         taskIds: params.p_tasks.map((task: { id: string }) => task.id),
       },
       error: null,
     }));
-    const result = await new SupabaseRecommendationRepository().createRunMatrix({
-      planId: "plan-1",
-      arrivalDate: "2026-08-15",
-      candidates: [{ cityCode: "wuhan", cityName: "武汉", source: "system" }],
-      tasks: [{
-        participantId: "p1",
-        cityCode: "wuhan",
-        originCityCode: "beijing",
-        mode: "flight",
-        searchDate: "2026-08-14",
-        arrivalDate: "2026-08-15",
-        physicalKey: "beijing:wuhan:flight:2026-08-14",
-      }],
-    });
+    const result = await new SupabaseRecommendationRepository().createRunMatrix(createRunInput);
 
     expect(mocks.rpc).toHaveBeenCalledTimes(1);
     expect(mocks.rpc).toHaveBeenCalledWith(
@@ -82,7 +89,68 @@ describe("SupabaseRecommendationRepository", () => {
       expect.objectContaining({ p_plan_id: "plan-1" }),
     );
     expect(mocks.from).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ disposition: "created", status: "pending" });
     expect(result.taskIds).toHaveLength(1);
+  });
+
+  it("returns an existing compatible active run unchanged", async () => {
+    mocks.rpc.mockResolvedValue({
+      data: {
+        disposition: "resume_existing",
+        runId: RUN_ID,
+        status: "collecting",
+        taskIds: [],
+      },
+      error: null,
+    });
+
+    await expect(new SupabaseRecommendationRepository().createRunMatrix(createRunInput))
+      .resolves.toMatchObject({
+        disposition: "resume_existing",
+        runId: RUN_ID,
+        status: "collecting",
+        taskIds: [],
+      });
+  });
+
+  it("throws a typed rejection for a valid rejected outcome", async () => {
+    mocks.rpc.mockResolvedValue({
+      data: { disposition: "rejected", code: "SHARED_RESULT_EXISTS" },
+      error: null,
+    });
+
+    await expect(new SupabaseRecommendationRepository().createRunMatrix(createRunInput))
+      .rejects.toMatchObject({
+        name: "RunCreationError",
+        code: "SHARED_RESULT_EXISTS",
+      });
+  });
+
+  it.each([
+    { disposition: "created", runId: RUN_ID, status: "collecting", taskIds: [TASK_ID] },
+    { disposition: "resume_existing", runId: RUN_ID, status: "collecting", taskIds: [TASK_ID] },
+    { disposition: "resume_existing", runId: RUN_ID, status: "completed", taskIds: [] },
+    { disposition: "rejected", code: "UNKNOWN_CODE" },
+  ])("rejects malformed run creation RPC data: %j", async (data) => {
+    mocks.rpc.mockResolvedValue({ data, error: null });
+
+    await expect(new SupabaseRecommendationRepository().createRunMatrix(createRunInput))
+      .rejects.toThrow("invalid RPC result");
+  });
+
+  it("rejects a created run ID that differs from the requested ID", async () => {
+    mocks.rpc.mockResolvedValue({
+      data: {
+        disposition: "created",
+        runId: OTHER_RUN_ID,
+        status: "pending",
+        taskIds: [TASK_ID],
+      },
+      error: null,
+    });
+
+    await expect(new SupabaseRecommendationRepository().createRunMatrix(createRunInput))
+      .rejects.toThrow("invalid RPC result");
   });
 
   it("surfaces atomic run matrix RPC failures", async () => {
@@ -93,6 +161,63 @@ describe("SupabaseRecommendationRepository", () => {
       candidates: [{ cityCode: "wuhan", cityName: "武汉", source: "system" }],
       tasks: [],
     })).rejects.toThrow("matrix failed");
+  });
+
+  it.each([
+    ["2026-08-01T00:15:00.000Z", "2026-08-01T00:15:00.000Z"],
+    [null, null],
+  ])("loads a string or null stale deadline", async (storedValue, expectedValue) => {
+    const runMaybeSingle = vi.fn().mockResolvedValue({
+      data: {
+        id: RUN_ID,
+        plan_id: "plan-1",
+        status: "collecting",
+        trace_id: OTHER_RUN_ID,
+        retry_after: null,
+        stale_after: storedValue,
+        error_summary: null,
+        policy_version: "2026-07-19.v2",
+        kind: "automatic",
+        plans: [{ meeting_date: "2026-08-15" }],
+      },
+      error: null,
+    });
+    const runEq = vi.fn().mockReturnValue({ maybeSingle: runMaybeSingle });
+    const runSelect = vi.fn().mockReturnValue({ eq: runEq });
+    const participantOrder = vi.fn().mockResolvedValue({ data: [{ id: "p1" }], error: null });
+    const participantEq = vi.fn().mockReturnValue({ order: participantOrder });
+    const participantSelect = vi.fn().mockReturnValue({ eq: participantEq });
+    mocks.from.mockImplementation((table: string) => table === "recommendation_runs"
+      ? { select: runSelect }
+      : { select: participantSelect });
+
+    await expect(new SupabaseRecommendationRepository().getRun(RUN_ID))
+      .resolves.toMatchObject({ staleAfter: expectedValue });
+    expect(runSelect).toHaveBeenCalledWith(expect.stringContaining("stale_after"));
+  });
+
+  it("rejects a non-string, non-null stale deadline", async () => {
+    const runMaybeSingle = vi.fn().mockResolvedValue({
+      data: {
+        id: RUN_ID,
+        plan_id: "plan-1",
+        status: "collecting",
+        trace_id: OTHER_RUN_ID,
+        retry_after: null,
+        stale_after: 123,
+        error_summary: null,
+        policy_version: "2026-07-19.v2",
+        kind: "automatic",
+        plans: [{ meeting_date: "2026-08-15" }],
+      },
+      error: null,
+    });
+    const runEq = vi.fn().mockReturnValue({ maybeSingle: runMaybeSingle });
+    const runSelect = vi.fn().mockReturnValue({ eq: runEq });
+    mocks.from.mockReturnValue({ select: runSelect });
+
+    await expect(new SupabaseRecommendationRepository().getRun(RUN_ID))
+      .rejects.toThrow("Invalid recommendation run record");
   });
 
   it("saves a deduplicated outcome through one atomic RPC", async () => {

@@ -27,6 +27,7 @@ export type StoredRecommendationRun = {
   status: RunStatus;
   traceId: string;
   retryAfter: string | null;
+  staleAfter: string | null;
   errorCode: string | null;
   policyVersion: string;
   kind: "automatic" | "alternative";
@@ -49,6 +50,26 @@ export type CreateRunMatrixInput = {
   requestedCityCode?: string | null;
   requestedByParticipantId?: string | null;
 };
+
+export const runCreationErrorCodes = [
+  "CALCULATION_IN_PROGRESS",
+  "SHARED_RESULT_EXISTS",
+  "SHARED_RESULT_REQUIRED",
+] as const;
+export type RunCreationErrorCode = typeof runCreationErrorCodes[number];
+
+export type ActiveRunStatus = Exclude<RunStatus, "completed" | "incomplete" | "failed">;
+
+export type PreparedRun =
+  | { disposition: "created"; runId: string; status: "pending"; taskIds: string[] }
+  | { disposition: "resume_existing"; runId: string; status: ActiveRunStatus; taskIds: [] };
+
+export class RunCreationError extends Error {
+  constructor(readonly code: RunCreationErrorCode) {
+    super(code);
+    this.name = "RunCreationError";
+  }
+}
 
 export type SavedAgentProposal = {
   proposalId: string;
@@ -74,7 +95,7 @@ export interface AgentProposalRepository {
 }
 
 export interface RecommendationRepository {
-  createRunMatrix(input: CreateRunMatrixInput): Promise<{ runId: string; taskIds: string[] }>;
+  createRunMatrix(input: CreateRunMatrixInput): Promise<PreparedRun>;
   getRouteTask(taskId: string): Promise<StoredRouteTask | null>;
   markTaskRunning(taskId: string): Promise<StoredRouteTask>;
   saveTaskOutcome(taskId: string, outcome: QueryOutcome): Promise<void>;
@@ -162,7 +183,7 @@ type RouteTaskRow = {
 };
 
 const ROUTE_TASK_SELECT = "id,run_id,participant_id,city_code,origin_city_code,mode,search_date,physical_key,status,attempt_count,retry_after,error_code,recommendation_runs!inner(plans!inner(meeting_date)),participants!inner(departure_city_name)";
-const RUN_SELECT = "id,plan_id,status,trace_id,retry_after,error_summary,policy_version,kind,plans!inner(meeting_date)";
+const RUN_SELECT = "id,plan_id,status,trace_id,retry_after,stale_after,error_summary,policy_version,kind,plans!inner(meeting_date)";
 
 function firstRelation(value: unknown): Record<string, unknown> | null {
   const relation = Array.isArray(value) ? value[0] : value;
@@ -213,6 +234,7 @@ function toStoredRun(row: Record<string, unknown>): StoredRecommendationRun {
     typeof row.trace_id !== "string" ||
     typeof row.policy_version !== "string" ||
     typeof plan?.meeting_date !== "string" ||
+    (typeof row.stale_after !== "string" && row.stale_after !== null) ||
     !["pending", "collecting", "cooling_down", "calculating", "validating", "awaiting_host_confirmation", "completed", "incomplete", "failed"].includes(status) ||
     (kind !== "automatic" && kind !== "alternative")
   ) {
@@ -224,6 +246,7 @@ function toStoredRun(row: Record<string, unknown>): StoredRecommendationRun {
     status: status as RunStatus,
     traceId: row.trace_id,
     retryAfter: typeof row.retry_after === "string" ? row.retry_after : null,
+    staleAfter: row.stale_after,
     errorCode: typeof row.error_summary === "string" ? row.error_summary : null,
     policyVersion: row.policy_version,
     kind,
@@ -255,14 +278,37 @@ function toVerifiedQuote(row: Record<string, unknown>): VerifiedQuote {
   };
 }
 
-const runMatrixResultSchema = z.object({
-  runId: z.uuid(),
-  taskIds: z.array(z.uuid()),
-}).strict();
+const activeRunStatusSchema = z.enum([
+  "pending",
+  "collecting",
+  "cooling_down",
+  "calculating",
+  "validating",
+  "awaiting_host_confirmation",
+]);
+
+const runMatrixResultSchema = z.discriminatedUnion("disposition", [
+  z.object({
+    disposition: z.literal("created"),
+    runId: z.uuid(),
+    status: z.literal("pending"),
+    taskIds: z.array(z.uuid()).min(1),
+  }).strict(),
+  z.object({
+    disposition: z.literal("resume_existing"),
+    runId: z.uuid(),
+    status: activeRunStatusSchema,
+    taskIds: z.tuple([]),
+  }).strict(),
+  z.object({
+    disposition: z.literal("rejected"),
+    code: z.enum(runCreationErrorCodes),
+  }).strict(),
+]);
 
 export class SupabaseRecommendationRepository
   implements RunOrchestratorRepository {
-  async createRunMatrix(input: CreateRunMatrixInput) {
+  async createRunMatrix(input: CreateRunMatrixInput): Promise<PreparedRun> {
     const supabase = createServiceSupabaseClient();
     const runId = randomUUID();
     const taskIds = input.tasks.map((task) => deterministicRouteTaskId(runId, task));
@@ -290,10 +336,17 @@ export class SupabaseRecommendationRepository
     });
     if (error) throw new Error(`Failed to create recommendation run matrix: ${error.message}`);
     const parsed = runMatrixResultSchema.safeParse(data);
-    if (!parsed.success
-      || parsed.data.runId !== runId
+    if (!parsed.success) {
+      throw new Error("Failed to create recommendation run matrix: invalid RPC result");
+    }
+    if (parsed.data.disposition === "rejected") {
+      throw new RunCreationError(parsed.data.code);
+    }
+    if (parsed.data.disposition === "created" && (
+      parsed.data.runId !== runId
       || parsed.data.taskIds.length !== taskIds.length
-      || parsed.data.taskIds.some((id, index) => id !== taskIds[index])) {
+      || parsed.data.taskIds.some((id, index) => id !== taskIds[index])
+    )) {
       throw new Error("Failed to create recommendation run matrix: invalid RPC result");
     }
     return parsed.data;

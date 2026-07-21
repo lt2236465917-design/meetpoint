@@ -2,6 +2,10 @@ import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 
 const activeGuard = "recommendation_runs_one_active_per_plan";
+const atomicRunCreationPaths = [
+  "supabase/schema.sql",
+  "supabase/migrations/202607210001_publication_safety_and_run_recovery.sql",
+];
 
 describe("active recommendation run database guard", () => {
   it("replaces the historical running-only index with the active-state guard", async () => {
@@ -29,5 +33,20 @@ describe("active recommendation run database guard", () => {
     expect(schema.toLowerCase()).not.toContain(
       "recommendation_runs_one_running_per_plan",
     );
+  });
+
+  it("returns structured atomic run-creation outcomes and tracks stale runs", async () => {
+    for (const path of atomicRunCreationPaths) {
+      const sql = (await readFile(path, "utf8")).toLowerCase();
+
+      expect(sql).toContain("'disposition', 'created'");
+      expect(sql).toContain("'disposition', 'resume_existing'");
+      expect(sql).toContain("'disposition', 'rejected'");
+      expect(sql).toContain("'code', 'shared_result_exists'");
+      expect(sql).toContain("'code', 'shared_result_required'");
+      expect(sql).toContain("'code', 'calculation_in_progress'");
+      expect(sql).toContain("for update");
+      expect(sql).toContain("stale_after");
+    }
   });
 });

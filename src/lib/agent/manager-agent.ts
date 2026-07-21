@@ -3,7 +3,7 @@ import { z } from "zod";
 import { generateCandidateCities } from "@/lib/city/candidate-generator";
 import { findCityByCode } from "@/data/cities";
 import { buildRouteTasks } from "@/lib/recommendation/query-matrix";
-import type { RecommendationRepository } from "@/lib/recommendation/repository";
+import type { PreparedRun, RecommendationRepository } from "@/lib/recommendation/repository";
 import { transportModeSchema } from "@/lib/validation/schemas";
 
 const participantSchema = z.object({
@@ -50,7 +50,7 @@ export type ManagerInput = z.input<typeof managerInputSchema>;
 export class ManagerAgent {
   constructor(private readonly repository: RecommendationRepository) {}
 
-  async prepare(input: ManagerInput): Promise<{ runId: string; taskIds: string[] }> {
+  async prepare(input: ManagerInput): Promise<PreparedRun> {
     const parsed = managerInputSchema.parse(input);
     const requestedCity = parsed.alternative
       ? findCityByCode(parsed.alternative.cityCode)
