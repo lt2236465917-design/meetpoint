@@ -2,7 +2,20 @@
   "services": {
     "frontend": {
       "root": ".",
-      "framework": "nextjs"
+      "framework": "nextjs",
+      "bindings": [
+        {
+          "type": "service",
+          "service": "travel_gateway",
+          "format": "url",
+          "env": "TRAVEL_GATEWAY_URL"
+        }
+      ]
+    },
+    "travel_gateway": {
+      "root": "services/travel-provider-gateway",
+      "runtime": "container",
+      "entrypoint": "Dockerfile"
     }
   },
   "rewrites": [
