@@ -17,6 +17,7 @@ export async function POST(
     const errorCode = error instanceof Error ? error.message : "HOST_CONFIRMATION_FAILED";
     const status = errorCode === "INVALID_HOST_TOKEN" ? 403
       : errorCode === "RUN_NOT_FOUND" ? 404
+        : errorCode === "PREVIEW_EXPIRED" ? 409
         : 400;
     return NextResponse.json({ error: errorCode }, { status });
   }

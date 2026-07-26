@@ -464,6 +464,14 @@ export function submitFallbackProposal(runId: string, output: unknown) {
 export async function advanceFallbackRun(input: { runId: string; planId: string }) {
   const run = runFor(input.runId);
   if (!run || run.planId !== input.planId) throw new Error("RUN_NOT_FOUND");
+  if (
+    activeStatuses.has(run.status)
+    && run.staleAfter
+    && new Date(run.staleAfter).getTime() <= nowDate().getTime()
+  ) {
+    expireActiveRun(run);
+    return publicProgress(run)!;
+  }
   if (["completed", "incomplete", "failed", "awaiting_host_confirmation"].includes(run.status)) return publicProgress(run)!;
   if (run.status === "pending") run.status = "collecting";
   else if (run.status === "collecting") {
@@ -492,6 +500,7 @@ export async function advanceFallbackRun(input: { runId: string; planId: string 
       try { publishAutomatic(run, proposal); } catch { run.status = "failed"; run.errorCode = "PUBLICATION_GUARD_REJECTED"; run.completedAt = timestamp(); }
     }
   }
+  run.staleAfter = staleAfterForStatus(run.status, nowDate());
   recordEvent(run, "run_advanced");
   return publicProgress(run)!;
 }
@@ -538,6 +547,10 @@ export async function confirmFallbackAlternative(input: { code?: string; runId: 
   if (!result) throw new Error("PUBLICATION_GUARD_REJECTED");
   if (run.status === "completed" && result.isShared) return result;
   if (run.status !== "awaiting_host_confirmation") throw new Error("RUN_NOT_FOUND");
+  if (!run.staleAfter || new Date(run.staleAfter).getTime() <= nowDate().getTime()) {
+    expireActiveRun(run);
+    throw new Error("PREVIEW_EXPIRED");
+  }
   const current = currentSharedResult(run.planId);
   if (!current) throw new Error("PUBLICATION_GUARD_REJECTED");
   current.supersededAt = timestamp();
@@ -545,6 +558,7 @@ export async function confirmFallbackAlternative(input: { code?: string; runId: 
   result.publishedAt = timestamp();
   run.status = "completed";
   run.completedAt = timestamp();
+  run.staleAfter = null;
   recordEvent(run, "result_shared");
   return result;
 }

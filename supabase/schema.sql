@@ -872,6 +872,11 @@ begin
     raise exception 'route task outcome compare-and-set failed';
   end if;
 
+  update public.recommendation_runs
+  set stale_after = now() + interval '15 minutes'
+  where id = v_task.run_id
+    and status in ('pending', 'collecting', 'cooling_down', 'calculating', 'validating');
+
   return true;
 end;
 $$;
@@ -1050,7 +1055,8 @@ begin
   set is_shared = true, published_at = now()
   where public.recommendation_results.id = v_result.id;
   update public.recommendation_runs
-  set status = 'completed', completed_at = now(), retry_after = null
+  set status = 'completed', completed_at = now(), retry_after = null,
+      stale_after = null, advance_lease_token = null, advance_lease_expires_at = null
   where public.recommendation_runs.id = p_run_id;
   return v_result.id;
 end;
@@ -1061,7 +1067,7 @@ create function confirm_alternative_result(
   p_proposal_id uuid,
   p_host_token_hash text
 )
-returns uuid
+returns jsonb
 language plpgsql
 security invoker
 set search_path = ''
@@ -1105,6 +1111,16 @@ begin
       and public.plan_credentials.host_token_hash = p_host_token_hash
   ) then
     raise exception 'invalid host credential';
+  end if;
+
+  if v_run.status = 'awaiting_host_confirmation'
+    and (v_run.stale_after is null or v_run.stale_after <= now())
+  then
+    update public.recommendation_runs
+    set status = 'failed', error_summary = 'RUN_STALE_EXPIRED', completed_at = now(),
+        stale_after = null, advance_lease_token = null, advance_lease_expires_at = null
+    where id = p_run_id and status = 'awaiting_host_confirmation';
+    return jsonb_build_object('disposition', 'rejected', 'code', 'PREVIEW_EXPIRED');
   end if;
 
   select * into v_proposal
@@ -1218,9 +1234,13 @@ begin
   set is_shared = true, published_at = now()
   where public.recommendation_results.id = v_result.id;
   update public.recommendation_runs
-  set status = 'completed', completed_at = now(), retry_after = null
+  set status = 'completed', completed_at = now(), retry_after = null,
+      stale_after = null, advance_lease_token = null, advance_lease_expires_at = null
   where public.recommendation_runs.id = p_run_id;
-  return v_result.id;
+  return jsonb_build_object(
+    'disposition', 'completed',
+    'resultId', v_result.id
+  );
 end;
 $$;
 

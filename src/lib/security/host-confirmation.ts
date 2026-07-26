@@ -1,6 +1,20 @@
+import { z } from "zod";
+
 import { confirmFallbackAlternative } from "@/lib/fallback/mvp-store";
+import { SupabaseRecommendationRepository } from "@/lib/recommendation/repository";
 import { verifyToken } from "@/lib/security/tokens";
 import { createServiceSupabaseClient, hasSupabaseEnvironment } from "@/lib/supabase/server";
+
+const confirmationResultSchema = z.discriminatedUnion("disposition", [
+  z.object({
+    disposition: z.literal("completed"),
+    resultId: z.uuid(),
+  }).strict(),
+  z.object({
+    disposition: z.literal("rejected"),
+    code: z.literal("PREVIEW_EXPIRED"),
+  }).strict(),
+]);
 
 export async function confirmAlternativePreview(input: {
   code: string;
@@ -19,7 +33,7 @@ export async function confirmAlternativePreview(input: {
   if (!plan) throw new Error("RUN_NOT_FOUND");
   const { data: run } = await supabase
     .from("recommendation_runs")
-    .select("id,status,kind")
+    .select("id,status,kind,stale_after")
     .eq("id", input.runId)
     .eq("plan_id", plan.id)
     .single();
@@ -34,6 +48,26 @@ export async function confirmAlternativePreview(input: {
   }
   if (run.status === "completed") return { runId: run.id, status: "completed" };
   if (run.status !== "awaiting_host_confirmation") throw new Error("RUN_NOT_FOUND");
+  const now = new Date();
+  if (!run.stale_after || new Date(run.stale_after).getTime() <= now.getTime()) {
+    const expired = await new SupabaseRecommendationRepository().expireStaleRun(
+      run.id,
+      "awaiting_host_confirmation",
+      now.toISOString(),
+    );
+    if (!expired) {
+      const { data: current } = await supabase
+        .from("recommendation_runs")
+        .select("status")
+        .eq("id", run.id)
+        .eq("plan_id", plan.id)
+        .single();
+      if (current?.status === "completed") {
+        return { runId: run.id, status: "completed" };
+      }
+    }
+    throw new Error("PREVIEW_EXPIRED");
+  }
 
   const { data: proposals } = await supabase
     .from("recommendation_proposals")
@@ -51,6 +85,9 @@ export async function confirmAlternativePreview(input: {
     p_proposal_id: proposal.id,
     p_host_token_hash: credential.host_token_hash,
   });
-  if (error || typeof data !== "string") throw new Error("HOST_CONFIRMATION_FAILED");
+  if (error) throw new Error("HOST_CONFIRMATION_FAILED");
+  const parsed = confirmationResultSchema.safeParse(data);
+  if (!parsed.success) throw new Error("HOST_CONFIRMATION_FAILED");
+  if (parsed.data.disposition === "rejected") throw new Error(parsed.data.code);
   return { runId: run.id, status: "completed" };
 }

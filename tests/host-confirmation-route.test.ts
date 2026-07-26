@@ -38,4 +38,15 @@ describe("POST /api/plans/[code]/previews/[runId]/confirm", () => {
       code: "ABC123", runId: "run-1", hostToken: "host-token",
     });
   });
+
+  it("maps an expired preview to a safe conflict", async () => {
+    mocks.confirmAlternativePreview.mockRejectedValue(new Error("PREVIEW_EXPIRED"));
+    const { POST } = await import("@/app/api/plans/[code]/previews/[runId]/confirm/route");
+    const response = await POST(new Request("http://localhost/api/plans/ABC123/previews/run-1/confirm", {
+      method: "POST", headers: { "x-host-token": "host-token" },
+    }), { params: Promise.resolve({ code: "ABC123", runId: "run-1" }) });
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toEqual({ error: "PREVIEW_EXPIRED" });
+  });
 });

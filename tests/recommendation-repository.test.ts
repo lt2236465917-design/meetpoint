@@ -332,6 +332,83 @@ describe("SupabaseRecommendationRepository", () => {
     expect(secondEq).toHaveBeenCalledWith("status", "pending");
   });
 
+  it("refreshes the active deadline when acquiring an advance lease", async () => {
+    const select = vi.fn().mockResolvedValue({ data: [{ id: RUN_ID }], error: null });
+    const or = vi.fn().mockReturnValue({ select });
+    const statusEq = vi.fn().mockReturnValue({ or });
+    const runEq = vi.fn().mockReturnValue({ eq: statusEq });
+    const update = vi.fn().mockReturnValue({ eq: runEq });
+    mocks.from.mockReturnValue({ update });
+
+    await expect(new SupabaseRecommendationRepository().tryAcquireAdvanceLease({
+      runId: RUN_ID,
+      expectedStatus: "collecting",
+      token: "44444444-4444-4444-8444-444444444444",
+      now: "2026-08-01T00:00:00.000Z",
+      expiresAt: "2026-08-01T00:05:00.000Z",
+      staleAfter: "2026-08-01T00:15:00.000Z",
+    })).resolves.toBe(true);
+
+    expect(update).toHaveBeenCalledWith(expect.objectContaining({
+      advance_lease_token: "44444444-4444-4444-8444-444444444444",
+      advance_lease_expires_at: "2026-08-01T00:05:00.000Z",
+      stale_after: "2026-08-01T00:15:00.000Z",
+    }));
+  });
+
+  it("writes preview and terminal deadlines in the same status transition", async () => {
+    const select = vi.fn().mockResolvedValue({ data: [{ id: RUN_ID }], error: null });
+    const statusEq = vi.fn().mockReturnValue({ select });
+    const runEq = vi.fn().mockReturnValue({ eq: statusEq });
+    const update = vi.fn().mockReturnValue({ eq: runEq });
+    mocks.from.mockReturnValue({ update });
+    const repository = new SupabaseRecommendationRepository();
+
+    await repository.compareAndSetRunStatus(
+      RUN_ID,
+      "validating",
+      "awaiting_host_confirmation",
+      { staleAfter: "2026-08-08T00:00:00.000Z" },
+    );
+    expect(update).toHaveBeenLastCalledWith(expect.objectContaining({
+      status: "awaiting_host_confirmation",
+      stale_after: "2026-08-08T00:00:00.000Z",
+    }));
+
+    await repository.compareAndSetRunStatus(
+      RUN_ID,
+      "collecting",
+      "failed",
+      { staleAfter: null },
+    );
+    expect(update).toHaveBeenLastCalledWith(expect.objectContaining({
+      status: "failed",
+      stale_after: null,
+    }));
+  });
+
+  it("expires a stale run with a status-and-deadline CAS", async () => {
+    const select = vi.fn().mockResolvedValue({ data: [{ id: RUN_ID }], error: null });
+    const lte = vi.fn().mockReturnValue({ select });
+    const statusEq = vi.fn().mockReturnValue({ lte });
+    const runEq = vi.fn().mockReturnValue({ eq: statusEq });
+    const update = vi.fn().mockReturnValue({ eq: runEq });
+    mocks.from.mockReturnValue({ update });
+
+    await expect(new SupabaseRecommendationRepository().expireStaleRun(
+      RUN_ID,
+      "collecting",
+      "2026-08-01T00:00:01.000Z",
+    )).resolves.toBe(true);
+
+    expect(lte).toHaveBeenCalledWith("stale_after", "2026-08-01T00:00:01.000Z");
+    expect(update).toHaveBeenCalledWith(expect.objectContaining({
+      status: "failed",
+      error_summary: "RUN_STALE_EXPIRED",
+      stale_after: null,
+    }));
+  });
+
   it("uses a pending-only CAS review update so a concurrent reviewer cannot overwrite a decision", async () => {
     const maybeSingle = vi.fn().mockResolvedValue({
       data: { status: "pending", supervisor_approved_version: null },

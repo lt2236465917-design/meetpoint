@@ -11,6 +11,7 @@ import type {
 } from "@/lib/agent/contracts";
 import { calculationOutputSchema } from "@/lib/agent/contracts";
 import { createServiceSupabaseClient } from "@/lib/supabase/server";
+import { staleAfterForStatus } from "@/lib/recommendation/run-deadlines";
 import type { RouteTaskDraft } from "./query-matrix";
 
 export type CandidateRecord = {
@@ -120,7 +121,11 @@ export interface RunOrchestratorRepository extends RecommendationRepository, Age
     runId: string,
     expectedStatus: RunStatus,
     nextStatus: RunStatus,
-    options?: { retryAfter?: string | null; errorCode?: string | null },
+    options?: {
+      retryAfter?: string | null;
+      errorCode?: string | null;
+      staleAfter?: string | null;
+    },
   ): Promise<boolean>;
   tryAcquireAdvanceLease(input: {
     runId: string;
@@ -128,7 +133,13 @@ export interface RunOrchestratorRepository extends RecommendationRepository, Age
     token: string;
     now: string;
     expiresAt: string;
+    staleAfter: string;
   }): Promise<boolean>;
+  expireStaleRun(
+    runId: string,
+    expectedStatus: RunStatus,
+    now: string,
+  ): Promise<boolean>;
   releaseAdvanceLease(runId: string, token: string): Promise<void>;
   failAdvance(runId: string, token: string, errorCode: string): Promise<boolean>;
   listRunTasks(runId: string): Promise<StoredRouteTask[]>;
@@ -461,6 +472,7 @@ export class SupabaseRecommendationRepository
     let query = createServiceSupabaseClient().from("recommendation_runs").update({
       status,
       retry_after: retryAfter,
+      stale_after: staleAfterForStatus(status, new Date()),
     }).eq("id", runId);
     if (expectedStatus) query = query.eq("status", expectedStatus);
     const { data, error } = await query.select("id");
@@ -497,7 +509,11 @@ export class SupabaseRecommendationRepository
     runId: string,
     expectedStatus: RunStatus,
     nextStatus: RunStatus,
-    options: { retryAfter?: string | null; errorCode?: string | null } = {},
+    options: {
+      retryAfter?: string | null;
+      errorCode?: string | null;
+      staleAfter?: string | null;
+    } = {},
   ): Promise<boolean> {
     const { data, error } = await createServiceSupabaseClient()
       .from("recommendation_runs")
@@ -505,6 +521,9 @@ export class SupabaseRecommendationRepository
         status: nextStatus,
         retry_after: options.retryAfter ?? null,
         error_summary: options.errorCode ?? null,
+        stale_after: options.staleAfter === undefined
+          ? staleAfterForStatus(nextStatus, new Date())
+          : options.staleAfter,
         ...(nextStatus === "completed" || nextStatus === "incomplete" || nextStatus === "failed"
           ? { completed_at: new Date().toISOString() }
           : {}),
@@ -522,12 +541,14 @@ export class SupabaseRecommendationRepository
     token: string;
     now: string;
     expiresAt: string;
+    staleAfter: string;
   }): Promise<boolean> {
     const { data, error } = await createServiceSupabaseClient()
       .from("recommendation_runs")
       .update({
         advance_lease_token: input.token,
         advance_lease_expires_at: input.expiresAt,
+        stale_after: input.staleAfter,
       })
       .eq("id", input.runId)
       .eq("status", input.expectedStatus)
@@ -535,6 +556,29 @@ export class SupabaseRecommendationRepository
       .select("id");
     if (error) throw new Error(`Failed to acquire recommendation run lease: ${error.message}`);
     return Array.isArray(data) && data.length === 1 && data[0]?.id === input.runId;
+  }
+
+  async expireStaleRun(
+    runId: string,
+    expectedStatus: RunStatus,
+    now: string,
+  ): Promise<boolean> {
+    const { data, error } = await createServiceSupabaseClient()
+      .from("recommendation_runs")
+      .update({
+        status: "failed",
+        error_summary: "RUN_STALE_EXPIRED",
+        completed_at: now,
+        stale_after: null,
+        advance_lease_token: null,
+        advance_lease_expires_at: null,
+      })
+      .eq("id", runId)
+      .eq("status", expectedStatus)
+      .lte("stale_after", now)
+      .select("id");
+    if (error) throw new Error(`Failed to expire stale recommendation run: ${error.message}`);
+    return Array.isArray(data) && data.length === 1 && data[0]?.id === runId;
   }
 
   async releaseAdvanceLease(runId: string, token: string): Promise<void> {
@@ -555,6 +599,7 @@ export class SupabaseRecommendationRepository
         completed_at: new Date().toISOString(),
         advance_lease_token: null,
         advance_lease_expires_at: null,
+        stale_after: null,
       })
       .eq("id", runId)
       .eq("advance_lease_token", token)
@@ -753,7 +798,12 @@ export class SupabaseRecommendationRepository
   ): Promise<void> {
     const { data, error } = await createServiceSupabaseClient()
       .from("recommendation_runs")
-      .update({ status: "failed", error_summary: code })
+      .update({
+        status: "failed",
+        error_summary: code,
+        completed_at: new Date().toISOString(),
+        stale_after: null,
+      })
       .eq("id", runId)
       .select("id");
     if (error || !Array.isArray(data) || data.length !== 1) {

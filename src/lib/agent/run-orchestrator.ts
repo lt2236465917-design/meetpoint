@@ -13,7 +13,10 @@ import {
   type StoredRecommendationRun,
   type StoredRouteTask,
 } from "@/lib/recommendation/repository";
-import { ACTIVE_RUN_STALE_MS } from "@/lib/recommendation/run-deadlines";
+import {
+  ACTIVE_RUN_STALE_MS,
+  staleAfterForStatus,
+} from "@/lib/recommendation/run-deadlines";
 import { ManagerAgent } from "@/lib/agent/manager-agent";
 import { advanceFallbackRun } from "@/lib/fallback/mvp-store";
 import { createServiceSupabaseClient, hasSupabaseEnvironment } from "@/lib/supabase/server";
@@ -118,12 +121,22 @@ export class RunOrchestrator {
 
     const leaseToken = randomUUID();
     const now = this.now();
+    if (run.staleAfter && new Date(run.staleAfter).getTime() <= now.getTime()) {
+      const expired = await this.repository.expireStaleRun(
+        run.id,
+        run.status,
+        now.toISOString(),
+      );
+      if (expired) return "failed";
+      return (await this.repository.getRun(run.id))?.status ?? run.status;
+    }
     const acquired = await this.repository.tryAcquireAdvanceLease({
       runId: run.id,
       expectedStatus: run.status,
       token: leaseToken,
       now: now.toISOString(),
       expiresAt: new Date(now.getTime() + ADVANCE_LEASE_MS).toISOString(),
+      staleAfter: staleAfterForStatus(run.status, now)!,
     });
     if (!acquired) return (await this.repository.getRun(run.id))?.status ?? run.status;
 
@@ -164,7 +177,10 @@ export class RunOrchestrator {
     if (!allowedTransitions[run.status].includes(next)) {
       throw new Error(`Invalid recommendation run transition: ${run.status} -> ${next}`);
     }
-    const moved = await this.repository.compareAndSetRunStatus(run.id, run.status, next, options);
+    const moved = await this.repository.compareAndSetRunStatus(run.id, run.status, next, {
+      ...options,
+      staleAfter: staleAfterForStatus(next, this.now()),
+    });
     if (moved) return next;
     return (await this.repository.getRun(run.id))?.status ?? run.status;
   }

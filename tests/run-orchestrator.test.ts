@@ -72,6 +72,7 @@ function repository(input: { current: StoredRun; tasks?: StoredRouteTask[]; quot
     async markTaskRunning() { throw new Error("not reached"); },
     async saveTaskOutcome() {},
     async markTaskRecoveryExhausted() { return true; },
+    async expireStaleRun() { return false; },
     async updateRunStatus() {},
     async compareAndSetRunStatus(_runId: string, expected: StoredRun["status"], next: StoredRun["status"]) {
       if (this.current.status !== expected) return false;
@@ -115,6 +116,27 @@ describe("RunOrchestrator", () => {
     expect(store.transitions).toEqual([["pending", "collecting"]]);
   });
 
+  it("fails an expired active run before acquiring a lease", async () => {
+    const store = repository({
+      current: { ...run("collecting"), staleAfter: "2026-08-01T00:00:00.000Z" },
+    });
+    const expire = vi.fn(async () => {
+      store.current = { ...store.current, status: "failed", staleAfter: null };
+      return true;
+    });
+    store.expireStaleRun = expire;
+
+    await expect(new RunOrchestrator({
+      repository: store,
+      now: () => new Date("2026-08-01T00:00:01.000Z"),
+    }).advanceRun("run-1")).resolves.toBe("failed");
+
+    expect(expire).toHaveBeenCalledWith(
+      "run-1", "collecting", "2026-08-01T00:00:01.000Z",
+    );
+    expect(store.leased).toBe(false);
+  });
+
   it("executes at most one bounded query batch while collecting", async () => {
     const store = repository({ current: run("collecting"), tasks: [task(), task({ id: "task-2", participantId: "p2" })] });
     const executed: string[] = [];
@@ -130,7 +152,10 @@ describe("RunOrchestrator", () => {
 
   it("reports cooldown progress without bypassing its retry time", async () => {
     const retryAt = "2030-01-01T00:00:00.000Z";
-    const store = repository({ current: { ...run("collecting"), retryAfter: retryAt }, tasks: [task({ status: "retryable_failure", retryAfter: retryAt })] });
+    const store = repository({
+      current: { ...run("collecting"), retryAfter: retryAt, staleAfter: retryAt },
+      tasks: [task({ status: "retryable_failure", retryAfter: retryAt })],
+    });
     const status = await new RunOrchestrator({
       repository: store, now: () => new Date("2029-12-31T23:59:59.000Z"), query: { execute: async () => ({ status: "empty" }) },
     }).advanceRun("run-1");
