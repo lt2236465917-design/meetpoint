@@ -12,7 +12,15 @@ This guide is the quick reference for running and calling the MVP locally.
 
 The same user-facing routes must remain usable on phones (shareable plan links) and on desktop. Shipped UI uses a true adaptive layout without fake phone chrome — see `docs/superpowers/specs/2026-07-17-desktop-adaptive-shell-design.md`.
 
-The local hardening migration is `supabase/migrations/202607210001_publication_safety_and_run_recovery.sql`. This Batch A implementation does not query or apply remote migration state and does not run live FlyAI/supplier acceptance; an operator must perform those separately.
+The local hardening migrations are `supabase/migrations/202607210001_publication_safety_and_run_recovery.sql` and `supabase/migrations/202607260001_atomic_materialization_and_policy_replay.sql`; the Batch B migration remains synchronized with `supabase/schema.sql`. This local implementation did not query or apply remote migration state and did not rerun live FlyAI/supplier acceptance; an operator must review those separately.
+
+For local database verification, point only at a disposable loopback PostgreSQL database whose name ends in `_test`:
+
+```bash
+TEST_DATABASE_URL='<local disposable PostgreSQL URL>' npm run test:postgres
+```
+
+The harness rejects remote hosts, protected/default databases, and names without the `_test` suffix, then rechecks the connected database before resetting schemas or applying migrations. Use this executable suite for transaction, concurrency, ordering, cleanup, and role proofs; static SQL substring tests do not replace it.
 
 For local browser testing, open `http://127.0.0.1:<port>`; for real-phone testing, open the current Network URL printed by `npm run dev`. `next.config.ts` discovers active LAN IPv4 addresses at startup so the browser can load Next.js development resources after switching Wi-Fi networks.
 
@@ -148,7 +156,7 @@ Returns:
 }
 ```
 
-The first request returns HTTP 202 with `disposition: "created"`; an identical active automatic request returns HTTP 200 with `disposition: "resume_existing"` and the persisted status instead of fabricating `pending`. A different active request returns `409 CALCULATION_IN_PROGRESS`. Automatic runs require the plan to be full and to have no shared result; after publication the route returns `409 SHARED_RESULT_EXISTS`. The durable orchestrator uses only verified quotes, complete coverage, deterministic policy replay, Supervisor approval, a persisted advance lease, and the guarded publication RPC. Under policy `2026-07-19.v2`, saving is the exact lowest verified direct-first fare across each participant's accepted modes (including direct normal train), while fast is the quickest direct-first team combination within 130% of the saving total. The local fallback has the same state and publication rules but no supplier adapter, so it becomes `incomplete` unless tests inject verified quotes.
+The first request returns HTTP 202 with `disposition: "created"`; an identical active automatic request returns HTTP 200 with `disposition: "resume_existing"` and the persisted status instead of fabricating `pending`. A different active request returns `409 CALCULATION_IN_PROGRESS`. Automatic runs require the plan to be full and to have no shared result; after publication the route returns `409 SHARED_RESULT_EXISTS`. The durable orchestrator uses only verified quotes, complete coverage, Supervisor approval, a persisted advance lease, and service-only database RPCs. Under policy `2026-07-19.v2`, saving is the exact lowest verified direct-first fare across each participant's accepted modes (including direct normal train), while fast is the quickest direct-first team combination within 130% of the saving total. The database derives both schemes and aggregates from persisted evidence, inserts the full result tree through one atomic RPC, and replays the policy again immediately before automatic sharing. Unknown policy versions or replay work above 50,000 states / 200,000 transitions fail closed with the public-safe publication diagnostic. The local fallback stages the same result tree all-or-nothing and revalidates before materialization and sharing, but has no supplier adapter, so it becomes `incomplete` unless tests inject verified quotes.
 
 ### Advance a Run
 
@@ -183,7 +191,7 @@ Requires either the requesting participant's `x-participant-token` or the plan's
 
 `POST /api/plans/[code]/previews/[runId]/confirm`
 
-Requires `x-host-token`; participant tokens, query parameters, request bodies, browser-local roles, and client-supplied proposal IDs are not confirmation authority. The server selects the exact Supervisor-approved proposal for the run and atomically replaces the shared result. Approval has a seven-day confirmation deadline. An unconfirmed expired preview returns `409 PREVIEW_EXPIRED`; a repeated successful confirmation remains idempotent and returns the completed result without creating another replacement.
+Requires `x-host-token`; participant tokens, query parameters, request bodies, browser-local roles, and client-supplied proposal IDs are not confirmation authority. The server selects the exact Supervisor-approved proposal for the run. The confirmation transaction replays the requested-city policy from persisted evidence immediately before atomically superseding and replacing the current shared result. Approval has a seven-day confirmation deadline. An unconfirmed expired preview returns `409 PREVIEW_EXPIRED`; a repeated successful confirmation remains idempotent and returns the completed result without creating another replacement.
 
 ## Error Codes
 
@@ -216,7 +224,7 @@ Terminal run progress may expose these `diagnosticCode` values without publishin
 | `REAL_QUOTE_COVERAGE_INCOMPLETE` | At least one participant lacks a complete verified route for every required scheme; retry after supplier recovery. |
 | `AGENT_MODEL_UNAVAILABLE` | The provider-neutral model could not be created; check server-only model credentials and availability. |
 | `AGENT_PROPOSAL_INVALID` | Calculation/Supervisor output did not pass the bounded review and deterministic validators. |
-| `PUBLICATION_GUARD_REJECTED` | The persisted proposal/result failed final deterministic publication checks. |
+| `PUBLICATION_GUARD_REJECTED` | The persisted proposal/result failed final deterministic publication checks, including unsupported policy versions or bounded SQL replay exhaustion. |
 
 ## Manual Smoke Path
 
