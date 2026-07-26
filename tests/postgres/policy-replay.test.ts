@@ -44,6 +44,23 @@ async function seedRun(client: Client): Promise<void> {
   );
 }
 
+async function seedCityTasks(
+  client: Client,
+  cityCode: string,
+  taskIds: readonly [string, string],
+): Promise<void> {
+  const { runId, participantIds, arrivalDate } = policyV2Fixture;
+  await client.query(
+    `insert into public.route_tasks
+       (id, run_id, participant_id, city_code, origin_city_code, mode,
+        search_date, physical_key, status)
+     values
+       ($1, $3, $4, $6, 'beijing', 'high_speed_rail', $7, $6 || ':p1:rail', 'succeeded'),
+       ($2, $3, $5, $6, 'shanghai', 'high_speed_rail', $7, $6 || ':p2:rail', 'succeeded')`,
+    [taskIds[0], taskIds[1], runId, participantIds[0], participantIds[1], cityCode, arrivalDate],
+  );
+}
+
 async function insertQuote(
   client: Client,
   source: PolicyV2QuoteFixture,
@@ -74,6 +91,19 @@ async function insertQuote(
       quote.isDirect,
       quote.quoteId,
     ],
+  );
+}
+
+async function insertApprovedProposal(
+  client: Client,
+  output: Record<string, unknown>,
+): Promise<void> {
+  await client.query(
+    `insert into public.recommendation_proposals
+       (id, run_id, version, policy_version, status, output_json,
+        validation_decision, supervisor_approved_version)
+     values ($1, $2, 1, '2026-07-19.v2', 'approved', $3, '{"ok":true}', 1)`,
+    [policyV2Fixture.proposalId, policyV2Fixture.runId, output],
   );
 }
 
@@ -380,6 +410,573 @@ describe("PostgreSQL recommendation policy v2 replay", () => {
       "select * from private.recommendation_policy_saving_v2($1)",
       [policyV2Fixture.runId],
     )).rejects.toThrow("recommendation evidence mismatch");
+  });
+
+  it("ranks a lower saving-total city first", async () => {
+    const [p1, p2] = policyV2Fixture.participantIds;
+    const [t1, t2] = policyV2Fixture.taskIds;
+    const changshaTasks = [
+      "00000000-0000-4000-8000-000000000321",
+      "00000000-0000-4000-8000-000000000322",
+    ] as const;
+    await seedCityTasks(client, "changsha", changshaTasks);
+
+    for (const quote of [
+      { id: "00000000-0000-4000-8000-000000000541", participantId: p1, taskId: t1, quoteId: "wuhan-p1", priceCny: 100 },
+      { id: "00000000-0000-4000-8000-000000000542", participantId: p2, taskId: t2, quoteId: "wuhan-p2", priceCny: 100 },
+      { id: "00000000-0000-4000-8000-000000000543", participantId: p1, taskId: changshaTasks[0], quoteId: "changsha-p1", cityCode: "changsha", priceCny: 101 },
+      { id: "00000000-0000-4000-8000-000000000544", participantId: p2, taskId: changshaTasks[1], quoteId: "changsha-p2", cityCode: "changsha", priceCny: 100 },
+    ] satisfies PolicyV2QuoteFixture[]) await insertQuote(client, quote);
+
+    const result = await client.query<{ city_code: string }>(
+      `select city_code
+       from private.recommendation_policy_projection($1)
+       order by rank_position`,
+      [policyV2Fixture.runId],
+    );
+
+    expect(result.rows).toEqual([
+      { city_code: "wuhan" },
+      { city_code: "changsha" },
+    ]);
+  });
+
+  it("ranks a city with more direct saving routes next", async () => {
+    const [p1, p2] = policyV2Fixture.participantIds;
+    const directTasks = [
+      "00000000-0000-4000-8000-000000000323",
+      "00000000-0000-4000-8000-000000000324",
+    ] as const;
+    const transferTasks = [
+      "00000000-0000-4000-8000-000000000325",
+      "00000000-0000-4000-8000-000000000326",
+    ] as const;
+    await seedCityTasks(client, "a-direct", directTasks);
+    await seedCityTasks(client, "z-transfer", transferTasks);
+
+    for (const quote of [
+      { id: "00000000-0000-4000-8000-000000000545", participantId: p1, taskId: directTasks[0], quoteId: "direct-p1", cityCode: "a-direct", priceCny: 100 },
+      { id: "00000000-0000-4000-8000-000000000546", participantId: p2, taskId: directTasks[1], quoteId: "direct-p2", cityCode: "a-direct", priceCny: 100 },
+      { id: "00000000-0000-4000-8000-000000000547", participantId: p1, taskId: transferTasks[0], quoteId: "transfer-p1", cityCode: "z-transfer", priceCny: 100, isDirect: false, transferCount: 1 },
+      { id: "00000000-0000-4000-8000-000000000548", participantId: p2, taskId: transferTasks[1], quoteId: "transfer-p2", cityCode: "z-transfer", priceCny: 100 },
+    ] satisfies PolicyV2QuoteFixture[]) await insertQuote(client, quote);
+
+    const result = await client.query<{ city_code: string }>(
+      `select city_code
+       from private.recommendation_policy_projection($1)
+       order by rank_position`,
+      [policyV2Fixture.runId],
+    );
+
+    expect(result.rows.map((row) => row.city_code)).toEqual([
+      "a-direct",
+      "z-transfer",
+    ]);
+  });
+
+  it("ranks a fairer saving-fare split next", async () => {
+    const [p1, p2] = policyV2Fixture.participantIds;
+    const fairTasks = [
+      "00000000-0000-4000-8000-000000000327",
+      "00000000-0000-4000-8000-000000000328",
+    ] as const;
+    const unfairTasks = [
+      "00000000-0000-4000-8000-000000000329",
+      "00000000-0000-4000-8000-000000000330",
+    ] as const;
+    await seedCityTasks(client, "a-fair", fairTasks);
+    await seedCityTasks(client, "z-unfair", unfairTasks);
+
+    for (const quote of [
+      { id: "00000000-0000-4000-8000-000000000549", participantId: p1, taskId: fairTasks[0], quoteId: "fair-p1", cityCode: "a-fair", priceCny: 100 },
+      { id: "00000000-0000-4000-8000-000000000550", participantId: p2, taskId: fairTasks[1], quoteId: "fair-p2", cityCode: "a-fair", priceCny: 100 },
+      { id: "00000000-0000-4000-8000-000000000551", participantId: p1, taskId: unfairTasks[0], quoteId: "unfair-p1", cityCode: "z-unfair", priceCny: 80 },
+      { id: "00000000-0000-4000-8000-000000000552", participantId: p2, taskId: unfairTasks[1], quoteId: "unfair-p2", cityCode: "z-unfair", priceCny: 120 },
+    ] satisfies PolicyV2QuoteFixture[]) await insertQuote(client, quote);
+
+    const result = await client.query<{ city_code: string }>(
+      `select city_code
+       from private.recommendation_policy_projection($1)
+       order by rank_position`,
+      [policyV2Fixture.runId],
+    );
+
+    expect(result.rows.map((row) => row.city_code)).toEqual([
+      "a-fair",
+      "z-unfair",
+    ]);
+  });
+
+  it("ranks a shorter saving team duration next", async () => {
+    const [p1, p2] = policyV2Fixture.participantIds;
+    const shortTasks = [
+      "00000000-0000-4000-8000-000000000331",
+      "00000000-0000-4000-8000-000000000332",
+    ] as const;
+    const longTasks = [
+      "00000000-0000-4000-8000-000000000333",
+      "00000000-0000-4000-8000-000000000334",
+    ] as const;
+    await seedCityTasks(client, "a-short", shortTasks);
+    await seedCityTasks(client, "z-long", longTasks);
+
+    for (const quote of [
+      { id: "00000000-0000-4000-8000-000000000553", participantId: p1, taskId: shortTasks[0], quoteId: "short-p1", cityCode: "a-short", durationMinutes: 100 },
+      { id: "00000000-0000-4000-8000-000000000554", participantId: p2, taskId: shortTasks[1], quoteId: "short-p2", cityCode: "a-short", durationMinutes: 100 },
+      { id: "00000000-0000-4000-8000-000000000555", participantId: p1, taskId: longTasks[0], quoteId: "long-p1", cityCode: "z-long", durationMinutes: 101 },
+      { id: "00000000-0000-4000-8000-000000000556", participantId: p2, taskId: longTasks[1], quoteId: "long-p2", cityCode: "z-long", durationMinutes: 100 },
+    ] satisfies PolicyV2QuoteFixture[]) await insertQuote(client, quote);
+
+    const result = await client.query<{ city_code: string }>(
+      `select city_code
+       from private.recommendation_policy_projection($1)
+       order by rank_position`,
+      [policyV2Fixture.runId],
+    );
+
+    expect(result.rows.map((row) => row.city_code)).toEqual([
+      "a-short",
+      "z-long",
+    ]);
+  });
+
+  it("uses C-collated city code as the final ranking key", async () => {
+    const [p1, p2] = policyV2Fixture.participantIds;
+    const aTasks = [
+      "00000000-0000-4000-8000-000000000335",
+      "00000000-0000-4000-8000-000000000336",
+    ] as const;
+    const zTasks = [
+      "00000000-0000-4000-8000-000000000337",
+      "00000000-0000-4000-8000-000000000338",
+    ] as const;
+    await seedCityTasks(client, "a-code", aTasks);
+    await seedCityTasks(client, "z-code", zTasks);
+
+    for (const quote of [
+      { id: "00000000-0000-4000-8000-000000000557", participantId: p1, taskId: aTasks[0], quoteId: "a-p1", cityCode: "a-code" },
+      { id: "00000000-0000-4000-8000-000000000558", participantId: p2, taskId: aTasks[1], quoteId: "a-p2", cityCode: "a-code" },
+      { id: "00000000-0000-4000-8000-000000000559", participantId: p1, taskId: zTasks[0], quoteId: "z-p1", cityCode: "z-code" },
+      { id: "00000000-0000-4000-8000-000000000560", participantId: p2, taskId: zTasks[1], quoteId: "z-p2", cityCode: "z-code" },
+    ] satisfies PolicyV2QuoteFixture[]) await insertQuote(client, quote);
+
+    const result = await client.query<{ city_code: string }>(
+      `select city_code
+       from private.recommendation_policy_projection($1)
+       order by rank_position`,
+      [policyV2Fixture.runId],
+    );
+
+    expect(result.rows.map((row) => row.city_code)).toEqual([
+      "a-code",
+      "z-code",
+    ]);
+  });
+
+  it("rejects an automatic proposal whose city is not the ranked winner", async () => {
+    const [p1, p2] = policyV2Fixture.participantIds;
+    const [t1, t2] = policyV2Fixture.taskIds;
+    await insertQuote(client, {
+      id: "00000000-0000-4000-8000-000000000561",
+      participantId: p1,
+      taskId: t1,
+      quoteId: "automatic-p1",
+    });
+    await insertQuote(client, {
+      id: "00000000-0000-4000-8000-000000000562",
+      participantId: p2,
+      taskId: t2,
+      quoteId: "automatic-p2",
+    });
+    await insertApprovedProposal(client, {
+      status: "proposal",
+      cityCode: "changsha",
+      schemes: [
+        {
+          kind: "saving",
+          quoteIdsByParticipant: { [p1]: "automatic-p1", [p2]: "automatic-p2" },
+          totalFareCny: 200,
+        },
+        {
+          kind: "fast",
+          quoteIdsByParticipant: { [p1]: "automatic-p1", [p2]: "automatic-p2" },
+          totalFareCny: 200,
+        },
+      ],
+      comparisonEvidence: {
+        eligibleCityCodes: ["wuhan"],
+        orderedCityCodes: ["wuhan"],
+      },
+      explanationZh: "按真实路线选择。",
+    });
+
+    await expect(client.query(
+      "select * from private.assert_recommendation_proposal($1, $2)",
+      [policyV2Fixture.runId, policyV2Fixture.proposalId],
+    )).rejects.toThrow("proposal does not match recommendation policy");
+  });
+
+  it("accepts the exact unique C-sorted eligible city codes", async () => {
+    const [p1, p2] = policyV2Fixture.participantIds;
+    const [t1, t2] = policyV2Fixture.taskIds;
+    const secondTasks = [
+      "00000000-0000-4000-8000-000000000339",
+      "00000000-0000-4000-8000-000000000340",
+    ] as const;
+    await seedCityTasks(client, "a-second", secondTasks);
+
+    for (const quote of [
+      { id: "00000000-0000-4000-8000-000000000563", participantId: p1, taskId: t1, quoteId: "winner-p1" },
+      { id: "00000000-0000-4000-8000-000000000564", participantId: p2, taskId: t2, quoteId: "winner-p2" },
+      { id: "00000000-0000-4000-8000-000000000565", participantId: p1, taskId: secondTasks[0], quoteId: "second-p1", cityCode: "a-second", priceCny: 101 },
+      { id: "00000000-0000-4000-8000-000000000566", participantId: p2, taskId: secondTasks[1], quoteId: "second-p2", cityCode: "a-second", priceCny: 101 },
+    ] satisfies PolicyV2QuoteFixture[]) await insertQuote(client, quote);
+
+    await insertApprovedProposal(client, {
+      status: "proposal",
+      cityCode: "wuhan",
+      schemes: [
+        {
+          kind: "saving",
+          quoteIdsByParticipant: { [p1]: "winner-p1", [p2]: "winner-p2" },
+          totalFareCny: 200,
+        },
+        {
+          kind: "fast",
+          quoteIdsByParticipant: { [p1]: "winner-p1", [p2]: "winner-p2" },
+          totalFareCny: 200,
+        },
+      ],
+      comparisonEvidence: {
+        eligibleCityCodes: ["a-second", "wuhan"],
+        orderedCityCodes: ["wuhan", "a-second"],
+      },
+      explanationZh: "按真实路线选择。",
+    });
+
+    const result = await client.query<{ city_code: string }>(
+      "select city_code from private.assert_recommendation_proposal($1, $2)",
+      [policyV2Fixture.runId, policyV2Fixture.proposalId],
+    );
+
+    expect(result.rows).toEqual([{ city_code: "wuhan" }]);
+  });
+
+  it("rejects ordered city codes that do not match the five-key ranking", async () => {
+    const [p1, p2] = policyV2Fixture.participantIds;
+    const [t1, t2] = policyV2Fixture.taskIds;
+    const secondTasks = [
+      "00000000-0000-4000-8000-000000000339",
+      "00000000-0000-4000-8000-000000000340",
+    ] as const;
+    await seedCityTasks(client, "a-second", secondTasks);
+
+    for (const quote of [
+      { id: "00000000-0000-4000-8000-000000000563", participantId: p1, taskId: t1, quoteId: "winner-p1" },
+      { id: "00000000-0000-4000-8000-000000000564", participantId: p2, taskId: t2, quoteId: "winner-p2" },
+      { id: "00000000-0000-4000-8000-000000000565", participantId: p1, taskId: secondTasks[0], quoteId: "second-p1", cityCode: "a-second", priceCny: 101 },
+      { id: "00000000-0000-4000-8000-000000000566", participantId: p2, taskId: secondTasks[1], quoteId: "second-p2", cityCode: "a-second", priceCny: 101 },
+    ] satisfies PolicyV2QuoteFixture[]) await insertQuote(client, quote);
+
+    await insertApprovedProposal(client, {
+      status: "proposal",
+      cityCode: "wuhan",
+      schemes: [
+        {
+          kind: "saving",
+          quoteIdsByParticipant: { [p1]: "winner-p1", [p2]: "winner-p2" },
+          totalFareCny: 200,
+        },
+        {
+          kind: "fast",
+          quoteIdsByParticipant: { [p1]: "winner-p1", [p2]: "winner-p2" },
+          totalFareCny: 200,
+        },
+      ],
+      comparisonEvidence: {
+        eligibleCityCodes: ["a-second", "wuhan"],
+        orderedCityCodes: ["a-second", "wuhan"],
+      },
+      explanationZh: "按真实路线选择。",
+    });
+
+    await expect(client.query(
+      "select * from private.assert_recommendation_proposal($1, $2)",
+      [policyV2Fixture.runId, policyV2Fixture.proposalId],
+    )).rejects.toThrow("proposal does not match recommendation policy");
+  });
+
+  it("returns exact saving and fast mappings with database-derived aggregates", async () => {
+    const [p1, p2] = policyV2Fixture.participantIds;
+    const [t1, t2] = policyV2Fixture.taskIds;
+    const quoteIds = {
+      savingP1: "00000000-0000-4000-8000-000000000567",
+      savingP2: "00000000-0000-4000-8000-000000000568",
+      fastP1: "00000000-0000-4000-8000-000000000569",
+      fastP2: "00000000-0000-4000-8000-000000000570",
+    } as const;
+
+    for (const quote of [
+      { id: quoteIds.savingP1, participantId: p1, taskId: t1, quoteId: "saving-p1", priceCny: 100, durationMinutes: 200, arriveAt: "2026-08-15T11:00:00+08:00" },
+      { id: quoteIds.savingP2, participantId: p2, taskId: t2, quoteId: "saving-p2", priceCny: 100, durationMinutes: 200, arriveAt: "2026-08-15T12:00:00+08:00" },
+      { id: quoteIds.fastP1, participantId: p1, taskId: t1, quoteId: "fast-p1", priceCny: 130, durationMinutes: 50, arriveAt: "2026-08-15T10:00:00+08:00" },
+      { id: quoteIds.fastP2, participantId: p2, taskId: t2, quoteId: "fast-p2", priceCny: 130, durationMinutes: 50, arriveAt: "2026-08-15T10:30:00+08:00" },
+    ] satisfies PolicyV2QuoteFixture[]) await insertQuote(client, quote);
+
+    await insertApprovedProposal(client, {
+      status: "proposal",
+      cityCode: "wuhan",
+      schemes: [
+        {
+          kind: "saving",
+          quoteIdsByParticipant: { [p1]: "saving-p1", [p2]: "saving-p2" },
+          totalFareCny: 200,
+        },
+        {
+          kind: "fast",
+          quoteIdsByParticipant: { [p1]: "fast-p1", [p2]: "fast-p2" },
+          totalFareCny: 260,
+        },
+      ],
+      comparisonEvidence: {
+        eligibleCityCodes: ["wuhan"],
+        orderedCityCodes: ["wuhan"],
+      },
+      explanationZh: "按真实路线选择。",
+    });
+
+    const result = await client.query<{
+      saving_total_fare: number;
+      saving_total_duration: number;
+      saving_quote_ids: Record<string, string>;
+      saving_verified_quote_ids: Record<string, string>;
+      fast_total_fare: number;
+      fast_total_duration: number;
+      fast_quote_ids: Record<string, string>;
+      fast_verified_quote_ids: Record<string, string>;
+    }>(
+      `select saving_total_fare, saving_total_duration,
+              saving_quote_ids, saving_verified_quote_ids,
+              fast_total_fare, fast_total_duration,
+              fast_quote_ids, fast_verified_quote_ids
+       from private.assert_recommendation_proposal($1, $2)`,
+      [policyV2Fixture.runId, policyV2Fixture.proposalId],
+    );
+
+    expect(result.rows).toEqual([{
+      saving_total_fare: 200,
+      saving_total_duration: 400,
+      saving_quote_ids: { [p1]: "saving-p1", [p2]: "saving-p2" },
+      saving_verified_quote_ids: { [p1]: quoteIds.savingP1, [p2]: quoteIds.savingP2 },
+      fast_total_fare: 260,
+      fast_total_duration: 100,
+      fast_quote_ids: { [p1]: "fast-p1", [p2]: "fast-p2" },
+      fast_verified_quote_ids: { [p1]: quoteIds.fastP1, [p2]: quoteIds.fastP2 },
+    }]);
+  });
+
+  it("rejects a proposal with a noncanonical physical quote mapping", async () => {
+    const [p1, p2] = policyV2Fixture.participantIds;
+    const [t1, t2] = policyV2Fixture.taskIds;
+    await insertQuote(client, {
+      id: "00000000-0000-4000-8000-000000000571",
+      participantId: p1,
+      taskId: t1,
+      quoteId: "canonical-p1",
+    });
+    await insertQuote(client, {
+      id: "00000000-0000-4000-8000-000000000572",
+      participantId: p2,
+      taskId: t2,
+      quoteId: "canonical-p2",
+    });
+    await insertApprovedProposal(client, {
+      status: "proposal",
+      cityCode: "wuhan",
+      schemes: [
+        {
+          kind: "saving",
+          quoteIdsByParticipant: { [p1]: "canonical-p2", [p2]: "canonical-p1" },
+          totalFareCny: 200,
+        },
+        {
+          kind: "fast",
+          quoteIdsByParticipant: { [p1]: "canonical-p1", [p2]: "canonical-p2" },
+          totalFareCny: 200,
+        },
+      ],
+      comparisonEvidence: {
+        eligibleCityCodes: ["wuhan"],
+        orderedCityCodes: ["wuhan"],
+      },
+      explanationZh: "按真实路线选择。",
+    });
+
+    await expect(client.query(
+      "select * from private.assert_recommendation_proposal($1, $2)",
+      [policyV2Fixture.runId, policyV2Fixture.proposalId],
+    )).rejects.toThrow("proposal does not match recommendation policy");
+  });
+
+  it("rejects proposal fare totals that differ from policy replay", async () => {
+    const [p1, p2] = policyV2Fixture.participantIds;
+    const [t1, t2] = policyV2Fixture.taskIds;
+    await insertQuote(client, {
+      id: "00000000-0000-4000-8000-000000000573",
+      participantId: p1,
+      taskId: t1,
+      quoteId: "total-p1",
+    });
+    await insertQuote(client, {
+      id: "00000000-0000-4000-8000-000000000574",
+      participantId: p2,
+      taskId: t2,
+      quoteId: "total-p2",
+    });
+    await insertApprovedProposal(client, {
+      status: "proposal",
+      cityCode: "wuhan",
+      schemes: [
+        {
+          kind: "saving",
+          quoteIdsByParticipant: { [p1]: "total-p1", [p2]: "total-p2" },
+          totalFareCny: 201,
+        },
+        {
+          kind: "fast",
+          quoteIdsByParticipant: { [p1]: "total-p1", [p2]: "total-p2" },
+          totalFareCny: 200,
+        },
+      ],
+      comparisonEvidence: {
+        eligibleCityCodes: ["wuhan"],
+        orderedCityCodes: ["wuhan"],
+      },
+      explanationZh: "按真实路线选择。",
+    });
+
+    await expect(client.query(
+      "select * from private.assert_recommendation_proposal($1, $2)",
+      [policyV2Fixture.runId, policyV2Fixture.proposalId],
+    )).rejects.toThrow("proposal does not match recommendation policy");
+  });
+
+  it("accepts an alternative requested city that is not the automatic winner", async () => {
+    const [p1, p2] = policyV2Fixture.participantIds;
+    const [t1, t2] = policyV2Fixture.taskIds;
+    const alternativeTasks = [
+      "00000000-0000-4000-8000-000000000341",
+      "00000000-0000-4000-8000-000000000342",
+    ] as const;
+    await seedCityTasks(client, "changsha", alternativeTasks);
+    await client.query(
+      `update public.recommendation_runs
+       set kind = 'alternative', requested_city_code = 'changsha',
+           requested_by_participant_id = $2
+       where id = $1`,
+      [policyV2Fixture.runId, p1],
+    );
+
+    for (const quote of [
+      { id: "00000000-0000-4000-8000-000000000575", participantId: p1, taskId: t1, quoteId: "winner-p1", priceCny: 100 },
+      { id: "00000000-0000-4000-8000-000000000576", participantId: p2, taskId: t2, quoteId: "winner-p2", priceCny: 100 },
+      { id: "00000000-0000-4000-8000-000000000577", participantId: p1, taskId: alternativeTasks[0], quoteId: "alternative-p1", cityCode: "changsha", priceCny: 101 },
+      { id: "00000000-0000-4000-8000-000000000578", participantId: p2, taskId: alternativeTasks[1], quoteId: "alternative-p2", cityCode: "changsha", priceCny: 101 },
+    ] satisfies PolicyV2QuoteFixture[]) await insertQuote(client, quote);
+
+    await insertApprovedProposal(client, {
+      status: "proposal",
+      cityCode: "changsha",
+      schemes: [
+        {
+          kind: "saving",
+          quoteIdsByParticipant: { [p1]: "alternative-p1", [p2]: "alternative-p2" },
+          totalFareCny: 202,
+        },
+        {
+          kind: "fast",
+          quoteIdsByParticipant: { [p1]: "alternative-p1", [p2]: "alternative-p2" },
+          totalFareCny: 202,
+        },
+      ],
+      comparisonEvidence: {
+        eligibleCityCodes: ["changsha", "wuhan"],
+        orderedCityCodes: ["wuhan", "changsha"],
+      },
+      explanationZh: "按真实路线选择。",
+    });
+
+    const result = await client.query<{ city_code: string }>(
+      "select city_code from private.assert_recommendation_proposal($1, $2)",
+      [policyV2Fixture.runId, policyV2Fixture.proposalId],
+    );
+
+    expect(result.rows).toEqual([{ city_code: "changsha" }]);
+  });
+
+  it("rejects an alternative proposal for a city other than the requested city", async () => {
+    const [p1, p2] = policyV2Fixture.participantIds;
+    const [t1, t2] = policyV2Fixture.taskIds;
+    const alternativeTasks = [
+      "00000000-0000-4000-8000-000000000343",
+      "00000000-0000-4000-8000-000000000344",
+    ] as const;
+    await seedCityTasks(client, "changsha", alternativeTasks);
+    await client.query(
+      `update public.recommendation_runs
+       set kind = 'alternative', requested_city_code = 'changsha',
+           requested_by_participant_id = $2
+       where id = $1`,
+      [policyV2Fixture.runId, p1],
+    );
+
+    for (const quote of [
+      { id: "00000000-0000-4000-8000-000000000579", participantId: p1, taskId: t1, quoteId: "wuhan-p1" },
+      { id: "00000000-0000-4000-8000-000000000580", participantId: p2, taskId: t2, quoteId: "wuhan-p2" },
+      { id: "00000000-0000-4000-8000-000000000581", participantId: p1, taskId: alternativeTasks[0], quoteId: "changsha-p1", cityCode: "changsha" },
+      { id: "00000000-0000-4000-8000-000000000582", participantId: p2, taskId: alternativeTasks[1], quoteId: "changsha-p2", cityCode: "changsha" },
+    ] satisfies PolicyV2QuoteFixture[]) await insertQuote(client, quote);
+
+    await insertApprovedProposal(client, {
+      status: "proposal",
+      cityCode: "wuhan",
+      schemes: [
+        {
+          kind: "saving",
+          quoteIdsByParticipant: { [p1]: "wuhan-p1", [p2]: "wuhan-p2" },
+          totalFareCny: 200,
+        },
+        {
+          kind: "fast",
+          quoteIdsByParticipant: { [p1]: "wuhan-p1", [p2]: "wuhan-p2" },
+          totalFareCny: 200,
+        },
+      ],
+      comparisonEvidence: {
+        eligibleCityCodes: ["changsha", "wuhan"],
+        orderedCityCodes: ["changsha", "wuhan"],
+      },
+      explanationZh: "按真实路线选择。",
+    });
+
+    await expect(client.query(
+      "select * from private.assert_recommendation_proposal($1, $2)",
+      [policyV2Fixture.runId, policyV2Fixture.proposalId],
+    )).rejects.toThrow("proposal does not match recommendation policy");
+  });
+
+  it("fails closed for an unknown recommendation policy version", async () => {
+    await client.query(
+      `update public.recommendation_runs
+       set policy_version = '2099-01-01.v1'
+       where id = $1`,
+      [policyV2Fixture.runId],
+    );
+
+    await expect(client.query(
+      "select * from private.recommendation_policy_projection($1)",
+      [policyV2Fixture.runId],
+    )).rejects.toThrow("unsupported recommendation policy");
   });
 
   it("selects the fastest team combination at exactly 130 percent of saving", async () => {

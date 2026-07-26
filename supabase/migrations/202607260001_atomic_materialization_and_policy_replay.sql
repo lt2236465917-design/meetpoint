@@ -365,3 +365,293 @@ revoke all on function private.recommendation_policy_fast_v2(uuid)
   from public, anon, authenticated;
 grant execute on function private.recommendation_policy_fast_v2(uuid)
   to service_role;
+
+create or replace function private.recommendation_policy_projection(
+  p_run_id uuid
+)
+returns table (
+  rank_position bigint,
+  city_code text,
+  saving_total_fare integer,
+  saving_total_duration integer,
+  saving_latest_arrival timestamptz,
+  saving_total_transfers integer,
+  direct_participant_count integer,
+  fare_fairness_gap integer,
+  saving_quote_ids jsonb,
+  saving_verified_quote_ids jsonb,
+  fast_total_fare integer,
+  fast_total_duration integer,
+  fast_latest_arrival timestamptz,
+  fast_total_transfers integer,
+  fast_quote_ids jsonb,
+  fast_verified_quote_ids jsonb
+)
+language plpgsql
+volatile
+security invoker
+set search_path = ''
+as $$
+declare
+  v_run public.recommendation_runs%rowtype;
+  v_participant_count integer;
+begin
+  select * into v_run
+  from public.recommendation_runs
+  where id = p_run_id;
+
+  if not found or v_run.policy_version <> '2026-07-19.v2' then
+    raise exception 'unsupported recommendation policy';
+  end if;
+
+  select count(*) into v_participant_count
+  from public.participants
+  where plan_id = v_run.plan_id;
+
+  return query
+  with saving as (
+    select
+      selected.city_code,
+      count(*)::integer as coverage_count,
+      sum(selected.price_cny)::integer as total_fare,
+      sum(selected.duration_minutes)::integer as total_duration,
+      max(selected.arrive_at) as latest_arrival,
+      sum(selected.transfer_count)::integer as total_transfers,
+      count(*) filter (where selected.is_direct)::integer as direct_count,
+      (max(selected.price_cny) - min(selected.price_cny))::integer as fairness_gap,
+      jsonb_object_agg(
+        selected.participant_id::text,
+        selected.quote_id
+        order by selected.participant_id
+      ) as quote_ids,
+      jsonb_object_agg(
+        selected.participant_id::text,
+        selected.verified_quote_id::text
+        order by selected.participant_id
+      ) as verified_quote_ids
+    from private.recommendation_policy_saving_v2(p_run_id) as selected
+    group by selected.city_code
+  ),
+  fast as (
+    select
+      selected.city_code,
+      count(*)::integer as coverage_count,
+      sum(selected.price_cny)::integer as total_fare,
+      sum(selected.duration_minutes)::integer as total_duration,
+      max(selected.arrive_at) as latest_arrival,
+      sum(selected.transfer_count)::integer as total_transfers,
+      jsonb_object_agg(
+        selected.participant_id::text,
+        selected.quote_id
+        order by selected.participant_id
+      ) as quote_ids,
+      jsonb_object_agg(
+        selected.participant_id::text,
+        selected.verified_quote_id::text
+        order by selected.participant_id
+      ) as verified_quote_ids
+    from private.recommendation_policy_fast_v2(p_run_id) as selected
+    group by selected.city_code
+  ),
+  eligible as (
+    select
+      saving.city_code,
+      saving.total_fare as saving_total_fare,
+      saving.total_duration as saving_total_duration,
+      saving.latest_arrival as saving_latest_arrival,
+      saving.total_transfers as saving_total_transfers,
+      saving.direct_count as direct_participant_count,
+      saving.fairness_gap as fare_fairness_gap,
+      saving.quote_ids as saving_quote_ids,
+      saving.verified_quote_ids as saving_verified_quote_ids,
+      fast.total_fare as fast_total_fare,
+      fast.total_duration as fast_total_duration,
+      fast.latest_arrival as fast_latest_arrival,
+      fast.total_transfers as fast_total_transfers,
+      fast.quote_ids as fast_quote_ids,
+      fast.verified_quote_ids as fast_verified_quote_ids
+    from saving
+    join fast using (city_code)
+    where saving.coverage_count = v_participant_count
+      and fast.coverage_count = v_participant_count
+  )
+  select
+    row_number() over (
+      order by
+        eligible.saving_total_fare,
+        eligible.direct_participant_count desc,
+        eligible.fare_fairness_gap,
+        eligible.saving_total_duration,
+        eligible.city_code collate "C"
+    ),
+    eligible.city_code,
+    eligible.saving_total_fare,
+    eligible.saving_total_duration,
+    eligible.saving_latest_arrival,
+    eligible.saving_total_transfers,
+    eligible.direct_participant_count,
+    eligible.fare_fairness_gap,
+    eligible.saving_quote_ids,
+    eligible.saving_verified_quote_ids,
+    eligible.fast_total_fare,
+    eligible.fast_total_duration,
+    eligible.fast_latest_arrival,
+    eligible.fast_total_transfers,
+    eligible.fast_quote_ids,
+    eligible.fast_verified_quote_ids
+  from eligible
+  order by 1;
+end;
+$$;
+
+revoke all on function private.recommendation_policy_projection(uuid)
+  from public, anon, authenticated;
+grant execute on function private.recommendation_policy_projection(uuid)
+  to service_role;
+
+create or replace function private.assert_recommendation_proposal(
+  p_run_id uuid,
+  p_proposal_id uuid
+)
+returns table (
+  rank_position bigint,
+  city_code text,
+  saving_total_fare integer,
+  saving_total_duration integer,
+  saving_latest_arrival timestamptz,
+  saving_total_transfers integer,
+  direct_participant_count integer,
+  fare_fairness_gap integer,
+  saving_quote_ids jsonb,
+  saving_verified_quote_ids jsonb,
+  fast_total_fare integer,
+  fast_total_duration integer,
+  fast_latest_arrival timestamptz,
+  fast_total_transfers integer,
+  fast_quote_ids jsonb,
+  fast_verified_quote_ids jsonb
+)
+language plpgsql
+volatile
+security invoker
+set search_path = ''
+as $$
+declare
+  v_run public.recommendation_runs%rowtype;
+  v_proposal public.recommendation_proposals%rowtype;
+  v_selected record;
+  v_eligible_city_codes jsonb;
+  v_ordered_city_codes jsonb;
+begin
+  select * into v_run
+  from public.recommendation_runs
+  where id = p_run_id;
+
+  select * into v_proposal
+  from public.recommendation_proposals
+  where id = p_proposal_id
+    and run_id = p_run_id;
+
+  if v_run.id is null
+    or v_proposal.id is null
+    or v_run.policy_version <> '2026-07-19.v2'
+    or v_proposal.policy_version <> v_run.policy_version
+  then
+    raise exception 'unsupported recommendation policy';
+  end if;
+
+  create temporary table if not exists policy_projection_cache (
+    rank_position bigint not null,
+    city_code text not null,
+    saving_total_fare integer not null,
+    saving_total_duration integer not null,
+    saving_latest_arrival timestamptz not null,
+    saving_total_transfers integer not null,
+    direct_participant_count integer not null,
+    fare_fairness_gap integer not null,
+    saving_quote_ids jsonb not null,
+    saving_verified_quote_ids jsonb not null,
+    fast_total_fare integer not null,
+    fast_total_duration integer not null,
+    fast_latest_arrival timestamptz not null,
+    fast_total_transfers integer not null,
+    fast_quote_ids jsonb not null,
+    fast_verified_quote_ids jsonb not null
+  ) on commit drop;
+
+  truncate table pg_temp.policy_projection_cache;
+  insert into pg_temp.policy_projection_cache
+  select * from private.recommendation_policy_projection(p_run_id);
+
+  if v_run.kind = 'automatic' then
+    select projection.* into v_selected
+    from pg_temp.policy_projection_cache as projection
+    where projection.rank_position = 1;
+
+    select
+      coalesce(jsonb_agg(city.city_code order by city.city_code collate "C"), '[]'::jsonb),
+      coalesce(jsonb_agg(city.city_code order by city.rank_position), '[]'::jsonb)
+    into v_eligible_city_codes, v_ordered_city_codes
+    from pg_temp.policy_projection_cache as city;
+  elsif v_run.kind = 'alternative' then
+    select projection.* into v_selected
+    from pg_temp.policy_projection_cache as projection
+    where projection.city_code = v_run.requested_city_code;
+  else
+    raise exception 'proposal does not match recommendation policy';
+  end if;
+
+  if v_selected.city_code is null
+    or v_proposal.output_json ->> 'status' is distinct from 'proposal'
+    or v_proposal.output_json ->> 'cityCode' is distinct from v_selected.city_code
+    or coalesce(jsonb_array_length(v_proposal.output_json -> 'schemes'), 0) <> 2
+    or v_proposal.output_json #>> '{schemes,0,kind}' is distinct from 'saving'
+    or v_proposal.output_json #>> '{schemes,1,kind}' is distinct from 'fast'
+    or v_proposal.output_json #> '{schemes,0,quoteIdsByParticipant}'
+      is distinct from v_selected.saving_quote_ids
+    or v_proposal.output_json #> '{schemes,1,quoteIdsByParticipant}'
+      is distinct from v_selected.fast_quote_ids
+    or (v_proposal.output_json #>> '{schemes,0,totalFareCny}')::integer
+      is distinct from v_selected.saving_total_fare
+    or (v_proposal.output_json #>> '{schemes,1,totalFareCny}')::integer
+      is distinct from v_selected.fast_total_fare
+    or (
+      v_run.kind = 'automatic'
+      and (
+        v_proposal.output_json #> '{comparisonEvidence,eligibleCityCodes}'
+          is distinct from v_eligible_city_codes
+        or v_proposal.output_json #> '{comparisonEvidence,orderedCityCodes}'
+          is distinct from v_ordered_city_codes
+      )
+    )
+  then
+    raise exception 'proposal does not match recommendation policy';
+  end if;
+
+  return query
+  select
+    projection.rank_position,
+    projection.city_code,
+    projection.saving_total_fare,
+    projection.saving_total_duration,
+    projection.saving_latest_arrival,
+    projection.saving_total_transfers,
+    projection.direct_participant_count,
+    projection.fare_fairness_gap,
+    projection.saving_quote_ids,
+    projection.saving_verified_quote_ids,
+    projection.fast_total_fare,
+    projection.fast_total_duration,
+    projection.fast_latest_arrival,
+    projection.fast_total_transfers,
+    projection.fast_quote_ids,
+    projection.fast_verified_quote_ids
+  from pg_temp.policy_projection_cache as projection
+  where projection.city_code = v_selected.city_code;
+end;
+$$;
+
+revoke all on function private.assert_recommendation_proposal(uuid, uuid)
+  from public, anon, authenticated;
+grant execute on function private.assert_recommendation_proposal(uuid, uuid)
+  to service_role;
