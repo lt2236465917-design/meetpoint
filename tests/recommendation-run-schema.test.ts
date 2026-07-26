@@ -78,6 +78,37 @@ describe("active recommendation run database guard", () => {
     expect(share).toBeGreaterThan(replay);
   });
 
+  it("keeps the final alternative confirmation replay synchronized before superseding", async () => {
+    const [schema, migration] = await Promise.all([
+      readFile("supabase/schema.sql", "utf8"),
+      readFile(
+        "supabase/migrations/202607260001_atomic_materialization_and_policy_replay.sql",
+        "utf8",
+      ),
+    ]);
+    const schemaFunction = extractLastFunction(schema, "confirm_alternative_result");
+    const migrationFunction = extractLastFunction(
+      migration,
+      "confirm_alternative_result",
+    );
+
+    expect(schemaFunction).toBe(migrationFunction);
+    const replay = schemaFunction.indexOf(
+      "perform private.assert_materialized_recommendation_result",
+    );
+    const supersede = schemaFunction.indexOf(
+      "set superseded_at = now()",
+      replay,
+    );
+    const share = schemaFunction.indexOf(
+      "set is_shared = true",
+      supersede,
+    );
+    expect(replay).toBeGreaterThan(-1);
+    expect(supersede).toBeGreaterThan(replay);
+    expect(share).toBeGreaterThan(supersede);
+  });
+
   it("replaces the historical running-only index with the active-state guard", async () => {
     const [schema, legacyMigration, multiAgentMigration] = await Promise.all([
       readFile("supabase/schema.sql", "utf8"),

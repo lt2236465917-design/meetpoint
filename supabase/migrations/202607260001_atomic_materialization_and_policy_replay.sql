@@ -1033,3 +1033,149 @@ revoke all on function public.publish_shared_result(uuid, uuid)
   from public, anon, authenticated;
 grant execute on function public.publish_shared_result(uuid, uuid)
   to service_role;
+
+create or replace function public.confirm_alternative_result(
+  p_run_id uuid,
+  p_proposal_id uuid,
+  p_host_token_hash text
+)
+returns jsonb
+language plpgsql
+volatile
+security invoker
+set search_path = ''
+as $$
+declare
+  v_plan_id uuid;
+  v_run public.recommendation_runs%rowtype;
+  v_proposal public.recommendation_proposals%rowtype;
+  v_result public.recommendation_results%rowtype;
+  v_current_result_id uuid;
+begin
+  select run.plan_id into v_plan_id
+  from public.recommendation_runs as run
+  where run.id = p_run_id;
+  if not found then
+    raise exception 'run not found';
+  end if;
+
+  perform 1
+  from public.plans as plan
+  where plan.id = v_plan_id
+  for update;
+  if not found then
+    raise exception 'plan not found';
+  end if;
+
+  select * into v_run
+  from public.recommendation_runs as run
+  where run.id = p_run_id
+  for update;
+  if not found or v_run.plan_id is distinct from v_plan_id then
+    raise exception 'run not found';
+  end if;
+  if v_run.kind <> 'alternative' then
+    raise exception 'host confirmation requires an alternative run';
+  end if;
+  if v_run.status <> 'awaiting_host_confirmation' then
+    raise exception 'alternative run must await host confirmation';
+  end if;
+
+  if p_host_token_hash is null or not exists (
+    select 1
+    from public.plan_credentials as credential
+    where credential.plan_id = v_run.plan_id
+      and credential.host_token_hash = p_host_token_hash
+  ) then
+    raise exception 'invalid host credential';
+  end if;
+
+  if v_run.stale_after is null or v_run.stale_after <= now() then
+    update public.recommendation_runs
+    set status = 'failed',
+        error_summary = 'RUN_STALE_EXPIRED',
+        completed_at = now(),
+        stale_after = null,
+        advance_lease_token = null,
+        advance_lease_expires_at = null
+    where id = p_run_id
+      and status = 'awaiting_host_confirmation';
+    return jsonb_build_object(
+      'disposition', 'rejected',
+      'code', 'PREVIEW_EXPIRED'
+    );
+  end if;
+
+  select * into v_proposal
+  from public.recommendation_proposals as proposal
+  where proposal.id = p_proposal_id
+    and proposal.run_id = p_run_id
+  for update;
+  if not found
+    or v_proposal.status <> 'approved'
+    or v_proposal.policy_version <> v_run.policy_version
+    or v_proposal.supervisor_approved_version is distinct from v_proposal.version
+    or not (v_proposal.validation_decision @> '{"ok": true}'::jsonb)
+  then
+    raise exception 'proposal is not approved for this run and policy';
+  end if;
+
+  select * into v_result
+  from public.recommendation_results as result
+  where result.run_id = p_run_id
+    and result.proposal_id = p_proposal_id
+  for update;
+  if not found
+    or v_result.plan_id is distinct from v_run.plan_id
+    or v_result.city_code is distinct from v_run.requested_city_code
+    or v_result.is_shared
+  then
+    raise exception 'exactly one matching alternative result is required';
+  end if;
+
+  select current_result.id into v_current_result_id
+  from public.recommendation_results as current_result
+  where current_result.plan_id = v_run.plan_id
+    and current_result.is_shared
+    and current_result.superseded_at is null
+  for update;
+  if not found then
+    raise exception 'no shared result to replace';
+  end if;
+
+  perform private.assert_materialized_recommendation_result(
+    p_run_id,
+    p_proposal_id,
+    v_result.id
+  );
+
+  update public.recommendation_results
+  set superseded_at = now(),
+      superseded_by_result_id = v_result.id
+  where id = v_current_result_id;
+
+  update public.recommendation_results
+  set is_shared = true,
+      published_at = now()
+  where id = v_result.id;
+
+  update public.recommendation_runs
+  set status = 'completed',
+      completed_at = now(),
+      retry_after = null,
+      stale_after = null,
+      advance_lease_token = null,
+      advance_lease_expires_at = null
+  where id = p_run_id;
+
+  return jsonb_build_object(
+    'disposition', 'completed',
+    'resultId', v_result.id
+  );
+end;
+$$;
+
+revoke all on function public.confirm_alternative_result(uuid, uuid, text)
+  from public, anon, authenticated;
+grant execute on function public.confirm_alternative_result(uuid, uuid, text)
+  to service_role;
