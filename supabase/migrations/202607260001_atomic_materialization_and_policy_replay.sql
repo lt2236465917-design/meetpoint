@@ -1,3 +1,5 @@
+begin;
+
 create schema if not exists private;
 
 revoke all on schema private from public, anon, authenticated;
@@ -1179,3 +1181,62 @@ revoke all on function public.confirm_alternative_result(uuid, uuid, text)
   from public, anon, authenticated;
 grant execute on function public.confirm_alternative_result(uuid, uuid, text)
   to service_role;
+
+do $$
+declare
+  v_result record;
+  v_run public.recommendation_runs%rowtype;
+  v_is_valid boolean;
+begin
+  for v_result in
+    select result.id, result.run_id, result.proposal_id
+    from public.recommendation_results as result
+    where not result.is_shared
+    order by result.run_id
+    for update
+  loop
+    select * into v_run
+    from public.recommendation_runs as run
+    where run.id = v_result.run_id
+    for update;
+
+    v_is_valid := true;
+    begin
+      perform private.assert_materialized_recommendation_result(
+        v_result.run_id,
+        v_result.proposal_id,
+        v_result.id
+      );
+    exception
+      when raise_exception or data_exception then
+      v_is_valid := false;
+    end;
+
+    if not v_is_valid then
+      delete from public.recommendation_results
+      where id = v_result.id;
+
+      if v_run.status in (
+        'pending',
+        'collecting',
+        'cooling_down',
+        'calculating',
+        'validating',
+        'awaiting_host_confirmation'
+      ) then
+        update public.recommendation_runs
+        set status = 'failed',
+            error_summary = 'PUBLICATION_GUARD_REJECTED',
+            completed_at = now(),
+            retry_after = null,
+            stale_after = null,
+            advance_lease_token = null,
+            advance_lease_expires_at = null
+        where id = v_result.run_id;
+      end if;
+    end if;
+  end loop;
+end;
+$$;
+
+commit;

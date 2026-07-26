@@ -140,6 +140,20 @@ describe("multi-agent migration", () => {
     }
   });
 
+  it("cleans only invalid unshared drafts through the canonical replay boundary", async () => {
+    const sql = (await readFile(atomicMaterializationMigrationPath, "utf8")).toLowerCase();
+    const cleanup = sql.slice(sql.lastIndexOf("do $$"));
+
+    expect(sql).toMatch(/^begin;/);
+    expect(sql.trimEnd()).toMatch(/commit;$/);
+    expect(cleanup).toContain("where not result.is_shared");
+    expect(cleanup).toContain("for update");
+    expect(cleanup).toContain("private.assert_materialized_recommendation_result");
+    expect(cleanup).toContain("delete from public.recommendation_results");
+    expect(cleanup).toContain("error_summary = 'publication_guard_rejected'");
+    expect(cleanup).not.toContain("where result.is_shared");
+  });
+
   it("preserves service-only authority in the hardening migration and canonical schema", async () => {
     for (const path of [hardeningMigrationPath, "supabase/schema.sql"]) {
       const sql = (await readFile(path, "utf8")).toLowerCase();

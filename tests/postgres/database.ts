@@ -69,6 +69,15 @@ async function grantServiceRoleDataAccess(client: Client): Promise<void> {
   `);
 }
 
+async function bootstrapSupabasePublication(client: Client): Promise<void> {
+  const existing = await client.query(
+    "select 1 from pg_catalog.pg_publication where pubname = 'supabase_realtime'",
+  );
+  if (existing.rowCount === 0) {
+    await client.query("create publication supabase_realtime");
+  }
+}
+
 export async function resetCanonicalDatabase(client: Client): Promise<void> {
   await bootstrapRoles(client);
   await client.query("drop schema if exists public cascade");
@@ -84,6 +93,7 @@ export async function resetThroughMigration(
   lastMigration: string,
 ): Promise<void> {
   await bootstrapRoles(client);
+  await bootstrapSupabasePublication(client);
   await client.query("drop schema if exists public cascade");
   await client.query("create schema public authorization current_user");
   await client.query("grant usage, create on schema public to public");
@@ -95,4 +105,9 @@ export async function resetThroughMigration(
     await client.query(await readFile(path.join(directory, migration), "utf8"));
   }
   await grantServiceRoleDataAccess(client);
+}
+
+export async function applyMigration(client: Client, migration: string): Promise<void> {
+  const sql = await readFile(path.join("supabase/migrations", migration), "utf8");
+  await client.query(sql);
 }

@@ -6,6 +6,8 @@ import { describe, expect, it } from "vitest";
 const migrationPath =
   "supabase/migrations/202607210001_publication_safety_and_run_recovery.sql";
 const schemaPath = "supabase/schema.sql";
+const atomicMaterializationMigrationPath =
+  "supabase/migrations/202607260001_atomic_materialization_and_policy_replay.sql";
 const initialMigrationPath =
   "supabase/migrations/202607080001_initial_schema.sql";
 
@@ -112,6 +114,30 @@ describe("Supabase public read boundary", () => {
       for (const signature of serviceOnlyFunctions) {
         expect(sql).toContain(
           `revoke execute on function ${signature} from public, anon, authenticated;`,
+        );
+        expect(sql).toContain(
+          `grant execute on function ${signature} to service_role;`,
+        );
+      }
+    }
+  });
+
+  it("keeps Batch B policy helpers and materialization outside browser authority", async () => {
+    for (const path of [atomicMaterializationMigrationPath, schemaPath]) {
+      const sql = normalizeSql(await readFile(path, "utf8"));
+
+      expect(sql).toContain(
+        "revoke all on schema private from public, anon, authenticated;",
+      );
+      expect(sql).toContain("grant usage on schema private to service_role;");
+      for (const signature of [
+        "private.recommendation_policy_projection(uuid)",
+        "private.assert_recommendation_proposal(uuid, uuid)",
+        "private.assert_materialized_recommendation_result(uuid, uuid, uuid)",
+        "public.materialize_recommendation_result(uuid, uuid)",
+      ]) {
+        expect(sql).toContain(
+          `revoke all on function ${signature} from public, anon, authenticated;`,
         );
         expect(sql).toContain(
           `grant execute on function ${signature} to service_role;`,
