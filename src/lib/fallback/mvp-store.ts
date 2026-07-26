@@ -14,7 +14,11 @@ import { arrivalDateInShanghai } from "@/lib/recommendation/date";
 import { buildRouteTasks } from "@/lib/recommendation/query-matrix";
 import { rankEligibleCities } from "@/lib/recommendation/policy";
 import { staleAfterForStatus } from "@/lib/recommendation/run-deadlines";
-import type { StoredRouteTask } from "@/lib/recommendation/repository";
+import type {
+  ActiveRunStatus,
+  RunCreationResult,
+  StoredRouteTask,
+} from "@/lib/recommendation/repository";
 import { validateRecommendationPolicy } from "@/lib/recommendation/validators";
 import { generateToken, hashToken, verifyToken } from "@/lib/security/tokens";
 import type { TransportMode } from "@/types/domain";
@@ -145,7 +149,9 @@ function currentSharedResult(planId: string) {
 }
 
 function activeRunForPlan(planId: string) {
-  return state().runs.find((run) => run.planId === planId && activeStatuses.has(run.status)) ?? null;
+  return state().runs.find((run): run is RunRow & { status: ActiveRunStatus } =>
+    run.planId === planId && activeStatuses.has(run.status),
+  ) ?? null;
 }
 
 function expireActiveRun(run: RunRow) {
@@ -298,7 +304,7 @@ function createMatrix(plan: PlanRow, kind: RunRow["kind"], requestedCityCode: st
   return run;
 }
 
-export async function calculateFallbackRecommendations(code: string) {
+export async function calculateFallbackRecommendations(code: string): Promise<RunCreationResult> {
   const plan = planFor(code);
   if (!plan) throw new Error("PLAN_NOT_FOUND");
   if (participantsFor(plan.id).length < 2) throw new Error("NOT_ENOUGH_PARTICIPANTS");
@@ -316,7 +322,11 @@ export async function calculateFallbackRecommendations(code: string) {
   return { disposition: "created" as const, runId: run.id, status: "pending" as const };
 }
 
-export async function createFallbackAlternativePreview(input: { code: string; participantToken: string; cityCode: string }) {
+export async function createFallbackAlternativePreview(input: {
+  code: string;
+  participantToken: string;
+  cityCode: string;
+}): Promise<RunCreationResult> {
   const verified = await verifyFallbackParticipantCanCalculate(input.code, input.participantToken);
   if (!verified.ok) throw new Error(verified.error);
   const plan = planFor(input.code)!;

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, expectTypeOf, it } from "vitest";
 
 import type { VerifiedQuote } from "@/lib/agent/contracts";
 import {
@@ -15,6 +15,7 @@ import {
   submitFallbackProposal,
   verifyFallbackParticipantCanCalculate,
 } from "@/lib/fallback/mvp-store";
+import type { RunCreationResult } from "@/lib/recommendation/repository";
 
 function quote(participantId: string, cityCode: string, suffix: "1" | "2"): VerifiedQuote {
   return {
@@ -86,11 +87,13 @@ describe("fallback publication guard", () => {
       cityCode: "wuhan",
     });
 
-    await expect(createFallbackAlternativePreview({
+    const resumed = await createFallbackAlternativePreview({
       code: input.created.code,
       participantToken: input.second.editToken,
       cityCode: "wuhan",
-    })).resolves.toEqual({
+    });
+    expectTypeOf(resumed).toMatchTypeOf<RunCreationResult>();
+    expect(resumed).toEqual({
       disposition: "resume_existing",
       runId: preview.runId,
       status: "pending",
