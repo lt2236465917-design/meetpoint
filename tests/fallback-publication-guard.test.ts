@@ -140,6 +140,28 @@ describe("fallback publication guard", () => {
     expect(readFallbackPlan(input.created.code)?.latestSharedResult).toBeNull();
   });
 
+  it("exposes no partial automatic result when approved evidence becomes invalid before materialization", async () => {
+    const input = await setup();
+    const started = await calculateFallbackRecommendations(input.created.code);
+    await advanceFallbackRun({ runId: started.runId, planId: input.planId });
+    seedFallbackVerifiedQuotes(started.runId, [
+      quote(input.first.participantId, "beijing", "1"),
+      quote(input.second.participantId, "beijing", "2"),
+    ]);
+    await advanceFallbackRun({ runId: started.runId, planId: input.planId });
+    await advanceFallbackRun({ runId: started.runId, planId: input.planId });
+    seedFallbackVerifiedQuotes(started.runId, [{
+      ...quote(input.first.participantId, "beijing", "1"),
+      id: "quote-better-beijing",
+      quoteId: `flyai:${"c".repeat(64)}`,
+      priceCny: 50,
+    }]);
+
+    await expect(advanceFallbackRun({ runId: started.runId, planId: input.planId }))
+      .resolves.toMatchObject({ status: "failed", diagnosticCode: "PUBLICATION_GUARD_REJECTED" });
+    expect(readFallbackPlan(input.created.code)?.latestSharedResult).toBeNull();
+  });
+
   it("keeps an alternative preview private until the host confirms its replacement", async () => {
     const input = await setup();
     await completeAutomatic(input);
@@ -156,6 +178,46 @@ describe("fallback publication guard", () => {
 
     await expect(confirmFallbackAlternative({ runId: preview.runId, hostToken: input.created.hostToken })).resolves.toMatchObject({ cityCode: "wuhan", isShared: true });
     expect(readFallbackPlan(input.created.code)?.latestSharedResult).toMatchObject({ cityCode: "wuhan", isShared: true });
+  });
+
+  it("rejects host confirmation when newer evidence invalidates the private preview", async () => {
+    const input = await setup();
+    await completeAutomatic(input);
+    const preview = await createFallbackAlternativePreview({
+      code: input.created.code,
+      participantToken: input.second.editToken,
+      cityCode: "wuhan",
+    });
+    await advanceFallbackRun({ runId: preview.runId, planId: input.planId });
+    seedFallbackVerifiedQuotes(preview.runId, [
+      quote(input.first.participantId, "wuhan", "1"),
+      quote(input.second.participantId, "wuhan", "2"),
+    ]);
+    await advanceFallbackRun({ runId: preview.runId, planId: input.planId });
+    await advanceFallbackRun({ runId: preview.runId, planId: input.planId });
+    await advanceFallbackRun({ runId: preview.runId, planId: input.planId });
+
+    seedFallbackVerifiedQuotes(preview.runId, [{
+      ...quote(input.first.participantId, "wuhan", "1"),
+      id: "quote-better-wuhan",
+      quoteId: `flyai:${"c".repeat(64)}`,
+      priceCny: 50,
+    }]);
+
+    await expect(confirmFallbackAlternative({
+      runId: preview.runId,
+      hostToken: input.created.hostToken,
+    })).rejects.toThrow("PUBLICATION_GUARD_REJECTED");
+    expect(readFallbackPlan(input.created.code)?.latestSharedResult)
+      .toMatchObject({ cityCode: "beijing", isShared: true });
+    await expect(readFallbackPrivatePreview({
+      runId: preview.runId,
+      participantToken: input.second.editToken,
+    })).resolves.toMatchObject({
+      status: "awaiting_host_confirmation",
+      cityCode: "wuhan",
+      isShared: false,
+    });
   });
 
   it("rejects creating an alternative when there is no shared result to replace", async () => {

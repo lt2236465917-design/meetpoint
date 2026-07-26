@@ -563,6 +563,15 @@ export async function confirmFallbackAlternative(input: { code?: string; runId: 
   }
   const current = currentSharedResult(run.planId);
   if (!current) throw new Error("PUBLICATION_GUARD_REJECTED");
+  const proposal = state().proposals.find((entry) =>
+    entry.id === result.proposalId
+    && entry.runId === run.id
+    && entry.status === "approved"
+    && entry.validation.ok,
+  );
+  if (!proposal || !validateRecommendationPolicy(validationInput(run, proposal.output)).ok) {
+    throw new Error("PUBLICATION_GUARD_REJECTED");
+  }
   current.supersededAt = timestamp();
   result.isShared = true;
   result.publishedAt = timestamp();
