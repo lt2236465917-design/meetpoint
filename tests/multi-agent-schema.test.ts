@@ -111,6 +111,14 @@ describe("multi-agent migration", () => {
       expect(sql).toContain("jsonb_to_recordset");
       expect(sql).toContain("route task must be running");
     }
+
+    for (const path of [hardeningMigrationPath, "supabase/schema.sql"]) {
+      const sql = (await readFile(path, "utf8")).toLowerCase();
+      expect(sql).toContain("create function terminalize_route_task_recovery");
+      expect(sql).toMatch(
+        /create function terminalize_route_task_recovery[\s\S]*?security invoker[\s\S]*?set search_path = ''/,
+      );
+    }
   });
 
   it("preserves service-only authority in the hardening migration and canonical schema", async () => {
@@ -120,6 +128,7 @@ describe("multi-agent migration", () => {
       for (const name of [
         "create_recommendation_run_matrix",
         "save_route_task_outcome",
+        "terminalize_route_task_recovery",
         "publish_shared_result",
         "confirm_alternative_result",
       ]) {

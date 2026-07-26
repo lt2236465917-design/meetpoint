@@ -278,6 +278,35 @@ begin
 end;
 $$;
 
+create function terminalize_route_task_recovery(
+  p_task_id uuid,
+  p_error_code text,
+  p_stale_after timestamptz
+)
+returns boolean
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  v_run_id uuid;
+begin
+  update public.route_tasks
+  set status = 'terminal_failure', retry_after = null,
+      error_code = coalesce(nullif(btrim(p_error_code), ''), 'ROUTE_RECOVERY_EXHAUSTED'),
+      updated_at = now()
+  where id = p_task_id and status = 'retryable_failure'
+  returning run_id into v_run_id;
+  if not found then return false; end if;
+
+  update public.recommendation_runs
+  set stale_after = p_stale_after
+  where id = v_run_id
+    and status in ('pending', 'collecting', 'cooling_down', 'calculating', 'validating');
+  return true;
+end;
+$$;
+
 create or replace function publish_shared_result(p_run_id uuid, p_proposal_id uuid)
 returns uuid
 language plpgsql
@@ -626,6 +655,8 @@ revoke execute on function create_recommendation_run_matrix(
 ) from public, anon, authenticated;
 revoke execute on function save_route_task_outcome(uuid, jsonb, jsonb)
   from public, anon, authenticated;
+revoke execute on function terminalize_route_task_recovery(uuid, text, timestamptz)
+  from public, anon, authenticated;
 revoke execute on function publish_shared_result(uuid, uuid)
   from public, anon, authenticated;
 revoke execute on function confirm_alternative_result(uuid, uuid, text)
@@ -641,6 +672,8 @@ grant execute on function create_recommendation_run_matrix(
   uuid, uuid, date, jsonb, jsonb, text, text, uuid
 ) to service_role;
 grant execute on function save_route_task_outcome(uuid, jsonb, jsonb)
+  to service_role;
+grant execute on function terminalize_route_task_recovery(uuid, text, timestamptz)
   to service_role;
 grant execute on function publish_shared_result(uuid, uuid) to service_role;
 grant execute on function confirm_alternative_result(uuid, uuid, text)

@@ -71,6 +71,7 @@ function repository(input: { current: StoredRun; tasks?: StoredRouteTask[]; quot
     async getRouteTask() { return null; },
     async markTaskRunning() { throw new Error("not reached"); },
     async saveTaskOutcome() {},
+    async markTaskRecoveryExhausted() { return true; },
     async updateRunStatus() {},
     async compareAndSetRunStatus(_runId: string, expected: StoredRun["status"], next: StoredRun["status"]) {
       if (this.current.status !== expected) return false;
@@ -146,23 +147,50 @@ describe("RunOrchestrator", () => {
     expect(store.transitions).toEqual([["collecting", "incomplete"]]);
   });
 
-  it("stops only the exhausted retryable route group after its two allowed recovery attempts", async () => {
+  it("terminalizes one exhausted route and continues other pending work", async () => {
     const store = repository({ current: run("collecting"), tasks: [
       task({
+        id: "exhausted",
         status: "retryable_failure",
         attemptCount: 3,
         retryAfter: null,
         errorCode: "PROVIDER_TIMEOUT",
       }),
-      task({ id: "task-2", participantId: "p2", status: "succeeded" }),
+      task({ id: "pending", participantId: "p2", status: "pending" }),
     ] });
+    const terminalize = vi.fn(async () => true);
     const execute = vi.fn(async () => ({ status: "empty" }));
+    store.markTaskRecoveryExhausted = terminalize;
 
     const status = await new RunOrchestrator({ repository: store, query: { execute } }).advanceRun("run-1");
 
-    expect(status).toBe("incomplete");
+    expect(status).toBe("collecting");
+    expect(terminalize).toHaveBeenCalledWith(
+      "exhausted",
+      "PROVIDER_TIMEOUT",
+      expect.any(String),
+    );
+    expect(execute).toHaveBeenCalledWith("pending");
+    expect(store.transitions).toEqual([]);
+  });
+
+  it("becomes incomplete only after every remaining route is terminal", async () => {
+    const store = repository({ current: run("collecting"), tasks: [
+      task({
+        id: "exhausted",
+        status: "retryable_failure",
+        attemptCount: 3,
+        retryAfter: null,
+        errorCode: "PROVIDER_TIMEOUT",
+      }),
+    ] });
+    store.markTaskRecoveryExhausted = vi.fn(async () => true);
+    const execute = vi.fn(async () => ({ status: "empty" as const }));
+
+    await expect(new RunOrchestrator({ repository: store, query: { execute } })
+      .advanceRun("run-1")).resolves.toBe("incomplete");
+    expect(store.markTaskRecoveryExhausted).toHaveBeenCalledOnce();
     expect(execute).not.toHaveBeenCalled();
-    expect(store.transitions).toEqual([["collecting", "incomplete"]]);
   });
 
   it("starts calculation when at least one candidate has complete real coverage", async () => {

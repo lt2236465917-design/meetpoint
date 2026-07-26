@@ -110,6 +110,11 @@ export interface RecommendationRepository {
 }
 
 export interface RunOrchestratorRepository extends RecommendationRepository, AgentProposalRepository {
+  markTaskRecoveryExhausted(
+    taskId: string,
+    errorCode: string,
+    staleAfter: string,
+  ): Promise<boolean>;
   getRun(runId: string): Promise<StoredRecommendationRun | null>;
   compareAndSetRunStatus(
     runId: string,
@@ -425,6 +430,26 @@ export class SupabaseRecommendationRepository
     );
     if (error) throw new Error(`Failed to persist task outcome: ${error.message}`);
     if (data !== true) throw new Error("Failed to persist task outcome: invalid RPC result");
+  }
+
+  async markTaskRecoveryExhausted(
+    taskId: string,
+    errorCode: string,
+    staleAfter: string,
+  ): Promise<boolean> {
+    const { data, error } = await createServiceSupabaseClient().rpc(
+      "terminalize_route_task_recovery",
+      {
+        p_task_id: taskId,
+        p_error_code: errorCode,
+        p_stale_after: staleAfter,
+      },
+    );
+    if (error) throw new Error(`Failed to terminalize route task recovery: ${error.message}`);
+    if (typeof data !== "boolean") {
+      throw new Error("Failed to terminalize route task recovery: invalid RPC result");
+    }
+    return data;
   }
 
   async updateRunStatus(

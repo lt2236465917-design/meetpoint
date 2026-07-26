@@ -290,6 +290,32 @@ describe("SupabaseRecommendationRepository", () => {
     )).rejects.toThrow("route task must be running");
   });
 
+  it("terminalizes exhausted route recovery through one atomic RPC", async () => {
+    mocks.rpc.mockResolvedValue({ data: true, error: null });
+
+    await expect(new SupabaseRecommendationRepository().markTaskRecoveryExhausted(
+      TASK_ID,
+      "PROVIDER_TIMEOUT",
+      "2026-08-01T00:15:00.000Z",
+    )).resolves.toBe(true);
+
+    expect(mocks.rpc).toHaveBeenCalledWith("terminalize_route_task_recovery", {
+      p_task_id: TASK_ID,
+      p_error_code: "PROVIDER_TIMEOUT",
+      p_stale_after: "2026-08-01T00:15:00.000Z",
+    });
+  });
+
+  it("rejects malformed exhausted-task RPC data", async () => {
+    mocks.rpc.mockResolvedValue({ data: "true", error: null });
+
+    await expect(new SupabaseRecommendationRepository().markTaskRecoveryExhausted(
+      TASK_ID,
+      "PROVIDER_TIMEOUT",
+      "2026-08-01T00:15:00.000Z",
+    )).rejects.toThrow("invalid RPC result");
+  });
+
   it("requires exactly one run status row and supports expected-status CAS", async () => {
     const statusSelect = vi.fn().mockResolvedValue({ data: [], error: null });
     const secondEq = vi.fn(() => ({ select: statusSelect }));

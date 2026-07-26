@@ -13,6 +13,7 @@ import {
   type StoredRecommendationRun,
   type StoredRouteTask,
 } from "@/lib/recommendation/repository";
+import { ACTIVE_RUN_STALE_MS } from "@/lib/recommendation/run-deadlines";
 import { ManagerAgent } from "@/lib/agent/manager-agent";
 import { advanceFallbackRun } from "@/lib/fallback/mvp-store";
 import { createServiceSupabaseClient, hasSupabaseEnvironment } from "@/lib/supabase/server";
@@ -184,9 +185,16 @@ export class RunOrchestrator {
         recoveryAttemptCount: Math.max(0, task.attemptCount - 1),
         secondaryAdapterConfigured: false,
       })]));
-    if ([...recovery.values()].some((action) => action.type === "stop_incomplete")) {
-      return this.transition(run, "incomplete", { errorCode: "REAL_QUOTE_COVERAGE_INCOMPLETE" });
-    }
+    const stopped = [...recovery.entries()]
+      .filter(([, action]) => action.type === "stop_incomplete");
+    await Promise.all(stopped.map(([taskId]) => {
+      const task = tasks.find((entry) => entry.id === taskId)!;
+      return this.repository.markTaskRecoveryExhausted(
+        taskId,
+        task.errorCode ?? "ROUTE_RECOVERY_EXHAUSTED",
+        new Date(this.now().getTime() + ACTIVE_RUN_STALE_MS).toISOString(),
+      );
+    }));
     const ready = tasks.filter((task) => task.status === "pending" || recovery.get(task.id)?.type === "rerun_task");
     if (ready.length > 0) {
       const batch = ready.slice(0, this.logicalConcurrency);
