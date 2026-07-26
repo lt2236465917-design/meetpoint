@@ -12,6 +12,8 @@ This guide is the quick reference for running and calling the MVP locally.
 
 The same user-facing routes must remain usable on phones (shareable plan links) and on desktop. Shipped UI uses a true adaptive layout without fake phone chrome — see `docs/superpowers/specs/2026-07-17-desktop-adaptive-shell-design.md`.
 
+The local hardening migration is `supabase/migrations/202607210001_publication_safety_and_run_recovery.sql`. This Batch A implementation does not query or apply remote migration state and does not run live FlyAI/supplier acceptance; an operator must perform those separately.
+
 For local browser testing, open `http://127.0.0.1:<port>`; for real-phone testing, open the current Network URL printed by `npm run dev`. `next.config.ts` discovers active LAN IPv4 addresses at startup so the browser can load Next.js development resources after switching Wi-Fi networks.
 
 ## Local Fallback Mode
@@ -38,7 +40,7 @@ Pre-migration `city_recommendations` and `travel_options` are historical read-on
 | Variable | Scope | Purpose |
 | --- | --- | --- |
 | `NEXT_PUBLIC_SUPABASE_URL` | Browser and server | Supabase project URL. |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Browser and server | Public anon key for browser reads. |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Browser and server | Public Supabase client bootstrap; it grants no direct business-table or Realtime reads. |
 | `SUPABASE_SERVICE_ROLE_KEY` | Server only | Service-role key for route handlers and calculations. |
 | `AMAP_API_KEY` | Server only | Amap administrative-district lookup for non-hub prefecture-level departure cities. |
 | `DEEPSEEK_API_KEY` | Server only | Provider-neutral Calculation/Supervisor model. |
@@ -91,7 +93,7 @@ Returns:
 }
 ```
 
-`latestRun` exposes `{ status, traceId, pendingGroups, retryAt, diagnosticCode }`. When a current shared result exists, the public projection stays anchored to the completed run that owns it; a pending private alternative run never hides or replaces that city. Without a shared result, `latestRun` reports the latest automatic run. `latestSharedResult` is present only when its owning run is `"completed"`.
+`latestRun` exposes `{ status, traceId, pendingGroups, retryAt, diagnosticCode }`. When a current shared result exists, the public projection stays anchored to the completed run that owns it; a pending private alternative run never hides or replaces that city. Without a shared result, `latestRun` reports the latest automatic run. `latestSharedResult` is present only when its owning run is `"completed"`. This HTTP allowlist is the only unauthenticated business-data projection: browser roles cannot read business tables directly or subscribe to them through Realtime.
 
 ### Search Cities
 
@@ -141,19 +143,20 @@ Returns:
 ```json
 {
   "runId": "...",
-  "status": "pending"
+  "status": "pending",
+  "disposition": "created"
 }
 ```
 
-Both paths return HTTP 202 and do not wait for supplier work. The durable orchestrator uses only verified quotes, complete coverage, deterministic policy replay, Supervisor approval, a persisted advance lease, and the guarded publication RPC. Under policy `2026-07-19.v2`, saving is the exact lowest verified direct-first fare across each participant's accepted modes (including direct normal train), while fast is the quickest direct-first team combination within 130% of the saving total. The local fallback has the same state and publication rules but no supplier adapter, so it becomes `incomplete` unless tests inject verified quotes.
+The first request returns HTTP 202 with `disposition: "created"`; an identical active automatic request returns HTTP 200 with `disposition: "resume_existing"` and the persisted status instead of fabricating `pending`. A different active request returns `409 CALCULATION_IN_PROGRESS`. Automatic runs require the plan to be full and to have no shared result; after publication the route returns `409 SHARED_RESULT_EXISTS`. The durable orchestrator uses only verified quotes, complete coverage, deterministic policy replay, Supervisor approval, a persisted advance lease, and the guarded publication RPC. Under policy `2026-07-19.v2`, saving is the exact lowest verified direct-first fare across each participant's accepted modes (including direct normal train), while fast is the quickest direct-first team combination within 130% of the saving total. The local fallback has the same state and publication rules but no supplier adapter, so it becomes `incomplete` unless tests inject verified quotes.
 
 ### Advance a Run
 
 `POST /api/plans/[code]/runs/[runId]/advance`
 
-Requires `x-participant-token`. Each request performs at most one state transition or one bounded query batch, then returns `{ runId, status, traceId, retryAt, diagnosticCode }`. The durable path persists an advance lease so repeated or concurrent requests return the current state rather than duplicate supplier work.
+Requires `x-participant-token`. Each request performs at most one state transition or one bounded query batch, then returns `{ runId, status, traceId, retryAt, diagnosticCode }`. The durable path persists an advance lease so repeated or concurrent requests return the current state rather than duplicate supplier work. Active work has a rolling 15-minute inactivity deadline; an advance after expiry fails the run with `RUN_STALE_EXPIRED` before acquiring a new lease.
 
-Run statuses are `pending`, `collecting`, `cooling_down`, `calculating`, `validating`, `awaiting_host_confirmation`, `completed`, `incomplete`, and `failed`. Only the `completed` run that owns the current non-superseded shared result may expose scheme cards. Before a shared result exists, every other automatic status exposes progress, retry, or diagnostic guidance instead.
+Run statuses are `pending`, `collecting`, `cooling_down`, `calculating`, `validating`, `awaiting_host_confirmation`, `completed`, `incomplete`, and `failed`. Exhausting recovery terminalizes only the affected route task; other ready or cooling-down routes continue. The run becomes `incomplete` only when no complete city coverage remains and all remaining route work is terminal. Only the `completed` run that owns the current non-superseded shared result may expose scheme cards. Before a shared result exists, every other automatic status exposes progress, retry, or diagnostic guidance instead.
 
 ### Create a Private Alternative Preview
 
@@ -168,7 +171,7 @@ Requires `x-participant-token` from a participant in this plan and a canonical b
 }
 ```
 
-Returns HTTP 202 with the private run ID and initial status. The route-task matrix contains only the requested city, follows the normal verified-quote and review pipeline, and stops at `awaiting_host_confirmation` instead of changing the shared result.
+Preview creation requires an existing shared result; otherwise it returns `409 SHARED_RESULT_REQUIRED`. A new private run returns HTTP 202 with `disposition: "created"`, while the same participant/city active preview returns HTTP 200 with `disposition: "resume_existing"` and its persisted status. A conflicting active request returns `409 CALCULATION_IN_PROGRESS`. The route-task matrix contains only the requested city, follows the normal verified-quote and review pipeline, and stops at `awaiting_host_confirmation` instead of changing the shared result.
 
 ### Read a Private Alternative Preview
 
@@ -180,7 +183,7 @@ Requires either the requesting participant's `x-participant-token` or the plan's
 
 `POST /api/plans/[code]/previews/[runId]/confirm`
 
-Requires `x-host-token`; participant tokens, query parameters, request bodies, browser-local roles, and client-supplied proposal IDs are not confirmation authority. The server selects the exact Supervisor-approved proposal for the run and atomically replaces the shared result. A repeated successful confirmation is idempotent and returns the completed result without creating another replacement.
+Requires `x-host-token`; participant tokens, query parameters, request bodies, browser-local roles, and client-supplied proposal IDs are not confirmation authority. The server selects the exact Supervisor-approved proposal for the run and atomically replaces the shared result. Approval has a seven-day confirmation deadline. An unconfirmed expired preview returns `409 PREVIEW_EXPIRED`; a repeated successful confirmation remains idempotent and returns the completed result without creating another replacement.
 
 ## Error Codes
 
@@ -193,7 +196,10 @@ Requires `x-host-token`; participant tokens, query parameters, request bodies, b
 | `INVALID_PARTICIPANT_TOKEN` | The participant token does not belong to this plan. |
 | `PARTICIPANT_LIMIT_NOT_REACHED` | The plan is not full yet, so calculation is not allowed. |
 | `UNSUPPORTED_CITY` | The requested preview city is not a canonical supported city. |
+| `SHARED_RESULT_EXISTS` | An automatic run cannot start after a shared result exists; read it or create a private alternative. |
+| `SHARED_RESULT_REQUIRED` | A private alternative cannot start before the initial shared result exists. |
 | `PREVIEW_NOT_FOUND` | The private preview is absent, belongs to another plan, or is not visible to this credential. |
+| `PREVIEW_EXPIRED` | The seven-day host-confirmation window elapsed; create a new preview. |
 | `HOST_TOKEN_REQUIRED` | Preview confirmation was called without `x-host-token`. |
 | `INVALID_HOST_TOKEN` | The host token does not belong to this plan. |
 | `APPROVED_PROPOSAL_NOT_FOUND` | No exact Supervisor-approved proposal is available for confirmation. |

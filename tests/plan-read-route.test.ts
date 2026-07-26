@@ -37,6 +37,30 @@ function mockLatestRunLookup(run: unknown | null) {
   return { select, planEq, kindEq, order, limit: mocks.runsLimit };
 }
 
+function mockRunProjectionLookup(runs: Array<Record<string, unknown>>) {
+  const filters = new Map<string, unknown>();
+  type RunQueryBuilder = {
+    eq: (column: string, value: unknown) => RunQueryBuilder;
+    order: (column: string, options: unknown) => RunQueryBuilder;
+    limit: (count: number) => Promise<{ data: Array<Record<string, unknown>> }>;
+  };
+  const builder: RunQueryBuilder = {
+    eq: vi.fn((column: string, value: unknown) => {
+      filters.set(column, value);
+      return builder;
+    }),
+    order: vi.fn(() => builder),
+    limit: vi.fn(async (count: number) => {
+      const filtered = runs
+        .filter((run) => [...filters].every(([key, value]) => run[key] === value))
+        .sort((left, right) => String(right.started_at).localeCompare(String(left.started_at)));
+      return { data: filtered.slice(0, count) };
+    }),
+  };
+  const select = vi.fn(() => builder);
+  return { select, ...builder };
+}
+
 function mockCurrentSharedLookup(result: unknown | null) {
   const limit = vi.fn().mockResolvedValue({ data: result ? [result] : [] });
   const isNull = vi.fn(() => ({ limit }));
@@ -153,5 +177,86 @@ describe("GET /api/plans/[code]", () => {
     expect(latestRunLookup.limit).toHaveBeenCalledWith(1);
     expect(latestRunLookup.select).toHaveBeenCalledWith("id, status, trace_id, retry_after, error_summary, started_at");
     expect(pendingGroups.inStatus).toHaveBeenCalledWith("status", ["pending", "running", "retryable_failure"]);
+  });
+
+  it("anchors a shared result to its owning run instead of a newer private preview", async () => {
+    const plan = {
+      id: "plan-1",
+      code: "ABC123",
+      title: "上海周末见面",
+      meeting_date: "2026-08-15",
+      participant_limit: 2,
+      status: "completed",
+    };
+    const sharedRun = {
+      id: "run-shared",
+      plan_id: "plan-1",
+      kind: "automatic",
+      status: "completed",
+      trace_id: "11111111-1111-4111-8111-111111111111",
+      retry_after: null,
+      error_summary: null,
+      started_at: "2026-08-01T00:00:00.000Z",
+    };
+    const newerPrivatePreview = {
+      id: "run-private",
+      plan_id: "plan-1",
+      kind: "alternative",
+      status: "awaiting_host_confirmation",
+      trace_id: "22222222-2222-4222-8222-222222222222",
+      retry_after: null,
+      error_summary: null,
+      started_at: "2026-08-02T00:00:00.000Z",
+      requested_by_participant_id: "participant-private",
+      requested_city_code: "310100",
+    };
+    const currentShared = {
+      id: "result-shared",
+      run_id: "run-shared",
+      city_code: "320100",
+      explanation_zh: "南京让大家都更从容",
+      published_at: "2026-08-01T01:00:00.000Z",
+    };
+    const planLookup = mockPlanLookup(plan);
+    const participantLookup = mockParticipantsLookup([]);
+    const currentSharedLookup = mockCurrentSharedLookup(currentShared);
+    const runLookup = mockRunProjectionLookup([sharedRun, newerPrivatePreview]);
+    const pendingGroups = mockPendingGroups(0);
+    mocks.from
+      .mockReturnValueOnce({ select: planLookup.select })
+      .mockReturnValueOnce({ select: participantLookup.select })
+      .mockReturnValueOnce({ select: currentSharedLookup.select })
+      .mockReturnValueOnce({ select: runLookup.select })
+      .mockReturnValueOnce({ select: pendingGroups.select });
+
+    const { GET } = await import("@/app/api/plans/[code]/route");
+    const response = await GET(new Request("http://localhost/api/plans/ABC123"), {
+      params: Promise.resolve({ code: "ABC123" }),
+    });
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.latestRun).toEqual({
+      status: "completed",
+      traceId: "11111111-1111-4111-8111-111111111111",
+      pendingGroups: 0,
+      retryAt: null,
+      diagnosticCode: null,
+    });
+    expect(body.latestSharedResult).toEqual({
+      id: "result-shared",
+      city_code: "320100",
+      explanation_zh: "南京让大家都更从容",
+      published_at: "2026-08-01T01:00:00.000Z",
+    });
+    expect(body).not.toHaveProperty("kind");
+    expect(JSON.stringify(body)).not.toContain("requested_by_participant_id");
+    expect(JSON.stringify(body)).not.toContain("requested_city_code");
+    expect(JSON.stringify(body)).not.toContain("alternative");
+    expect(runLookup.eq).toHaveBeenCalledWith("id", "run-shared");
+    expect(runLookup.eq).not.toHaveBeenCalledWith("plan_id", "plan-1");
+    expect(runLookup.select).toHaveBeenCalledWith(
+      "id, status, trace_id, retry_after, error_summary, started_at",
+    );
   });
 });

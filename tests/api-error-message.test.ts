@@ -34,6 +34,15 @@ describe("getApiErrorMessage", () => {
     expect(getApiErrorMessage("PUBLICATION_GUARD_REJECTED", "失败")).toBe(
       "方案没通过对大家更公平的核对，请再点一次「开始见面」",
     );
+    expect(getApiErrorMessage("SHARED_RESULT_EXISTS", "失败")).toBe(
+      "已经选好见面城市了，去看结果或换个城市看看",
+    );
+    expect(getApiErrorMessage("SHARED_RESULT_REQUIRED", "失败")).toBe(
+      "先完成第一次见面安排，再换个城市看看",
+    );
+    expect(getApiErrorMessage("PREVIEW_EXPIRED", "失败")).toBe(
+      "这份预览已经过期，请重新生成一次",
+    );
   });
 
   it("uses fallback copy for unknown errors", () => {

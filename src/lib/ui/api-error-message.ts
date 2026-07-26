@@ -17,6 +17,9 @@ const apiErrorMessages: Record<string, string> = {
     "方案没通过对大家更公平的核对，请再点一次「开始见面」",
   PUBLICATION_GUARD_REJECTED:
     "方案没通过对大家更公平的核对，请再点一次「开始见面」",
+  SHARED_RESULT_EXISTS: "已经选好见面城市了，去看结果或换个城市看看",
+  SHARED_RESULT_REQUIRED: "先完成第一次见面安排，再换个城市看看",
+  PREVIEW_EXPIRED: "这份预览已经过期，请重新生成一次",
 };
 
 export function getApiErrorMessage(
