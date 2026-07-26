@@ -8,6 +8,12 @@ import {
   PolicyLimitExceededError,
   rankEligibleCities,
 } from "@/lib/recommendation/policy";
+import {
+  policyV2Fixture,
+  policyV2ParityQuotes,
+  policyV2ParitySavingSelection,
+  policyV2Quote,
+} from "./fixtures/publication-policy-v2";
 
 const arrivalDate = "2026-08-15";
 
@@ -60,6 +66,30 @@ describe("directFirstEligible", () => {
 });
 
 describe("buildSavingScheme", () => {
+  it("matches the shared PostgreSQL saving fixture", () => {
+    const quotes = policyV2ParityQuotes.map((input) => {
+      const fixture = policyV2Quote(input);
+      return quote(fixture.quoteId, fixture.participantId, {
+        id: fixture.id,
+        cityCode: fixture.cityCode,
+        mode: fixture.mode,
+        searchDate: fixture.searchDate,
+        priceCny: fixture.priceCny,
+        departAt: fixture.departAt,
+        arriveAt: fixture.arriveAt,
+        durationMinutes: fixture.durationMinutes,
+        transferCount: fixture.transferCount,
+        isDirect: fixture.isDirect,
+      });
+    });
+
+    expect(buildSavingScheme(policyV2Fixture.participantIds, quotes)?.quoteIdsByParticipant)
+      .toEqual(Object.fromEntries(policyV2ParitySavingSelection.map((selection) => [
+        selection.participantId,
+        selection.quoteId,
+      ])));
+  });
+
   it("selects the cheapest direct quote even when a faster quote is within 110 percent", () => {
     const scheme = buildSavingScheme(["p1"], [
       quote("normal-train", "p1", {
