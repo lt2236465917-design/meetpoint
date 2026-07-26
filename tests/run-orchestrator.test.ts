@@ -402,8 +402,10 @@ describe("RunOrchestrator", () => {
   it("materializes an approved alternative privately without calling automatic publication", async () => {
     const current = { ...run("validating"), kind: "alternative" as const };
     const store = repository({ current, quotes: [quote("p1", "wuhan"), quote("p2", "wuhan")] });
-    const materialize = vi.fn(async () => undefined);
+    const listVerifiedQuotes = vi.fn(async () => store.quotes);
+    const materialize = vi.fn(async () => "55555555-5555-4555-8555-555555555555");
     const publish = vi.fn(async () => undefined);
+    store.listVerifiedQuotes = listVerifiedQuotes;
     store.getLatestApprovedProposal = async () => ({
       id: "proposal-1",
       version: 1,
@@ -423,7 +425,8 @@ describe("RunOrchestrator", () => {
 
     await expect(new RunOrchestrator({ repository: store }).advanceRun("run-1"))
       .resolves.toBe("awaiting_host_confirmation");
-    expect(materialize).toHaveBeenCalledOnce();
+    expect(listVerifiedQuotes).not.toHaveBeenCalled();
+    expect(materialize).toHaveBeenCalledWith("run-1", "proposal-1");
     expect(publish).not.toHaveBeenCalled();
   });
 });

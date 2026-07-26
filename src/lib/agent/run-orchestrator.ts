@@ -280,13 +280,10 @@ export class RunOrchestrator {
   }
 
   private async publish(run: StoredRun): Promise<RunStatus> {
-    const [proposal, quotes] = await Promise.all([
-      this.repository.getLatestApprovedProposal(run.id),
-      this.repository.listVerifiedQuotes(run.id),
-    ]);
+    const proposal = await this.repository.getLatestApprovedProposal(run.id);
     if (!proposal) return this.transition(run, "failed", { errorCode: "AGENT_PROPOSAL_INVALID" });
     try {
-      await this.repository.materializeApprovedProposal({ run, proposal, quotes });
+      await this.repository.materializeApprovedProposal(run.id, proposal.id);
       if (run.kind === "alternative") {
         return this.transition(run, "awaiting_host_confirmation");
       }

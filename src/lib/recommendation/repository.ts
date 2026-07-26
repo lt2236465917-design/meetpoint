@@ -145,11 +145,7 @@ export interface RunOrchestratorRepository extends RecommendationRepository, Age
   listRunTasks(runId: string): Promise<StoredRouteTask[]>;
   listVerifiedQuotes(runId: string): Promise<VerifiedQuote[]>;
   getLatestApprovedProposal(runId: string): Promise<ApprovedProposal | null>;
-  materializeApprovedProposal(input: {
-    run: StoredRecommendationRun;
-    proposal: ApprovedProposal;
-    quotes: readonly VerifiedQuote[];
-  }): Promise<void>;
+  materializeApprovedProposal(runId: string, proposalId: string): Promise<string>;
   publishSharedResult(runId: string, proposalId: string): Promise<void>;
 }
 
@@ -649,75 +645,15 @@ export class SupabaseRecommendationRepository
     return { id: parsed.data.id, version: parsed.data.version, output: output.data };
   }
 
-  async materializeApprovedProposal(input: {
-    run: StoredRecommendationRun;
-    proposal: ApprovedProposal;
-    quotes: readonly VerifiedQuote[];
-  }): Promise<void> {
-    const { data: existing, error: existingError } = await createServiceSupabaseClient()
-      .from("recommendation_results")
-      .select("id")
-      .eq("run_id", input.run.id)
-      .eq("proposal_id", input.proposal.id)
-      .maybeSingle();
-    if (existingError) throw new Error(`Failed to load draft recommendation result: ${existingError.message}`);
-    if (existing) return;
-
-    const quotesByParticipant = new Map<string, Map<string, VerifiedQuote>>();
-    for (const quote of input.quotes) {
-      const participantQuotes = quotesByParticipant.get(quote.participantId) ?? new Map<string, VerifiedQuote>();
-      participantQuotes.set(quote.quoteId, quote);
-      quotesByParticipant.set(quote.participantId, participantQuotes);
-    }
-    const schemeRows = input.proposal.output.schemes.map((scheme) => {
-      const selected = input.run.participantIds.map((participantId) => {
-        const quote = quotesByParticipant
-          .get(participantId)
-          ?.get(scheme.quoteIdsByParticipant[participantId] ?? "");
-        if (!quote || quote.cityCode !== input.proposal.output.cityCode) {
-          throw new Error("Approved proposal references invalid verified quote");
-        }
-        return quote;
-      });
-      return {
-        id: randomUUID(),
-        result_id: "",
-        kind: scheme.kind,
-        total_fare_cny: scheme.totalFareCny,
-        total_duration_minutes: selected.reduce((sum, quote) => sum + quote.durationMinutes, 0),
-        latest_arrival_at: selected.map((quote) => quote.arriveAt).sort().at(-1),
-        team_transfer_count: selected.reduce((sum, quote) => sum + quote.transferCount, 0),
-        selected,
-      };
+  async materializeApprovedProposal(runId: string, proposalId: string): Promise<string> {
+    const { data, error } = await createServiceSupabaseClient().rpc("materialize_recommendation_result", {
+      p_run_id: runId,
+      p_proposal_id: proposalId,
     });
-    if (schemeRows.some((scheme) => !scheme.latest_arrival_at)) {
-      throw new Error("Approved proposal has empty scheme");
+    if (error || typeof data !== "string" || !z.uuid().safeParse(data).success) {
+      throw new Error("Failed to materialize approved recommendation result");
     }
-    const resultId = randomUUID();
-    const supabase = createServiceSupabaseClient();
-    const { error: resultError } = await supabase.from("recommendation_results").insert({
-      id: resultId, plan_id: input.run.planId, run_id: input.run.id, proposal_id: input.proposal.id,
-      city_code: input.proposal.output.cityCode, explanation_zh: input.proposal.output.explanationZh, is_shared: false,
-    });
-    if (resultError) throw new Error("Failed to materialize approved recommendation result");
-    const { error: schemesError } = await supabase.from("recommendation_schemes").insert(
-      schemeRows.map((scheme) => ({
-        id: scheme.id,
-        result_id: resultId,
-        kind: scheme.kind,
-        total_fare_cny: scheme.total_fare_cny,
-        total_duration_minutes: scheme.total_duration_minutes,
-        latest_arrival_at: scheme.latest_arrival_at,
-        team_transfer_count: scheme.team_transfer_count,
-      })),
-    );
-    if (schemesError) throw new Error("Failed to materialize approved recommendation schemes");
-    const { error: routesError } = await supabase.from("recommendation_scheme_routes").insert(
-      schemeRows.flatMap((scheme) => scheme.selected.map((quote) => ({
-        scheme_id: scheme.id, participant_id: quote.participantId, verified_quote_id: quote.id,
-      }))),
-    );
-    if (routesError) throw new Error("Failed to materialize approved recommendation routes");
+    return data;
   }
 
   async publishSharedResult(runId: string, proposalId: string): Promise<void> {
