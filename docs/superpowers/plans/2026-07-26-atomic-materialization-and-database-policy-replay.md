@@ -69,7 +69,7 @@
 - Create: `tests/postgres/database.ts`
 - Create: `tests/postgres/schema-smoke.test.ts`
 
-- [ ] **Step 1: Define the rule and directory contract before practice**
+- [x] **Step 1: Define the rule and directory contract before practice**
 
 Add the permanent rule beside the current publication guardrails:
 
@@ -83,7 +83,7 @@ Add to Structure:
 - `tests/postgres/`: executable disposable-PostgreSQL behavior tests for migrations, transactions, policy replay, concurrency, and database roles. They run only through `npm run test:postgres` with a guarded local `TEST_DATABASE_URL`; default unit tests never access a database.
 ```
 
-- [ ] **Step 2: Add the isolated test command and client**
+- [x] **Step 2: Add the isolated test command and client**
 
 Run:
 
@@ -99,7 +99,7 @@ Add:
 
 `vitest.postgres.config.ts` includes only `tests/postgres/**/*.test.ts`, runs serially, and uses a generous per-test timeout. Exclude that directory from `vitest.config.ts` so `npm run test` remains hermetic.
 
-- [ ] **Step 3: Write the guarded harness smoke test**
+- [x] **Step 3: Write the guarded harness smoke test**
 
 `tests/postgres/database.ts` must refuse to reset unless all are true:
 
@@ -112,7 +112,7 @@ The reset helper creates local `anon`, `authenticated`, and `service_role` NOLOG
 
 Create `schema-smoke.test.ts` to assert canonical schema execution and the current core tables/functions.
 
-- [ ] **Step 4: Verify the harness guard fails safely**
+- [x] **Step 4: Verify the harness guard fails safely**
 
 Run without a URL:
 
@@ -122,7 +122,7 @@ npm run test:postgres -- tests/postgres/schema-smoke.test.ts
 
 Expected: FAIL before any database mutation with `TEST_DATABASE_URL is required`.
 
-- [ ] **Step 5: Run against a disposable local database**
+- [x] **Step 5: Run against a disposable local database**
 
 Provision a fresh local PostgreSQL database whose name ends in `_test`, then run:
 
@@ -132,7 +132,7 @@ TEST_DATABASE_URL='<local disposable URL>' npm run test:postgres -- tests/postgr
 
 Expected: PASS. The current workstation has no `supabase`, `docker`, `psql`, or `pg_isready`; if no local server is provisioned, stop here and report the prerequisite instead of substituting static tests.
 
-- [ ] **Step 6: Run the default suite and commit**
+- [x] **Step 6: Run the default suite and commit**
 
 ```bash
 npm run test

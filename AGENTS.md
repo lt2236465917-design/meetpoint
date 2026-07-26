@@ -20,6 +20,7 @@ This project is a mobile-usable Web app for multi-person cross-city meeting plan
 - Use English for code, files, variables, and commit messages.
 - Keep supplier facts, fare arithmetic, date filtering, evidence validation, and publication guardrails deterministic. The Calculation Agent may choose the winning city only from verified quote IDs; see `docs/superpowers/specs/2026-07-15-multi-agent-recommendation-design.md`.
 - Treat gateway `quoteId` as a physical evidence identifier that may repeat across participants sharing the same route. Materialization and validation must resolve verified evidence by `(participantId, quoteId)`, never by a global quote-ID map.
+- Materialize recommendation result, scheme, and route rows only through one database transaction. The database must derive aggregates and replay the run's supported deterministic policy from persisted verified evidence before materialization and immediately before sharing; application-approved totals are assertions, not publication facts.
 - Calculation model input must not include `coverageComplete`, `deterministicPolicyResult`, or any other preselected winner. When the model selects the deterministic winning city, canonicalize schemes, totals, and comparison evidence from `rankEligibleCities` before validation; never invent or mutate supplier quote facts.
 - Treat results as shared team decisions: publish one city with saving and fast schemes, show per-participant travel details, and do not use average fare as a UI decision metric.
 - Saving means the exact lowest verified fare inside each participant's direct-first eligible set across accepted modes (including direct normal train); equal-fare ties use transfers, duration, then quote ID. Fast remains the fastest direct-first team combination within 130% of the saving total. Policy version: `2026-07-19.v2`.
@@ -48,6 +49,7 @@ This project is a mobile-usable Web app for multi-person cross-city meeting plan
 - `src/lib/travel/`: normalized gateway request contract, authenticated server client, and booking-URL validation.
 - `services/travel-provider-gateway/`: isolated server-side travel-provider access; it must follow the travel gateway ownership and safety rules above.
 - `src/lib/recommendation/`: deterministic policy, validators, query-matrix execution, persistence, and compatibility entry points.
+- `tests/postgres/`: executable disposable-PostgreSQL behavior tests for migrations, transactions, policy replay, concurrency, and database roles. They run only through `npm run test:postgres` with a guarded local `TEST_DATABASE_URL`; default unit tests never access a database.
 - `src/lib/city/`: city search, distance, and candidate generation.
 - `src/lib/ai/`: server-only DeepSeek client and model configuration used behind `AgentModel`.
 - `src/lib/supabase/`: browser anon client and server-only service-role client.
