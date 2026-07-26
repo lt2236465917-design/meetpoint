@@ -13,6 +13,7 @@ import { findCityByCode } from "@/data/cities";
 import { arrivalDateInShanghai } from "@/lib/recommendation/date";
 import { buildRouteTasks } from "@/lib/recommendation/query-matrix";
 import { rankEligibleCities } from "@/lib/recommendation/policy";
+import { staleAfterForStatus } from "@/lib/recommendation/run-deadlines";
 import type { StoredRouteTask } from "@/lib/recommendation/repository";
 import { validateRecommendationPolicy } from "@/lib/recommendation/validators";
 import { generateToken, hashToken, verifyToken } from "@/lib/security/tokens";
@@ -49,6 +50,7 @@ type RunRow = {
   requestedByParticipantId: string | null;
   startedAt: string;
   completedAt: string | null;
+  staleAfter: string | null;
 };
 
 type ProposalRow = {
@@ -122,7 +124,9 @@ function state(): StoreState {
   return next;
 }
 
-function timestamp() { return new Date().toISOString(); }
+let fallbackNow: (() => Date) | null = null;
+function nowDate() { return fallbackNow?.() ?? new Date(); }
+function timestamp() { return nowDate().toISOString(); }
 function id(prefix: string) { return `${prefix}_${randomUUID()}`; }
 function latestRun(planId: string) {
   return state().runs.filter((run) => run.planId === planId && run.kind === "automatic")
@@ -138,6 +142,17 @@ function currentSharedResult(planId: string) {
   return state().results.find((result) =>
     result.planId === planId && result.isShared && !result.supersededAt,
   ) ?? null;
+}
+
+function activeRunForPlan(planId: string) {
+  return state().runs.find((run) => run.planId === planId && activeStatuses.has(run.status)) ?? null;
+}
+
+function expireActiveRun(run: RunRow) {
+  run.status = "failed";
+  run.errorCode = "RUN_STALE_EXPIRED";
+  run.completedAt = timestamp();
+  run.staleAfter = null;
 }
 
 function resultPayload(result: ResultRow) {
@@ -218,6 +233,11 @@ function publicProgress(run: RunRow | null) {
 
 export function resetFallbackStoreForTests() {
   globalStore[globalKey] = undefined;
+  fallbackNow = null;
+}
+
+export function setFallbackNowForTests(now: (() => Date) | null) {
+  fallbackNow = now;
 }
 
 export async function createFallbackPlan(input: { title: string; arrivalDate: string; participantLimit: number }) {
@@ -265,6 +285,7 @@ function createMatrix(plan: PlanRow, kind: RunRow["kind"], requestedCityCode: st
     id: id("run"), planId: plan.id, status: "pending", traceId: randomUUID(), retryAfter: null,
     errorCode: null, policyVersion: POLICY_VERSION, kind, requestedCityCode, requestedByParticipantId,
     startedAt: timestamp(), completedAt: null,
+    staleAfter: staleAfterForStatus("pending", nowDate()),
   };
   state().runs.push(run);
   recordEvent(run, "run_created");
@@ -281,9 +302,18 @@ export async function calculateFallbackRecommendations(code: string) {
   const plan = planFor(code);
   if (!plan) throw new Error("PLAN_NOT_FOUND");
   if (participantsFor(plan.id).length < 2) throw new Error("NOT_ENOUGH_PARTICIPANTS");
-  if (state().runs.some((run) => run.planId === plan.id && activeStatuses.has(run.status))) throw new Error("CALCULATION_IN_PROGRESS");
+  if (currentSharedResult(plan.id)) throw new Error("SHARED_RESULT_EXISTS");
+  const active = activeRunForPlan(plan.id);
+  if (active?.staleAfter && new Date(active.staleAfter).getTime() <= nowDate().getTime()) {
+    expireActiveRun(active);
+  } else if (active) {
+    if (active.kind === "automatic") {
+      return { disposition: "resume_existing" as const, runId: active.id, status: active.status };
+    }
+    throw new Error("CALCULATION_IN_PROGRESS");
+  }
   const run = createMatrix(plan, "automatic", null, null);
-  return { runId: run.id, status: "pending" as const };
+  return { disposition: "created" as const, runId: run.id, status: "pending" as const };
 }
 
 export async function createFallbackAlternativePreview(input: { code: string; participantToken: string; cityCode: string }) {
@@ -291,8 +321,22 @@ export async function createFallbackAlternativePreview(input: { code: string; pa
   if (!verified.ok) throw new Error(verified.error);
   const plan = planFor(input.code)!;
   if (!findCityByCode(input.cityCode)) throw new Error("UNSUPPORTED_CITY");
+  if (!currentSharedResult(plan.id)) throw new Error("SHARED_RESULT_REQUIRED");
+  const active = activeRunForPlan(plan.id);
+  if (active?.staleAfter && new Date(active.staleAfter).getTime() <= nowDate().getTime()) {
+    expireActiveRun(active);
+  } else if (active) {
+    if (
+      active.kind === "alternative"
+      && active.requestedByParticipantId === verified.participantId
+      && active.requestedCityCode === input.cityCode
+    ) {
+      return { disposition: "resume_existing" as const, runId: active.id, status: active.status };
+    }
+    throw new Error("CALCULATION_IN_PROGRESS");
+  }
   const run = createMatrix(plan, "alternative", input.cityCode, verified.participantId);
-  return { runId: run.id, status: "pending" as const };
+  return { disposition: "created" as const, runId: run.id, status: "pending" as const };
 }
 
 export function seedFallbackVerifiedQuotes(runId: string, quotes: readonly VerifiedQuote[]) {

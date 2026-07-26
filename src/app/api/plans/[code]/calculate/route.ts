@@ -25,13 +25,18 @@ export async function POST(
       participantToken: req.headers.get("x-participant-token") ?? "",
     });
     return NextResponse.json(result, {
-      status: "status" in result && result.status === "pending" ? 202 : 200,
+      status: result.disposition === "created" ? 202 : 200,
     });
   } catch (error) {
     const code = error instanceof Error ? error.message : "CALCULATION_FAILED";
+    const conflictCodes = new Set([
+      "CALCULATION_IN_PROGRESS",
+      "SHARED_RESULT_EXISTS",
+      "SHARED_RESULT_REQUIRED",
+    ]);
     return NextResponse.json(
       { error: code },
-      { status: code === "CALCULATION_IN_PROGRESS" ? 409 : 400 },
+      { status: conflictCodes.has(code) ? 409 : 400 },
     );
   }
 }

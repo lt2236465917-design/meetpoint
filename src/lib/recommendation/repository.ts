@@ -64,6 +64,8 @@ export type PreparedRun =
   | { disposition: "created"; runId: string; status: "pending"; taskIds: string[] }
   | { disposition: "resume_existing"; runId: string; status: ActiveRunStatus; taskIds: [] };
 
+export type RunCreationResult = Pick<PreparedRun, "disposition" | "runId" | "status">;
+
 export class RunCreationError extends Error {
   constructor(readonly code: RunCreationErrorCode) {
     super(code);

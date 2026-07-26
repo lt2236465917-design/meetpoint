@@ -9,6 +9,7 @@ import { AgentModelError } from "@/lib/agent/model";
 import {
   SupabaseRecommendationRepository,
   type RunOrchestratorRepository as Repository,
+  type RunCreationResult,
   type StoredRecommendationRun,
   type StoredRouteTask,
 } from "@/lib/recommendation/repository";
@@ -280,7 +281,7 @@ type StartAutomaticRunInput = {
   participantToken: string;
 };
 
-export async function startAutomaticRun(input: StartAutomaticRunInput): Promise<{ runId: string; status: "pending" }> {
+export async function startAutomaticRun(input: StartAutomaticRunInput): Promise<RunCreationResult> {
   const verified = await verifyParticipantCanCalculatePlan({
     code: input.code,
     participantToken: input.participantToken,
@@ -308,9 +309,8 @@ export async function startAutomaticRun(input: StartAutomaticRunInput): Promise<
   const manualAddCityCodes = (candidates ?? []).filter((candidate) => candidate.source === "manual_add" && candidate.enabled).map((candidate) => candidate.city_code);
   const manualExcludeCityCodes = (candidates ?? []).filter((candidate) => candidate.source === "manual_exclude").map((candidate) => candidate.city_code);
   const repository = new SupabaseRecommendationRepository();
-  try {
-    const manager = new ManagerAgent(repository);
-    const prepared = await manager.prepare({
+  const manager = new ManagerAgent(repository);
+  const prepared = await manager.prepare({
       planId: plan.id,
       arrivalDate: plan.meeting_date,
       participants: participants.map((participant) => ({
@@ -321,12 +321,12 @@ export async function startAutomaticRun(input: StartAutomaticRunInput): Promise<
       })),
       manualAddCityCodes,
       manualExcludeCityCodes,
-    });
-    return { runId: prepared.runId, status: "pending" };
-  } catch (error) {
-    if (error instanceof Error && /duplicate key|unique/i.test(error.message)) throw new Error("CALCULATION_IN_PROGRESS");
-    throw error;
-  }
+  });
+  return {
+    disposition: prepared.disposition,
+    runId: prepared.runId,
+    status: prepared.status,
+  };
 }
 
 export async function advanceRun(input: { runId: string; planId: string }) {

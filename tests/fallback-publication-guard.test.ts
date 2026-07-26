@@ -59,6 +59,54 @@ async function completeAutomatic(input: Awaited<ReturnType<typeof setup>>) {
 describe("fallback publication guard", () => {
   beforeEach(() => resetFallbackStoreForTests());
 
+  it("requires a shared result before creating an alternative preview", async () => {
+    const input = await setup();
+
+    await expect(createFallbackAlternativePreview({
+      code: input.created.code,
+      participantToken: input.second.editToken,
+      cityCode: "wuhan",
+    })).rejects.toThrow("SHARED_RESULT_REQUIRED");
+  });
+
+  it("blocks a new automatic run after a shared result exists", async () => {
+    const input = await setup();
+    await completeAutomatic(input);
+
+    await expect(calculateFallbackRecommendations(input.created.code))
+      .rejects.toThrow("SHARED_RESULT_EXISTS");
+  });
+
+  it("resumes only the same participant and city preview", async () => {
+    const input = await setup();
+    await completeAutomatic(input);
+    const preview = await createFallbackAlternativePreview({
+      code: input.created.code,
+      participantToken: input.second.editToken,
+      cityCode: "wuhan",
+    });
+
+    await expect(createFallbackAlternativePreview({
+      code: input.created.code,
+      participantToken: input.second.editToken,
+      cityCode: "wuhan",
+    })).resolves.toEqual({
+      disposition: "resume_existing",
+      runId: preview.runId,
+      status: "pending",
+    });
+    await expect(createFallbackAlternativePreview({
+      code: input.created.code,
+      participantToken: input.first.editToken,
+      cityCode: "wuhan",
+    })).rejects.toThrow("CALCULATION_IN_PROGRESS");
+    await expect(createFallbackAlternativePreview({
+      code: input.created.code,
+      participantToken: input.second.editToken,
+      cityCode: "nanjing",
+    })).rejects.toThrow("CALCULATION_IN_PROGRESS");
+  });
+
   it("ends missing real coverage as incomplete without exposing a shared result", async () => {
     const input = await setup();
     const started = await calculateFallbackRecommendations(input.created.code);
@@ -107,17 +155,10 @@ describe("fallback publication guard", () => {
     expect(readFallbackPlan(input.created.code)?.latestSharedResult).toMatchObject({ cityCode: "wuhan", isShared: true });
   });
 
-  it("rejects confirming an alternative when there is no shared result to replace", async () => {
+  it("rejects creating an alternative when there is no shared result to replace", async () => {
     const input = await setup();
-    const preview = await createFallbackAlternativePreview({ code: input.created.code, participantToken: input.second.editToken, cityCode: "wuhan" });
-    await advanceFallbackRun({ runId: preview.runId, planId: input.planId });
-    seedFallbackVerifiedQuotes(preview.runId, [quote(input.first.participantId, "wuhan", "1"), quote(input.second.participantId, "wuhan", "2")]);
-    await advanceFallbackRun({ runId: preview.runId, planId: input.planId });
-    await advanceFallbackRun({ runId: preview.runId, planId: input.planId });
-    await advanceFallbackRun({ runId: preview.runId, planId: input.planId });
-
-    await expect(confirmFallbackAlternative({ runId: preview.runId, hostToken: input.created.hostToken }))
-      .rejects.toThrow("PUBLICATION_GUARD_REJECTED");
+    await expect(createFallbackAlternativePreview({ code: input.created.code, participantToken: input.second.editToken, cityCode: "wuhan" }))
+      .rejects.toThrow("SHARED_RESULT_REQUIRED");
     expect(readFallbackPlan(input.created.code)?.latestSharedResult).toBeNull();
   });
 });

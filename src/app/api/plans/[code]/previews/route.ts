@@ -24,11 +24,16 @@ export async function POST(
       cityCode: city.code,
       cityName: city.name,
     });
-    return NextResponse.json(result, { status: 202 });
+    return NextResponse.json(result, {
+      status: result.disposition === "created" ? 202 : 200,
+    });
   } catch (error) {
     const errorCode = error instanceof Error ? error.message : "PREVIEW_CREATE_FAILED";
     const status = errorCode === "PLAN_NOT_FOUND" ? 404
-      : errorCode === "CALCULATION_IN_PROGRESS" || errorCode === "PARTICIPANT_LIMIT_NOT_REACHED" ? 409
+      : errorCode === "CALCULATION_IN_PROGRESS"
+          || errorCode === "SHARED_RESULT_EXISTS"
+          || errorCode === "SHARED_RESULT_REQUIRED"
+          || errorCode === "PARTICIPANT_LIMIT_NOT_REACHED" ? 409
         : errorCode === "INVALID_PARTICIPANT_TOKEN" ? 403
           : errorCode === "PARTICIPANT_TOKEN_REQUIRED" ? 401
             : 400;

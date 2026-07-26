@@ -91,7 +91,12 @@ export function AlternativeCityFlow({
       }
       const nextRunId = json.runId as string;
       setRunId(nextRunId);
-      setPreview({ runId: nextRunId, status: "pending", pendingGroups: 0, result: null });
+      setPreview({
+        runId: nextRunId,
+        status: json.status as AlternativePreviewData["status"],
+        pendingGroups: 0,
+        result: null,
+      });
       window.history.replaceState(null, "", `/p/${code}/alternatives?runId=${encodeURIComponent(nextRunId)}`);
       setMessage("正在查询这个城市的真实票价。");
     } catch {

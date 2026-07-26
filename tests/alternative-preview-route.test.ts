@@ -17,7 +17,9 @@ describe("alternative preview routes", () => {
   });
 
   it("lets a participant create a one-city preview with a canonical city pair", async () => {
-    mocks.createAlternativePreview.mockResolvedValue({ runId: "run-1", status: "pending" });
+    mocks.createAlternativePreview.mockResolvedValue({
+      disposition: "created", runId: "run-1", status: "pending",
+    });
     const { POST } = await import("@/app/api/plans/[code]/previews/route");
 
     const response = await POST(new Request("http://localhost/api/plans/ABC123/previews", {
@@ -27,11 +29,43 @@ describe("alternative preview routes", () => {
     }), { params: Promise.resolve({ code: "ABC123" }) });
 
     expect(response.status).toBe(202);
-    await expect(response.json()).resolves.toEqual({ runId: "run-1", status: "pending" });
+    await expect(response.json()).resolves.toEqual({
+      disposition: "created", runId: "run-1", status: "pending",
+    });
     expect(mocks.createAlternativePreview).toHaveBeenCalledWith({
       code: "ABC123", participantToken: "participant-a", cityCode: "wuhan", cityName: "武汉",
     });
   });
+
+  it("returns 200 when the same participant resumes the same preview", async () => {
+    mocks.createAlternativePreview.mockResolvedValue({
+      disposition: "resume_existing", runId: "run-1", status: "collecting",
+    });
+    const { POST } = await import("@/app/api/plans/[code]/previews/route");
+    const response = await POST(new Request("http://localhost/api/plans/ABC123/previews", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-participant-token": "participant-a" },
+      body: JSON.stringify({ cityCode: "wuhan", cityName: "武汉" }),
+    }), { params: Promise.resolve({ code: "ABC123" }) });
+
+    expect(response.status).toBe(200);
+  });
+
+  it.each(["SHARED_RESULT_REQUIRED", "CALCULATION_IN_PROGRESS"])(
+    "maps %s to a safe conflict",
+    async (errorCode) => {
+      mocks.createAlternativePreview.mockRejectedValue(new Error(errorCode));
+      const { POST } = await import("@/app/api/plans/[code]/previews/route");
+      const response = await POST(new Request("http://localhost/api/plans/ABC123/previews", {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-participant-token": "participant-a" },
+        body: JSON.stringify({ cityCode: "wuhan", cityName: "武汉" }),
+      }), { params: Promise.resolve({ code: "ABC123" }) });
+
+      expect(response.status).toBe(409);
+      await expect(response.json()).resolves.toEqual({ error: errorCode });
+    },
+  );
 
   it.each([
     { cityCode: "invented", cityName: "不存在" },

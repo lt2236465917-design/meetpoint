@@ -5,7 +5,10 @@ import {
   createFallbackAlternativePreview,
   readFallbackPrivatePreview,
 } from "@/lib/fallback/mvp-store";
-import { SupabaseRecommendationRepository } from "@/lib/recommendation/repository";
+import {
+  SupabaseRecommendationRepository,
+  type RunCreationResult,
+} from "@/lib/recommendation/repository";
 import { verifyParticipantCanCalculatePlan } from "@/lib/security/participant-calculation";
 import { verifyToken } from "@/lib/security/tokens";
 import {
@@ -30,7 +33,7 @@ export async function createAlternativePreview(input: {
   participantToken: string;
   cityCode: string;
   cityName: string;
-}): Promise<{ runId: string; status: "pending" }> {
+}): Promise<RunCreationResult> {
   const city = findCityByCode(input.cityCode);
   if (!city || city.name !== input.cityName) throw new Error("UNSUPPORTED_CITY");
   const verified = await verifyParticipantCanCalculatePlan({
@@ -63,9 +66,8 @@ export async function createAlternativePreview(input: {
     throw new Error("NOT_ENOUGH_PARTICIPANTS");
   }
 
-  try {
-    const manager = new ManagerAgent(new SupabaseRecommendationRepository());
-    const prepared = await manager.prepare({
+  const manager = new ManagerAgent(new SupabaseRecommendationRepository());
+  const prepared = await manager.prepare({
       planId: plan.id,
       arrivalDate: plan.meeting_date,
       participants: participants.map((participant) => ({
@@ -79,14 +81,12 @@ export async function createAlternativePreview(input: {
         cityName: city.name,
         requestedByParticipantId: verified.participantId,
       },
-    });
-    return { runId: prepared.runId, status: "pending" };
-  } catch (error) {
-    if (error instanceof Error && /duplicate key|unique/i.test(error.message)) {
-      throw new Error("CALCULATION_IN_PROGRESS");
-    }
-    throw error;
-  }
+  });
+  return {
+    disposition: prepared.disposition,
+    runId: prepared.runId,
+    status: prepared.status,
+  };
 }
 
 export async function readAlternativePreview(input: {

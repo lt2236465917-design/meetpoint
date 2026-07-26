@@ -23,7 +23,9 @@ describe("POST /api/plans/[code]/calculate", () => {
     mocks.verifyParticipantCanCalculatePlan.mockResolvedValue({
       ok: true, planId: "plan-1", participantId: "participant-1",
     });
-    mocks.calculatePlanRecommendations.mockResolvedValue({ runId: "run-1", status: "pending" });
+    mocks.calculatePlanRecommendations.mockResolvedValue({
+      disposition: "created", runId: "run-1", status: "pending",
+    });
 
     const { POST } = await import("@/app/api/plans/[code]/calculate/route");
     const response = await POST(
@@ -34,10 +36,43 @@ describe("POST /api/plans/[code]/calculate", () => {
     );
 
     expect(response.status).toBe(202);
-    await expect(response.json()).resolves.toEqual({ runId: "run-1", status: "pending" });
+    await expect(response.json()).resolves.toEqual({
+      disposition: "created", runId: "run-1", status: "pending",
+    });
     expect(mocks.calculatePlanRecommendations).toHaveBeenCalledWith({
       code: "ABC123", participantToken: "edit-token",
     });
+  });
+
+  it("returns 200 when an authorized participant resumes existing work", async () => {
+    mocks.verifyParticipantCanCalculatePlan.mockResolvedValue({
+      ok: true, planId: "plan-1", participantId: "participant-1",
+    });
+    mocks.calculatePlanRecommendations.mockResolvedValue({
+      disposition: "resume_existing", runId: "run-1", status: "collecting",
+    });
+
+    const { POST } = await import("@/app/api/plans/[code]/calculate/route");
+    const response = await POST(new Request("http://localhost/api/plans/ABC123/calculate", {
+      method: "POST", headers: { "x-participant-token": "edit-token" },
+    }), { params: Promise.resolve({ code: "ABC123" }) });
+
+    expect(response.status).toBe(200);
+  });
+
+  it("maps an existing shared result to a safe conflict", async () => {
+    mocks.verifyParticipantCanCalculatePlan.mockResolvedValue({
+      ok: true, planId: "plan-1", participantId: "participant-1",
+    });
+    mocks.calculatePlanRecommendations.mockRejectedValue(new Error("SHARED_RESULT_EXISTS"));
+
+    const { POST } = await import("@/app/api/plans/[code]/calculate/route");
+    const response = await POST(new Request("http://localhost/api/plans/ABC123/calculate", {
+      method: "POST", headers: { "x-participant-token": "edit-token" },
+    }), { params: Promise.resolve({ code: "ABC123" }) });
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toEqual({ error: "SHARED_RESULT_EXISTS" });
   });
 
   it("does not create a run when participant authorization fails", async () => {
