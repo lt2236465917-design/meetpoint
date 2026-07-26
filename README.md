@@ -8,6 +8,8 @@ Tasks 1–14 are complete against the [2026-07-15 Multi-Agent design](docs/super
 
 Local policy `2026-07-19.v2` defines saving as the exact lowest verified fare in each participant's direct-first accepted-mode set (including direct normal train) and keeps fast within 130% of the saving total. Supabase environments must apply `202607190001_recommendation_policy_v2.sql` before new durable runs use v2; the migration is not implied by building the app.
 
+Repository Audit Batch A is implemented locally: complete FlyAI itinerary normalization, API-only public projection, atomic run creation, per-route recovery exhaustion, and bounded run/preview expiry. The hardening migration is `202607210001_publication_safety_and_run_recovery.sql`; its remote state was not queried or applied during the local batch. Batch B and Batch C remain audit backlog only—see [document authority](docs/superpowers/README.md).
+
 ## Scripts
 
 - `npm run dev`
@@ -31,11 +33,11 @@ Local policy `2026-07-19.v2` defines saving as the exact lowest verified fare in
 - `POST /api/plans/[code]/participants`: creates a participant and returns `{ participantId, editToken }`.
 - `GET /api/plans/[code]/candidates`: returns stored candidate city controls for a plan.
 - `POST /api/plans/[code]/candidates`: currently returns `CANDIDATE_EDITING_UNAVAILABLE`.
-- `POST /api/plans/[code]/calculate`: creates a bounded automatic run and returns HTTP 202 `{ runId, status: "pending" }`; requires `x-participant-token`.
+- `POST /api/plans/[code]/calculate`: creates a bounded automatic run (`202`, `disposition: "created"`) or resumes the identical active automatic run (`200`, `disposition: "resume_existing"`); requires `x-participant-token`. Once a shared result exists, automatic creation fails with `SHARED_RESULT_EXISTS`.
 - `POST /api/plans/[code]/runs/[runId]/advance`: advances at most one state transition or one bounded query batch; requires `x-participant-token`.
-- `POST /api/plans/[code]/previews`: creates a one-city alternative run from `{ cityCode, cityName }`; requires `x-participant-token` and returns HTTP 202.
+- `POST /api/plans/[code]/previews`: after the first shared result exists, creates a one-city alternative run from `{ cityCode, cityName }` (`202 created`) or resumes the same participant/city preview (`200 resume_existing`); requires `x-participant-token`.
 - `GET /api/plans/[code]/previews/[runId]`: reads private progress and preview data only for the requesting participant or host; unauthorized callers receive 404.
-- `POST /api/plans/[code]/previews/[runId]/confirm`: atomically replaces the current shared result; authority comes only from `x-host-token` and repeated successful confirmation is idempotent.
+- `POST /api/plans/[code]/previews/[runId]/confirm`: atomically replaces the current shared result within the seven-day confirmation window; authority comes only from `x-host-token`, expired previews return `PREVIEW_EXPIRED`, and repeated successful confirmation is idempotent.
 
 ## Core Modules
 
@@ -48,7 +50,7 @@ Local policy `2026-07-19.v2` defines saving as the exact lowest verified fare in
 - `src/lib/recommendation/policy.ts` and `validators.ts`: deterministic direct-first saving/fast schemes, unique-city ranking, evidence replay, and bounded policy evaluation.
 - `src/lib/recommendation/repository.ts`: durable run persistence and guarded result materialization. A gateway `quoteId` may repeat when multiple participants share a physical route, so selected evidence is resolved by participant plus quote ID rather than a global quote-ID lookup.
 - `src/lib/agent/`: provider-neutral model boundary plus Manager, Query, Calculation, Supervisor, Fallback, tracing, and bounded orchestration modules.
-- `src/lib/agent/run-orchestrator.ts`: creates and incrementally advances durable runs with a persisted lease; it dispatches to the guarded in-memory fallback when Supabase is absent.
+- `src/lib/agent/run-orchestrator.ts`: creates and incrementally advances durable runs with a persisted lease and rolling 15-minute inactivity deadline; one exhausted route becomes terminal while other healthy route tasks continue. It dispatches to the guarded in-memory fallback when Supabase is absent.
 - `src/lib/recommendation/alternative-preview.ts` and `src/lib/security/host-confirmation.ts`: bind a private run to one canonical city and requesting participant, authorize private reads, and pass the exact Supervisor-approved proposal to host-only atomic confirmation.
 - `src/components/result/SharedRecommendation.tsx` and `SchemeCard.tsx`: render the published city once and map persisted participant routes directly on `.atmosphere-panel` glass (no nested white route cards), including team totals, route facts, quote fingerprints, and China-time freshness; they never render booking links or client-side route selection.
 - `src/components/result/RefreshingResultNotice.tsx`: maps every run status to Chinese progress/retry guidance. Nonterminal runs can post one bounded authenticated advance; terminal `incomplete` / `failed` runs create a fresh automatic run when the device still holds a participant token, instead of presenting a no-op refresh.
@@ -68,7 +70,7 @@ For local browser testing, use `http://127.0.0.1:<port>`; for mobile-device test
 Supabase variables:
 
 - `NEXT_PUBLIC_SUPABASE_URL`: public Supabase project URL used by browser and server clients.
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY`: public anon key for browser-side reads.
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`: public Supabase client bootstrap key; browser roles have no direct business-table or Realtime read path.
 - `SUPABASE_SERVICE_ROLE_KEY`: server-only service-role key for route handlers and background calculations.
 - `AMAP_API_KEY`: server-side Amap key for local-miss city validation; normalized city-level results can be selected even when they are absent from the built-in city library.
 - `DEEPSEEK_API_KEY`: server-side DeepSeek key for the provider-neutral Calculation/Supervisor model.
@@ -103,7 +105,7 @@ npm run build
 
 The gateway exposes `GET /healthz` and authenticated `POST /v1/search`. It accepts only supported normalized requests, calls FlyAI through an argument-array CLI invocation with shell execution disabled, and returns stable error codes for no route, no ticket, rate limit, upstream unavailability, CLI failure, timeout, and invalid responses. Its 5-minute cache is process-local; supplier calls are globally serial, same-key cache misses share one in-flight request, and rate limiting has no immediate retry (5-second then 15-second global cooldown). A health response proves only that the gateway process is reachable, not supplier quota, risk-control clearance, or real-ticket availability.
 
-For operations, the default FlyAI path writes a server-only `flyai_diagnostic` log event. It contains only a hashed `routeFingerprint`, `mode`, `outcome`, top-level/data/item field-name arrays, item/normalized/dropped counts, dropped validation categories, and `cliErrorCode`; it is not an HTTP contract, cache entry, or database record, and contains no provider text, ticket facts, city names, personal data, or secrets. Live `data.itemList` entries are validated independently, so one malformed entry does not discard adjacent real routes; only a non-empty list with no valid route returns `PROVIDER_INVALID_RESPONSE`. Live prices accept `ticketPrice`, `price`, or documented `adultPrice`, including currency-prefixed numeric strings.
+For operations, the default FlyAI path writes a server-only `flyai_diagnostic` log event. Its fixed allowlist is `routeFingerprint`, `mode`, `outcome`, `itemCount`, `normalizedCount`, `droppedCount`, `droppedReasons`, and `cliErrorCode`; it is not an HTTP contract, cache entry, or database record, and contains no supplier key names, provider text, ticket facts, city names, personal data, or secrets. Live `data.itemList` entries are validated independently, so one malformed entry does not discard adjacent real routes; only a non-empty list with no valid route returns `PROVIDER_INVALID_RESPONSE`. Connecting itineraries normalize the complete ordered segment set and reject invalid sequence, over-eight-segment, or mixed-mode evidence. Live prices accept `ticketPrice`, `price`, or documented `adultPrice`, including currency-prefixed numeric strings.
 
 Run `npm run probe:providers` only with operator-managed keys exported from root `.env.local` and `services/travel-provider-gateway/.env`; keep `FLYAI_API_KEY` in the gateway file rather than copying it into root configuration. `PROBE_TRAVEL_DATE` optionally fixes the probe date, and `PROBE_FLYAI_SORT_TYPE=3|8` compares price-first with direct-first ordering without changing production. The probe leaves journey type unfiltered and prints one redacted JSON summary with status, latency, field names, and total/direct/connecting/unclassified counts, never provider payload values. The active QueryAgent keeps route/mode work bounded and never replaces missing verified quotes with estimates. Supplier coverage remains an operational acceptance question: use a new full plan and route-fingerprint diagnostics after cooldown, and do not treat `/healthz` or a single successful fare row as proof of supplier-wide authorization, quota recovery, or production readiness.
 
@@ -142,7 +144,7 @@ After the automated verification above, run this browser smoke for Task 14:
 4. Submit two participants from different cities.
 5. Confirm the public plan page updates filling records without a manual browser refresh.
 6. After the participant limit is reached, start calculation from the public plan page on a device that has filled the plan.
-7. Confirm the calculate request returns a pending run and the progress route is reachable with the participant token.
+7. Confirm the calculate request returns `202 created` for a new run or `200 resume_existing` for the identical active run, and the progress route is reachable with the participant token.
 8. Do not use local fallback to claim a published target result: it has no supplier adapter and will finish as `incomplete` without injected verified quotes. Consult the canonical acceptance record for current Task 14 evidence and blockers.
 9. With a completed fixture or Supabase-backed run, confirm `/p/[code]/result` shows the city once, exactly “省钱方案” and “省时方案”, every participant route, quote freshness in China time, and no estimate, average-fare, three-city, or booking-link UI.
 10. From a completed result, open “换个城市看看”, select one supported city, and confirm the requester sees “仅你可见的预览” while the shared result remains unchanged.
