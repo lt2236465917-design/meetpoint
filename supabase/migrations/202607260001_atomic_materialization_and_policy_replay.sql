@@ -655,3 +655,274 @@ revoke all on function private.assert_recommendation_proposal(uuid, uuid)
   from public, anon, authenticated;
 grant execute on function private.assert_recommendation_proposal(uuid, uuid)
   to service_role;
+
+create or replace function private.assert_materialized_recommendation_result(
+  p_run_id uuid,
+  p_proposal_id uuid,
+  p_result_id uuid
+)
+returns void
+language plpgsql
+volatile
+security invoker
+set search_path = ''
+as $$
+declare
+  v_run public.recommendation_runs%rowtype;
+  v_proposal public.recommendation_proposals%rowtype;
+  v_result public.recommendation_results%rowtype;
+  v_projection record;
+begin
+  select * into v_run
+  from public.recommendation_runs
+  where id = p_run_id;
+
+  select * into v_proposal
+  from public.recommendation_proposals
+  where id = p_proposal_id
+    and run_id = p_run_id;
+
+  select * into v_result
+  from public.recommendation_results
+  where id = p_result_id
+    and run_id = p_run_id
+    and proposal_id = p_proposal_id;
+
+  select * into v_projection
+  from private.assert_recommendation_proposal(p_run_id, p_proposal_id);
+
+  if v_run.id is null
+    or v_proposal.id is null
+    or v_result.id is null
+    or v_result.plan_id is distinct from v_run.plan_id
+    or v_result.city_code is distinct from v_projection.city_code
+    or v_result.explanation_zh is distinct from v_proposal.output_json ->> 'explanationZh'
+    or v_result.is_shared
+    or v_result.published_at is not null
+    or v_result.superseded_at is not null
+    or v_result.superseded_by_result_id is not null
+    or (
+      select count(*)
+      from public.recommendation_schemes as scheme
+      where scheme.result_id = v_result.id
+    ) <> 2
+    or (
+      select count(distinct scheme.kind)
+      from public.recommendation_schemes as scheme
+      where scheme.result_id = v_result.id
+    ) <> 2
+    or exists (
+      select 1
+      from public.recommendation_schemes as scheme
+      where scheme.result_id = v_result.id
+        and (
+          (
+            scheme.kind = 'saving'
+            and (
+              scheme.total_fare_cny is distinct from v_projection.saving_total_fare
+              or scheme.total_duration_minutes is distinct from v_projection.saving_total_duration
+              or scheme.latest_arrival_at is distinct from v_projection.saving_latest_arrival
+              or scheme.team_transfer_count is distinct from v_projection.saving_total_transfers
+              or (
+                select jsonb_object_agg(
+                  route.participant_id::text,
+                  route.verified_quote_id::text
+                  order by route.participant_id
+                )
+                from public.recommendation_scheme_routes as route
+                where route.scheme_id = scheme.id
+              ) is distinct from v_projection.saving_verified_quote_ids
+            )
+          )
+          or
+          (
+            scheme.kind = 'fast'
+            and (
+              scheme.total_fare_cny is distinct from v_projection.fast_total_fare
+              or scheme.total_duration_minutes is distinct from v_projection.fast_total_duration
+              or scheme.latest_arrival_at is distinct from v_projection.fast_latest_arrival
+              or scheme.team_transfer_count is distinct from v_projection.fast_total_transfers
+              or (
+                select jsonb_object_agg(
+                  route.participant_id::text,
+                  route.verified_quote_id::text
+                  order by route.participant_id
+                )
+                from public.recommendation_scheme_routes as route
+                where route.scheme_id = scheme.id
+              ) is distinct from v_projection.fast_verified_quote_ids
+            )
+          )
+        )
+    )
+  then
+    raise exception 'existing result tree is incomplete or mismatched';
+  end if;
+end;
+$$;
+
+revoke all on function private.assert_materialized_recommendation_result(uuid, uuid, uuid)
+  from public, anon, authenticated;
+grant execute on function private.assert_materialized_recommendation_result(uuid, uuid, uuid)
+  to service_role;
+
+create or replace function public.materialize_recommendation_result(
+  p_run_id uuid,
+  p_proposal_id uuid
+)
+returns uuid
+language plpgsql
+volatile
+security invoker
+set search_path = ''
+as $$
+declare
+  v_plan_id uuid;
+  v_run public.recommendation_runs%rowtype;
+  v_proposal public.recommendation_proposals%rowtype;
+  v_existing_result public.recommendation_results%rowtype;
+  v_projection record;
+  v_result_id uuid := gen_random_uuid();
+  v_saving_scheme_id uuid := gen_random_uuid();
+  v_fast_scheme_id uuid := gen_random_uuid();
+begin
+  select run.plan_id into v_plan_id
+  from public.recommendation_runs as run
+  where run.id = p_run_id;
+  if not found then
+    raise exception 'run not found';
+  end if;
+
+  perform 1
+  from public.plans as plan
+  where plan.id = v_plan_id
+  for update;
+  if not found then
+    raise exception 'plan not found';
+  end if;
+
+  select * into v_run
+  from public.recommendation_runs as run
+  where run.id = p_run_id
+  for update;
+  if not found
+    or v_run.plan_id is distinct from v_plan_id
+    or v_run.status <> 'validating'
+  then
+    raise exception 'run is not valid for materialization';
+  end if;
+
+  select * into v_proposal
+  from public.recommendation_proposals as proposal
+  where proposal.id = p_proposal_id
+    and proposal.run_id = p_run_id
+  for update;
+  if not found
+    or v_proposal.status <> 'approved'
+    or v_proposal.policy_version <> v_run.policy_version
+    or v_proposal.supervisor_approved_version is distinct from v_proposal.version
+    or not (v_proposal.validation_decision @> '{"ok": true}'::jsonb)
+  then
+    raise exception 'proposal is not approved for this run and policy';
+  end if;
+
+  select * into v_projection
+  from private.assert_recommendation_proposal(p_run_id, p_proposal_id);
+  if not found then
+    raise exception 'proposal does not match recommendation policy';
+  end if;
+
+  select * into v_existing_result
+  from public.recommendation_results as result
+  where result.run_id = p_run_id
+    and result.proposal_id = p_proposal_id
+  for update;
+  if found then
+    perform private.assert_materialized_recommendation_result(
+      p_run_id,
+      p_proposal_id,
+      v_existing_result.id
+    );
+    return v_existing_result.id;
+  end if;
+
+  insert into public.recommendation_results (
+    id,
+    plan_id,
+    run_id,
+    proposal_id,
+    city_code,
+    explanation_zh,
+    is_shared
+  )
+  values (
+    v_result_id,
+    v_run.plan_id,
+    v_run.id,
+    v_proposal.id,
+    v_projection.city_code,
+    v_proposal.output_json ->> 'explanationZh',
+    false
+  );
+
+  insert into public.recommendation_schemes (
+    id,
+    result_id,
+    kind,
+    total_fare_cny,
+    total_duration_minutes,
+    latest_arrival_at,
+    team_transfer_count
+  )
+  values
+    (
+      v_saving_scheme_id,
+      v_result_id,
+      'saving',
+      v_projection.saving_total_fare,
+      v_projection.saving_total_duration,
+      v_projection.saving_latest_arrival,
+      v_projection.saving_total_transfers
+    ),
+    (
+      v_fast_scheme_id,
+      v_result_id,
+      'fast',
+      v_projection.fast_total_fare,
+      v_projection.fast_total_duration,
+      v_projection.fast_latest_arrival,
+      v_projection.fast_total_transfers
+    );
+
+  insert into public.recommendation_scheme_routes (
+    scheme_id,
+    participant_id,
+    verified_quote_id
+  )
+  select
+    v_saving_scheme_id,
+    selected.participant_id::uuid,
+    selected.verified_quote_id::uuid
+  from jsonb_each_text(v_projection.saving_verified_quote_ids)
+    as selected(participant_id, verified_quote_id)
+  union all
+  select
+    v_fast_scheme_id,
+    selected.participant_id::uuid,
+    selected.verified_quote_id::uuid
+  from jsonb_each_text(v_projection.fast_verified_quote_ids)
+    as selected(participant_id, verified_quote_id);
+
+  perform private.assert_materialized_recommendation_result(
+    p_run_id,
+    p_proposal_id,
+    v_result_id
+  );
+  return v_result_id;
+end;
+$$;
+
+revoke all on function public.materialize_recommendation_result(uuid, uuid)
+  from public, anon, authenticated;
+grant execute on function public.materialize_recommendation_result(uuid, uuid)
+  to service_role;

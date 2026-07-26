@@ -6,6 +6,8 @@ const migrationPath =
   "supabase/migrations/202607150001_multi_agent_recommendation.sql";
 const hardeningMigrationPath =
   "supabase/migrations/202607210001_publication_safety_and_run_recovery.sql";
+const atomicMaterializationMigrationPath =
+  "supabase/migrations/202607260001_atomic_materialization_and_policy_replay.sql";
 
 describe("multi-agent migration", () => {
   it("stores normalized evidence and recommendation records", async () => {
@@ -118,6 +120,23 @@ describe("multi-agent migration", () => {
       expect(sql).toMatch(
         /create function terminalize_route_task_recovery[\s\S]*?security invoker[\s\S]*?set search_path = ''/,
       );
+    }
+  });
+
+  it("exposes atomic result materialization only to the service role", async () => {
+    for (const path of [atomicMaterializationMigrationPath, "supabase/schema.sql"]) {
+      const sql = (await readFile(path, "utf8")).toLowerCase();
+
+      expect(sql).toMatch(
+        /create or replace function public\.materialize_recommendation_result[\s\S]*?security invoker[\s\S]*?set search_path = ''/,
+      );
+      expect(sql).toMatch(
+        /revoke all on function public\.materialize_recommendation_result\(uuid, uuid\)[\s\S]*?from public, anon, authenticated/,
+      );
+      expect(sql).toMatch(
+        /grant execute on function public\.materialize_recommendation_result\(uuid, uuid\)[\s\S]*?to service_role/,
+      );
+      expect(sql).toContain("private.assert_materialized_recommendation_result");
     }
   });
 
