@@ -2191,3 +2191,110 @@ revoke all on function public.materialize_recommendation_result(uuid, uuid)
   from public, anon, authenticated;
 grant execute on function public.materialize_recommendation_result(uuid, uuid)
   to service_role;
+
+create or replace function public.publish_shared_result(
+  p_run_id uuid,
+  p_proposal_id uuid
+)
+returns uuid
+language plpgsql
+volatile
+security invoker
+set search_path = ''
+as $$
+declare
+  v_plan_id uuid;
+  v_run public.recommendation_runs%rowtype;
+  v_proposal public.recommendation_proposals%rowtype;
+  v_result public.recommendation_results%rowtype;
+begin
+  select run.plan_id into v_plan_id
+  from public.recommendation_runs as run
+  where run.id = p_run_id;
+  if not found then
+    raise exception 'run not found';
+  end if;
+
+  perform 1
+  from public.plans as plan
+  where plan.id = v_plan_id
+  for update;
+  if not found then
+    raise exception 'plan not found';
+  end if;
+
+  select * into v_run
+  from public.recommendation_runs as run
+  where run.id = p_run_id
+  for update;
+  if not found or v_run.plan_id is distinct from v_plan_id then
+    raise exception 'run not found';
+  end if;
+  if v_run.kind <> 'automatic' then
+    raise exception 'automatic publication requires an automatic run';
+  end if;
+  if v_run.status <> 'validating' then
+    raise exception 'automatic run must be validating';
+  end if;
+
+  select * into v_proposal
+  from public.recommendation_proposals as proposal
+  where proposal.id = p_proposal_id
+    and proposal.run_id = p_run_id
+  for update;
+  if not found
+    or v_proposal.status <> 'approved'
+    or v_proposal.policy_version <> v_run.policy_version
+    or v_proposal.supervisor_approved_version is distinct from v_proposal.version
+    or not (v_proposal.validation_decision @> '{"ok": true}'::jsonb)
+  then
+    raise exception 'proposal is not approved for this run and policy';
+  end if;
+
+  select * into v_result
+  from public.recommendation_results as result
+  where result.run_id = p_run_id
+    and result.proposal_id = p_proposal_id
+  for update;
+  if not found then
+    raise exception 'exactly one matching result is required';
+  end if;
+
+  if exists (
+    select 1
+    from public.recommendation_results as current_result
+    where current_result.plan_id = v_run.plan_id
+      and current_result.is_shared
+      and current_result.superseded_at is null
+  ) then
+    raise exception 'shared result already exists';
+  end if;
+
+  perform private.assert_materialized_recommendation_result(
+    p_run_id,
+    p_proposal_id,
+    v_result.id
+  );
+
+  update public.recommendation_results
+  set is_shared = true,
+      published_at = now()
+  where id = v_result.id;
+
+  update public.recommendation_runs
+  set status = 'completed',
+      completed_at = now(),
+      retry_after = null,
+      stale_after = null,
+      advance_lease_token = null,
+      advance_lease_expires_at = null
+  where id = p_run_id;
+
+  return v_result.id;
+end;
+$$;
+
+revoke all on function public.publish_shared_result(uuid, uuid)
+  from public, anon, authenticated;
+grant execute on function public.publish_shared_result(uuid, uuid)
+  to service_role;

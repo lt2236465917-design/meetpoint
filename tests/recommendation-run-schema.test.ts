@@ -25,6 +25,19 @@ function extractFunction(sql: string, functionName: string) {
   return sql.slice(start, end + "\n$$;".length).toLowerCase();
 }
 
+function extractLastFunction(sql: string, functionName: string) {
+  const declaration = new RegExp(
+    `create(?: or replace)? function\\s+(?:public\\.)?${functionName}\\s*\\(`,
+    "gi",
+  );
+  const matches = [...sql.matchAll(declaration)];
+  const start = matches.at(-1)?.index ?? -1;
+  if (start < 0) throw new Error(`Missing function: ${functionName}`);
+  const end = sql.indexOf("\n$$;", start);
+  if (end < 0) throw new Error(`Unterminated function: ${functionName}`);
+  return sql.slice(start, end + "\n$$;".length).toLowerCase();
+}
+
 function findRowLock(functionSql: string, tableName: string) {
   let statementStart = 0;
   for (const terminator of functionSql.matchAll(/;/g)) {
@@ -42,6 +55,29 @@ function findRowLock(functionSql: string, tableName: string) {
 }
 
 describe("active recommendation run database guard", () => {
+  it("keeps the final automatic publication replay synchronized before sharing", async () => {
+    const [schema, migration] = await Promise.all([
+      readFile("supabase/schema.sql", "utf8"),
+      readFile(
+        "supabase/migrations/202607260001_atomic_materialization_and_policy_replay.sql",
+        "utf8",
+      ),
+    ]);
+    const schemaFunction = extractLastFunction(schema, "publish_shared_result");
+    const migrationFunction = extractLastFunction(migration, "publish_shared_result");
+
+    expect(schemaFunction).toBe(migrationFunction);
+    const replay = schemaFunction.indexOf(
+      "perform private.assert_materialized_recommendation_result",
+    );
+    const share = schemaFunction.indexOf(
+      "update public.recommendation_results",
+      replay,
+    );
+    expect(replay).toBeGreaterThan(-1);
+    expect(share).toBeGreaterThan(replay);
+  });
+
   it("replaces the historical running-only index with the active-state guard", async () => {
     const [schema, legacyMigration, multiAgentMigration] = await Promise.all([
       readFile("supabase/schema.sql", "utf8"),

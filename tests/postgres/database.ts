@@ -62,6 +62,13 @@ async function bootstrapRoles(client: Client): Promise<void> {
   `);
 }
 
+async function grantServiceRoleDataAccess(client: Client): Promise<void> {
+  await client.query(`
+    grant all privileges on all tables in schema public to service_role;
+    grant all privileges on all sequences in schema public to service_role;
+  `);
+}
+
 export async function resetCanonicalDatabase(client: Client): Promise<void> {
   await bootstrapRoles(client);
   await client.query("drop schema if exists public cascade");
@@ -69,6 +76,7 @@ export async function resetCanonicalDatabase(client: Client): Promise<void> {
   await client.query("grant usage, create on schema public to public");
   const schema = await readFile("supabase/schema.sql", "utf8");
   await client.query(schema);
+  await grantServiceRoleDataAccess(client);
 }
 
 export async function resetThroughMigration(
@@ -86,4 +94,5 @@ export async function resetThroughMigration(
   for (const migration of migrations) {
     await client.query(await readFile(path.join(directory, migration), "utf8"));
   }
+  await grantServiceRoleDataAccess(client);
 }
