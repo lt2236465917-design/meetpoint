@@ -1,6 +1,6 @@
 # Input Integrity And Terminal UX Hardening Implementation Plan
 
-**Status:** Draft — do not execute until the proposed design is approved
+**Status:** Reviewed — executing failing-first
 
 **Design:** `docs/superpowers/specs/2026-07-27-input-integrity-and-terminal-ux-hardening-design.md`
 
@@ -18,7 +18,7 @@
 
 **Files:** `AGENTS.md`, `src/lib/validation/calendar-date.ts`, `src/lib/validation/schemas.ts`, `src/lib/ui/create-plan-form.ts`, date/form/API tests.
 
-- [ ] Add approved permanent rules to `AGENTS.md` before implementation.
+- [x] Add approved permanent rules to `AGENTS.md` before implementation.
 - [ ] Add failing cases for nonexistent dates, leap years, and Shanghai minimum boundaries.
 - [ ] Implement one round-trip Gregorian calendar parser shared by API and form validation.
 - [ ] Verify focused tests and commit `fix: validate real plan calendar dates`.
