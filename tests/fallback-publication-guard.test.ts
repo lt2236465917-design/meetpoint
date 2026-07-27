@@ -78,6 +78,31 @@ describe("fallback publication guard", () => {
       .rejects.toThrow("SHARED_RESULT_EXISTS");
   });
 
+  it("derives latest arrival from timestamp instants instead of ISO text order", async () => {
+    const input = await setup();
+    const started = await calculateFallbackRecommendations(input.created.code);
+    await advanceFallbackRun({ runId: started.runId, planId: input.planId });
+    seedFallbackVerifiedQuotes(started.runId, [
+      {
+        ...quote(input.first.participantId, "beijing", "1"),
+        arriveAt: "2026-08-15T18:00:00+08:00",
+      },
+      {
+        ...quote(input.second.participantId, "beijing", "2"),
+        arriveAt: "2026-08-15T12:30:00+01:00",
+      },
+    ]);
+    await advanceFallbackRun({ runId: started.runId, planId: input.planId });
+    await advanceFallbackRun({ runId: started.runId, planId: input.planId });
+    await advanceFallbackRun({ runId: started.runId, planId: input.planId });
+
+    const result = readFallbackPlan(input.created.code)?.latestSharedResult;
+    expect(result?.schemes.map((scheme) => scheme.latestArrivalAt)).toEqual([
+      "2026-08-15T12:30:00+01:00",
+      "2026-08-15T12:30:00+01:00",
+    ]);
+  });
+
   it("resumes only the same participant and city preview", async () => {
     const input = await setup();
     await completeAutomatic(input);

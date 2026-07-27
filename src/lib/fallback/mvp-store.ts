@@ -148,6 +148,19 @@ function currentSharedResult(planId: string) {
   ) ?? null;
 }
 
+function latestArrivalInstant(quotes: readonly VerifiedQuote[]): string {
+  let latest: { value: string; epoch: number } | null = null;
+  for (const quote of quotes) {
+    const epoch = Date.parse(quote.arriveAt);
+    if (!Number.isFinite(epoch)) throw new Error("PUBLICATION_GUARD_REJECTED");
+    if (!latest || epoch > latest.epoch) {
+      latest = { value: quote.arriveAt, epoch };
+    }
+  }
+  if (!latest) throw new Error("PUBLICATION_GUARD_REJECTED");
+  return latest.value;
+}
+
 function activeRunForPlan(planId: string) {
   return state().runs.find((run): run is RunRow & { status: ActiveRunStatus } =>
     run.planId === planId && activeStatuses.has(run.status),
@@ -455,7 +468,21 @@ function materializeResult(run: RunRow, proposal: ProposalRow) {
     if (verified.reduce((sum, quote) => sum + quote.priceCny, 0) !== scheme.totalFareCny) {
       throw new Error("PUBLICATION_GUARD_REJECTED");
     }
-    const schemeRow: SchemeRow = { id: id("scheme"), resultId: result.id, kind: scheme.kind, totalFareCny: scheme.totalFareCny, totalDurationMinutes: verified.reduce((sum, quote) => sum + quote.durationMinutes, 0), latestArrivalAt: verified.map((quote) => quote.arriveAt).sort().at(-1)!, teamTransferCount: verified.reduce((sum, quote) => sum + quote.transferCount, 0) };
+    const schemeRow: SchemeRow = {
+      id: id("scheme"),
+      resultId: result.id,
+      kind: scheme.kind,
+      totalFareCny: scheme.totalFareCny,
+      totalDurationMinutes: verified.reduce(
+        (sum, quote) => sum + quote.durationMinutes,
+        0,
+      ),
+      latestArrivalAt: latestArrivalInstant(verified),
+      teamTransferCount: verified.reduce(
+        (sum, quote) => sum + quote.transferCount,
+        0,
+      ),
+    };
     staged.push({ scheme: schemeRow, routes: verified.map((quote) => ({ schemeId: schemeRow.id, participantId: quote.participantId, verifiedQuoteId: quote.id })) });
   }
   state().results.push(result);

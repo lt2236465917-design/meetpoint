@@ -47,10 +47,10 @@
 
 **Files:** `src/lib/fallback/mvp-store.ts`, fallback publication tests, policy parity fixtures.
 
-- [ ] Add a failing fixture whose ISO lexical order differs from chronological order because of UTC offsets.
-- [ ] Select the latest original timestamp by epoch and reject invalid instants.
-- [ ] Re-run fallback publication and recommendation-policy parity tests.
-- [ ] Commit `fix: compare fallback arrival instants chronologically`.
+- [x] Add a failing fixture whose ISO lexical order differs from chronological order because of UTC offsets.
+- [x] Select the latest original timestamp by epoch and reject invalid instants.
+- [x] Re-run fallback publication and recommendation-policy parity tests.
+- [x] Commit `fix: compare fallback arrival instants chronologically`.
 
 ### Task 5: Preserve Private Preview Terminal UX
 
