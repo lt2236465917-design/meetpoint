@@ -246,10 +246,22 @@ export function setFallbackNowForTests(now: (() => Date) | null) {
   fallbackNow = now;
 }
 
-export async function createFallbackPlan(input: { title: string; arrivalDate: string; participantLimit: number }) {
+export async function createFallbackPlan(
+  input: { title: string; arrivalDate: string; participantLimit: number },
+  options: { generateCode?: () => string } = {},
+) {
   const store = state();
-  let code = Math.random().toString(36).slice(2, 8).toUpperCase();
-  while (store.plans.some((plan) => plan.code === code)) code = Math.random().toString(36).slice(2, 8).toUpperCase();
+  const generateCode = options.generateCode
+    ?? (() => Math.random().toString(36).slice(2, 8).toUpperCase());
+  let code: string | null = null;
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const candidate = generateCode();
+    if (!store.plans.some((plan) => plan.code === candidate)) {
+      code = candidate;
+      break;
+    }
+  }
+  if (!code) throw new Error("PLAN_CODE_EXHAUSTED");
   const hostToken = generateToken();
   const plan: PlanRow = { id: id("plan"), code, title: input.title, meetingDate: input.arrivalDate, participantLimit: input.participantLimit, status: "collecting" };
   store.plans.push(plan);

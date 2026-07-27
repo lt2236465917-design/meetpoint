@@ -8,6 +8,7 @@ const apiErrorMessages: Record<string, string> = {
   INVALID_PARTICIPANT_TOKEN: "先加入这场见面，才能开始哦",
   PARTICIPANT_LIMIT_NOT_REACHED: "人数填满后才能开始见面",
   CREATE_PLAN_FAILED: "创建失败，请稍后重试",
+  PLAN_CODE_EXHAUSTED: "刚好撞上重复编号，请再创建一次",
   CREATE_PARTICIPANT_FAILED: "提交失败，请稍后重试",
   CANDIDATE_EDITING_UNAVAILABLE: "当前版本不支持手动调整候选城市",
   CALCULATION_FAILED: "这次没安排成，稍后再试一次",

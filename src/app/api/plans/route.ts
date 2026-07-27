@@ -12,6 +12,16 @@ function generateCode(): string {
   return Math.random().toString(36).slice(2, 8).toUpperCase();
 }
 
+const MAX_PLAN_CODE_ATTEMPTS = 5;
+
+function isPlanCodeCollision(error: unknown) {
+  if (!error || typeof error !== "object") return false;
+  const record = error as { code?: unknown; message?: unknown; details?: unknown };
+  const context = `${String(record.message ?? "")} ${String(record.details ?? "")}`;
+  return record.code === "23505"
+    && (context.includes("plans_code_key") || context.includes("Key (code)"));
+}
+
 export async function POST(req: Request) {
   const body = await req.json().catch(() => ({}));
   const parsed = createPlanSchema().safeParse(body);
@@ -21,40 +31,57 @@ export async function POST(req: Request) {
   }
 
   if (!hasSupabaseEnvironment()) {
-    const result = await createFallbackPlan(parsed.data);
-    return NextResponse.json({
-      ...result,
-      shareUrl: createShareUrl(req, result.code),
-    });
+    try {
+      const result = await createFallbackPlan(parsed.data);
+      return NextResponse.json({
+        ...result,
+        shareUrl: createShareUrl(req, result.code),
+      });
+    } catch (error) {
+      if (error instanceof Error && error.message === "PLAN_CODE_EXHAUSTED") {
+        return NextResponse.json(
+          { error: "PLAN_CODE_EXHAUSTED" },
+          { status: 503 },
+        );
+      }
+      return NextResponse.json({ error: "CREATE_PLAN_FAILED" }, { status: 500 });
+    }
   }
 
   const supabase = createServiceSupabaseClient();
-  const code = generateCode();
   const hostToken = generateToken();
-
-  const { data: planId, error } = await supabase.rpc(
-    "create_plan_with_host_credential",
-    {
-      p_code: code,
-      p_title: parsed.data.title,
-      p_meeting_date: parsed.data.arrivalDate,
-      p_participant_limit: parsed.data.participantLimit,
-      p_host_token_hash: await hashToken(hostToken),
-    },
-  );
-
-  if (error || !planId) {
-    return NextResponse.json(
-      { error: "CREATE_PLAN_FAILED" },
-      { status: 500 },
+  const hostTokenHash = await hashToken(hostToken);
+  for (let attempt = 0; attempt < MAX_PLAN_CODE_ATTEMPTS; attempt += 1) {
+    const code = generateCode();
+    const { data: planId, error } = await supabase.rpc(
+      "create_plan_with_host_credential",
+      {
+        p_code: code,
+        p_title: parsed.data.title,
+        p_meeting_date: parsed.data.arrivalDate,
+        p_participant_limit: parsed.data.participantLimit,
+        p_host_token_hash: hostTokenHash,
+      },
     );
+    if (!error && planId) {
+      return NextResponse.json({
+        code,
+        shareUrl: createShareUrl(req, code),
+        hostToken,
+      });
+    }
+    if (!isPlanCodeCollision(error)) {
+      return NextResponse.json(
+        { error: "CREATE_PLAN_FAILED" },
+        { status: 500 },
+      );
+    }
   }
 
-  return NextResponse.json({
-    code,
-    shareUrl: createShareUrl(req, code),
-    hostToken,
-  });
+  return NextResponse.json(
+    { error: "PLAN_CODE_EXHAUSTED" },
+    { status: 503 },
+  );
 }
 
 function createShareUrl(req: Request, code: string): string {

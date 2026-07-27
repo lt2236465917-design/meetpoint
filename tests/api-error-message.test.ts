@@ -12,6 +12,9 @@ describe("getApiErrorMessage", () => {
     expect(getApiErrorMessage("INVALID_PARTICIPANT_TOKEN", "失败")).toBe(
       "先加入这场见面，才能开始哦",
     );
+    expect(getApiErrorMessage("PLAN_CODE_EXHAUSTED", "失败")).toBe(
+      "刚好撞上重复编号，请再创建一次",
+    );
     expect(getApiErrorMessage("PARTICIPANT_LIMIT_NOT_REACHED", "失败")).toBe(
       "人数填满后才能开始见面",
     );

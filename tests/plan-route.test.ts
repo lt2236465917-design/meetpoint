@@ -76,6 +76,66 @@ describe("POST /api/plans", () => {
     await expect(verifyToken(json.hostToken, args.p_host_token_hash)).resolves.toBe(true);
   });
 
+  it("retries a confirmed plan-code collision with a new code", async () => {
+    const random = vi.spyOn(Math, "random")
+      .mockReturnValueOnce(0.1)
+      .mockReturnValueOnce(0.2);
+    mocks.rpc
+      .mockResolvedValueOnce({
+        data: null,
+        error: {
+          code: "23505",
+          message: 'duplicate key value violates unique constraint "plans_code_key"',
+        },
+      })
+      .mockResolvedValueOnce({ data: "plan-1", error: null });
+    try {
+      const { POST } = await import("@/app/api/plans/route");
+      const response = await POST(new Request("http://localhost/api/plans", {
+        method: "POST",
+        body: JSON.stringify({
+          title: "上海周末见面",
+          arrivalDate: "2026-08-15",
+          participantLimit: 4,
+        }),
+      }));
+      const json = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(mocks.rpc).toHaveBeenCalledTimes(2);
+      expect(mocks.rpc.mock.calls[0]?.[1].p_code)
+        .not.toBe(mocks.rpc.mock.calls[1]?.[1].p_code);
+      expect(json.code).toBe(mocks.rpc.mock.calls[1]?.[1].p_code);
+    } finally {
+      random.mockRestore();
+    }
+  });
+
+  it("stops after five confirmed plan-code collisions", async () => {
+    mocks.rpc.mockResolvedValue({
+      data: null,
+      error: {
+        code: "23505",
+        message: 'duplicate key value violates unique constraint "plans_code_key"',
+      },
+    });
+    const { POST } = await import("@/app/api/plans/route");
+    const response = await POST(new Request("http://localhost/api/plans", {
+      method: "POST",
+      body: JSON.stringify({
+        title: "上海周末见面",
+        arrivalDate: "2026-08-15",
+        participantLimit: 4,
+      }),
+    }));
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toEqual({
+      error: "PLAN_CODE_EXHAUSTED",
+    });
+    expect(mocks.rpc).toHaveBeenCalledTimes(5);
+  });
+
   it("returns a stable error without logging credentials when the RPC fails", async () => {
     mocks.rpc.mockResolvedValue({ data: null, error: { message: "db failure" } });
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
@@ -92,6 +152,7 @@ describe("POST /api/plans", () => {
 
       expect(response.status).toBe(500);
       await expect(response.json()).resolves.toEqual({ error: "CREATE_PLAN_FAILED" });
+      expect(mocks.rpc).toHaveBeenCalledTimes(1);
       expect(consoleError).not.toHaveBeenCalled();
     } finally {
       consoleError.mockRestore();

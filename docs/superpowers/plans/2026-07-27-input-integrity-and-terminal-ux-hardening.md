@@ -37,11 +37,11 @@
 
 **Files:** `src/app/api/plans/route.ts`, `src/lib/fallback/mvp-store.ts`, `src/lib/ui/api-error-message.ts`, plan/fallback tests.
 
-- [ ] Add one failing case for collision-then-success, five collisions, and unrelated RPC failure.
-- [ ] Implement a five-attempt helper with injectable code generation.
-- [ ] Retry only the expected `plans.code` unique violation; keep credentials server-only and return them only after success.
-- [ ] Bound fallback behavior identically and add actionable Chinese copy.
-- [ ] Verify focused tests and commit `fix: retry plan code collisions safely`.
+- [x] Add one failing case for collision-then-success, five collisions, and unrelated RPC failure.
+- [x] Implement a five-attempt helper with injectable code generation.
+- [x] Retry only the expected `plans.code` unique violation; keep credentials server-only and return them only after success.
+- [x] Bound fallback behavior identically and add actionable Chinese copy.
+- [x] Verify focused tests and commit `fix: retry plan code collisions safely`.
 
 ### Task 4: Align Fallback Arrival Aggregates
 
