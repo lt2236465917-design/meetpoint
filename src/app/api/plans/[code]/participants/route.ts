@@ -6,6 +6,7 @@ import {
   hasSupabaseEnvironment,
 } from "@/lib/supabase/server";
 import { participantInputSchema } from "@/lib/validation/schemas";
+import { resolveDepartureCityIdentity } from "@/lib/city/departure-city";
 
 export async function POST(
   req: Request,
@@ -19,8 +20,24 @@ export async function POST(
     return NextResponse.json({ error: "INVALID_INPUT" }, { status: 400 });
   }
 
+  const departure = await resolveDepartureCityIdentity({
+    code: parsed.data.departureCityCode,
+    name: parsed.data.departureCityName,
+  });
+  if (!departure.ok) {
+    return NextResponse.json(
+      { error: departure.error },
+      { status: departure.error === "CITY_VALIDATION_UNAVAILABLE" ? 503 : 400 },
+    );
+  }
+  const participant = {
+    ...parsed.data,
+    departureCityCode: departure.city.code,
+    departureCityName: departure.city.name,
+  };
+
   if (!hasSupabaseEnvironment()) {
-    const result = await createFallbackParticipant(code, parsed.data);
+    const result = await createFallbackParticipant(code, participant);
     if (!result.ok) {
       return NextResponse.json(
         { error: result.error },
@@ -40,10 +57,10 @@ export async function POST(
     "create_participant_with_credential",
     {
       p_code: code,
-      p_name: parsed.data.name,
-      p_departure_city_code: parsed.data.departureCityCode,
-      p_departure_city_name: parsed.data.departureCityName,
-      p_accepted_modes: parsed.data.acceptedModes,
+      p_name: participant.name,
+      p_departure_city_code: participant.departureCityCode,
+      p_departure_city_name: participant.departureCityName,
+      p_accepted_modes: participant.acceptedModes,
       p_edit_token_hash: editTokenHash,
     },
   );

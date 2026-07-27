@@ -1,5 +1,7 @@
 const apiErrorMessages: Record<string, string> = {
   INVALID_INPUT: "请检查必填信息是否完整",
+  INVALID_DEPARTURE_CITY: "请重新搜索并选择出发城市",
+  CITY_VALIDATION_UNAVAILABLE: "暂时无法确认这座城市，请稍后再试",
   PLAN_NOT_FOUND: "计划不存在或已失效",
   PARTICIPANT_LIMIT_REACHED: "这场见面的人已经齐了，没有空位啦",
   PARTICIPANT_TOKEN_REQUIRED: "请先填写你的出发信息",

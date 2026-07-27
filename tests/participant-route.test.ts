@@ -8,7 +8,7 @@ vi.mock("@/lib/supabase/server", () => ({
   createServiceSupabaseClient: () => ({ rpc: mocks.rpc }),
 }));
 
-function request() {
+function request(overrides: Record<string, unknown> = {}) {
   return new Request("http://localhost/api/plans/ABC123/participants", {
     method: "POST",
     body: JSON.stringify({
@@ -16,6 +16,7 @@ function request() {
       departureCityCode: "shanghai",
       departureCityName: "上海",
       acceptedModes: ["high_speed_rail", "flight"],
+      ...overrides,
     }),
   });
 }
@@ -24,6 +25,7 @@ describe("POST /api/plans/[code]/participants", () => {
   beforeEach(() => {
     vi.resetModules();
     mocks.rpc.mockReset();
+    vi.unstubAllEnvs();
   });
 
   it("atomically creates a participant and credential through one RPC", async () => {
@@ -49,6 +51,36 @@ describe("POST /api/plans/[code]/participants", () => {
     );
     const args = mocks.rpc.mock.calls[0]?.[1];
     await expect(verifyToken(json.editToken, args.p_edit_token_hash)).resolves.toBe(true);
+  });
+
+  it("rejects a built-in departure code paired with another city name", async () => {
+    const { POST } = await import("@/app/api/plans/[code]/participants/route");
+    const response = await POST(request({ departureCityName: "北京" }), {
+      params: Promise.resolve({ code: "ABC123" }),
+    });
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      error: "INVALID_DEPARTURE_CITY",
+    });
+    expect(mocks.rpc).not.toHaveBeenCalled();
+  });
+
+  it("returns retryable guidance when an Amap identity cannot be verified", async () => {
+    vi.stubEnv("AMAP_API_KEY", "");
+    const { POST } = await import("@/app/api/plans/[code]/participants/route");
+    const response = await POST(request({
+      departureCityCode: "amap-440800",
+      departureCityName: "湛江",
+    }), {
+      params: Promise.resolve({ code: "ABC123" }),
+    });
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toEqual({
+      error: "CITY_VALIDATION_UNAVAILABLE",
+    });
+    expect(mocks.rpc).not.toHaveBeenCalled();
   });
 
   it.each([

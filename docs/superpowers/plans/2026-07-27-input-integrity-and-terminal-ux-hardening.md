@@ -27,11 +27,11 @@
 
 **Files:** `src/lib/city/amap-client.ts`, `src/lib/city/city-provider.ts`, new server resolver, participant route/fallback store, provider and participant tests.
 
-- [ ] Add failing built-in and `amap-*` code/name mismatch tests.
-- [ ] Add a canonical resolver backed by `CITIES` or the selectable Amap administrative index.
-- [ ] Persist only resolver output; map mismatch to 400 and unavailable validation to 503.
-- [ ] Cover cached success, Amap outage, direct-admin units, prefectures, and province-administered cities.
-- [ ] Verify focused tests and commit `fix: bind departure cities to canonical identity`.
+- [x] Add failing built-in and `amap-*` code/name mismatch tests.
+- [x] Add a canonical resolver backed by `CITIES` or the selectable Amap administrative index.
+- [x] Persist only resolver output; map mismatch to 400 and unavailable validation to 503.
+- [x] Cover cached success, Amap outage, direct-admin units, prefectures, and province-administered cities.
+- [x] Verify focused tests and commit `fix: bind departure cities to canonical identity`.
 
 ### Task 3: Make Plan-Code Creation Retry-safe
 

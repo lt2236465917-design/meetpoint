@@ -41,12 +41,63 @@ export interface SearchAmapCitiesOptions {
   signal?: AbortSignal;
 }
 
+export type ResolveAmapCityResult =
+  | { status: "found"; city: AmapCityCandidate }
+  | { status: "not_found" }
+  | { status: "unavailable" };
+
 let cachedAmapCityIndex: AmapCityCandidate[] | null = null;
 let amapCityIndexPromise: Promise<AmapCityCandidate[]> | null = null;
 
 export function resetAmapCityIndexCacheForTests() {
   cachedAmapCityIndex = null;
   amapCityIndexPromise = null;
+}
+
+export async function resolveAmapCityByAdcode(
+  adcode: string,
+  options: SearchAmapCitiesOptions,
+): Promise<ResolveAmapCityResult> {
+  if (!/^\d{6}$/.test(adcode) || !options.apiKey) {
+    return { status: "unavailable" };
+  }
+  if (cachedAmapCityIndex) {
+    const indexed = cachedAmapCityIndex.find((city) => city.adcode === adcode);
+    return indexed
+      ? { status: "found", city: indexed }
+      : { status: "not_found" };
+  }
+
+  const url = new URL("https://restapi.amap.com/v3/config/district");
+  url.searchParams.set("keywords", adcode);
+  url.searchParams.set("subdistrict", "0");
+  url.searchParams.set("extensions", "base");
+  url.searchParams.set("key", options.apiKey);
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const payload = await fetchAmapJson(
+      url,
+      options.signal ?? AbortSignal.timeout(5000),
+    );
+    const parsed = amapDistrictResponseSchema.safeParse(payload);
+    if (!parsed.success) continue;
+    const district = parsed.data.districts.find((candidate) =>
+      candidate.adcode === adcode && isSelectableCityDistrict(candidate)
+    );
+    return district
+      ? {
+          status: "found",
+          city: { name: district.name, district: "", adcode: district.adcode },
+        }
+      : { status: "not_found" };
+  }
+
+  const indexedCities = await getAmapCityIndex(options.apiKey);
+  if (indexedCities.length === 0) return { status: "unavailable" };
+  const indexed = indexedCities.find((city) => city.adcode === adcode);
+  return indexed
+    ? { status: "found", city: indexed }
+    : { status: "not_found" };
 }
 
 export async function searchAmapCities(
