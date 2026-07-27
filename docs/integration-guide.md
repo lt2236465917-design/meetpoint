@@ -12,7 +12,7 @@ This guide is the quick reference for running and calling the MVP locally.
 
 The same user-facing routes must remain usable on phones (shareable plan links) and on desktop. Shipped UI uses a true adaptive layout without fake phone chrome — see `docs/superpowers/specs/2026-07-17-desktop-adaptive-shell-design.md`.
 
-The local hardening migrations are `supabase/migrations/202607210001_publication_safety_and_run_recovery.sql` and `supabase/migrations/202607260001_atomic_materialization_and_policy_replay.sql`; the Batch B migration remains synchronized with `supabase/schema.sql`. This local implementation did not query or apply remote migration state and did not rerun live FlyAI/supplier acceptance; an operator must review those separately.
+The hardening migrations are `supabase/migrations/202607210001_publication_safety_and_run_recovery.sql` and `supabase/migrations/202607260001_atomic_materialization_and_policy_replay.sql`; the Batch B migration remains synchronized with `supabase/schema.sql`. Both were applied to the linked Supabase project on 2026-07-27. Postflight migration, privilege, Realtime, and rollback-safe publication checks passed. The controlled supplier-backed run ended safely incomplete because real quote coverage was insufficient; see `docs/acceptance/2026-07-27-repository-audit-batch-b-remote-acceptance.md`.
 
 For local database verification, point only at a disposable loopback PostgreSQL database whose name ends in `_test`:
 

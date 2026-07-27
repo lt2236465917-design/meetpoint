@@ -8,7 +8,7 @@ Tasks 1–14 are complete against the [2026-07-15 Multi-Agent design](docs/super
 
 Local policy `2026-07-19.v2` defines saving as the exact lowest verified fare in each participant's direct-first accepted-mode set (including direct normal train) and keeps fast within 130% of the saving total. Supabase environments must apply `202607190001_recommendation_policy_v2.sql` before new durable runs use v2; the migration is not implied by building the app.
 
-Repository Audit Batch A is implemented locally: complete FlyAI itinerary normalization, API-only public projection, atomic run creation, per-route recovery exhaustion, and bounded run/preview expiry. The hardening migration is `202607210001_publication_safety_and_run_recovery.sql`; its remote state was not queried or applied during the local batch. Batch B and Batch C remain audit backlog only—see [document authority](docs/superpowers/README.md).
+Repository Audit Batches A and B are implemented and their hardening migrations `202607210001_publication_safety_and_run_recovery.sql` and `202607260001_atomic_materialization_and_policy_replay.sql` were applied to the linked Supabase project on 2026-07-27. Remote role/publication checks and rollback-safe automatic/alternative RPC smoke passed; the controlled live supplier run safely ended incomplete because real quote coverage was insufficient. Batch C has a proposed design and draft plan but is not implemented—see [document authority](docs/superpowers/README.md) and the [Batch B remote acceptance](docs/acceptance/2026-07-27-repository-audit-batch-b-remote-acceptance.md).
 
 ## Scripts
 
