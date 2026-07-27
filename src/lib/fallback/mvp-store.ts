@@ -577,10 +577,16 @@ export async function readFallbackPrivatePreview(input: {
   );
   if (!participantAllowed && !hostAllowed) return null;
   const result = state().results.find((entry) => entry.runId === run.id);
-  const payload = result ? resultPayload(result) : null;
+  const canExposeResult = ["awaiting_host_confirmation", "completed"].includes(
+    run.status,
+  );
+  const payload = result && canExposeResult ? resultPayload(result) : null;
+  const requestedCityCode = run.requestedCityCode!;
   return {
     runId: run.id,
     status: run.status,
+    requestedCityCode,
+    requestedCityName: findCityByCode(requestedCityCode)?.name ?? requestedCityCode,
     result: payload,
     ...(payload ?? {}),
   };

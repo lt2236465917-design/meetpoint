@@ -21,6 +21,8 @@ import type { TransportMode } from "@/types/domain";
 export type AlternativePreviewData = {
   runId: string;
   status: RunStatus;
+  requestedCityCode: string;
+  requestedCityName: string;
   traceId?: string;
   pendingGroups?: number;
   retryAt?: string | null;
@@ -106,6 +108,8 @@ export async function readAlternativePreview(input: {
     return {
       runId: preview.runId,
       status: preview.status,
+      requestedCityCode: preview.requestedCityCode,
+      requestedCityName: preview.requestedCityName,
       result: preview.result as SharedResult | null,
     };
   }
@@ -115,12 +119,18 @@ export async function readAlternativePreview(input: {
   if (!plan) return null;
   const { data: run } = await supabase
     .from("recommendation_runs")
-    .select("id,plan_id,status,trace_id,retry_after,error_summary,kind,requested_by_participant_id")
+    .select("id,plan_id,status,trace_id,retry_after,error_summary,kind,requested_city_code,requested_by_participant_id")
     .eq("id", input.runId)
     .eq("plan_id", plan.id)
     .single();
   const status = runStatusSchema.safeParse(run?.status);
-  if (!run || run.kind !== "alternative" || !run.requested_by_participant_id || !status.success) return null;
+  if (
+    !run
+    || run.kind !== "alternative"
+    || !run.requested_by_participant_id
+    || !run.requested_city_code
+    || !status.success
+  ) return null;
 
   const [participantAllowed, hostAllowed] = await Promise.all([
     verifyParticipantCredential(run.requested_by_participant_id, input.participantToken),
@@ -136,11 +146,16 @@ export async function readAlternativePreview(input: {
   return {
     runId: run.id,
     status: status.data,
+    requestedCityCode: run.requested_city_code,
+    requestedCityName:
+      findCityByCode(run.requested_city_code)?.name ?? run.requested_city_code,
     traceId: run.trace_id,
     pendingGroups: pendingGroups ?? 0,
     retryAt: run.retry_after,
     diagnosticCode: run.error_summary,
-    result: await loadPrivateResult(run.id),
+    result: ["awaiting_host_confirmation", "completed"].includes(status.data)
+      ? await loadPrivateResult(run.id)
+      : null,
   };
 }
 

@@ -199,7 +199,7 @@ export function isNonterminal(status: RunStatus) {
   return !["completed", "incomplete", "failed"].includes(status);
 }
 
-function diagnosticRunId(runId: string) {
+export function diagnosticRunId(runId: string) {
   const suffix = runId.replace(/^run[-_]?/i, "").slice(0, 8).toUpperCase();
   return `RUN-${suffix || runId.slice(0, 8).toUpperCase()}`;
 }

@@ -3,7 +3,10 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { CityCombobox } from "@/components/forms/CityCombobox";
-import { RefreshingResultNotice } from "@/components/result/RefreshingResultNotice";
+import {
+  diagnosticRunId,
+  RefreshingResultNotice,
+} from "@/components/result/RefreshingResultNotice";
 import { SharedRecommendation } from "@/components/result/SharedRecommendation";
 import { Notice } from "@/components/ui/Notice";
 import type { AlternativePreviewData } from "@/lib/recommendation/alternative-preview";
@@ -11,6 +14,28 @@ import { getApiErrorMessage } from "@/lib/ui/api-error-message";
 import { readMeetingHistory } from "@/lib/ui/meeting-history";
 
 const ACTIVE_STATUSES = new Set(["pending", "collecting", "cooling_down", "calculating", "validating"]);
+const TERMINAL_FAILURE_STATUSES = new Set(["incomplete", "failed"]);
+
+export function requestAlternativePreview({
+  code,
+  participantToken,
+  city,
+  request = fetch,
+}: {
+  code: string;
+  participantToken: string;
+  city: { code: string; name: string };
+  request?: typeof fetch;
+}) {
+  return request(`/api/plans/${encodeURIComponent(code)}/previews`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-participant-token": participantToken,
+    },
+    body: JSON.stringify({ cityCode: city.code, cityName: city.name }),
+  });
+}
 
 export function AlternativeCityFlow({
   code,
@@ -25,7 +50,14 @@ export function AlternativeCityFlow({
   initialPreview: AlternativePreviewData | null;
   initialRunId?: string;
 }) {
-  const [city, setCity] = useState<{ code: string; name: string } | null>(null);
+  const [city, setCity] = useState<{ code: string; name: string } | null>(
+    initialPreview
+      ? {
+          code: initialPreview.requestedCityCode,
+          name: initialPreview.requestedCityName,
+        }
+      : null,
+  );
   const [participantToken, setParticipantToken] = useState(participantTokenProp);
   const [hostToken, setHostToken] = useState(hostTokenProp);
   const [preview, setPreview] = useState(initialPreview);
@@ -74,15 +106,17 @@ export function AlternativeCityFlow({
     return () => window.clearTimeout(timer);
   }, [code, participantToken, preview, readPreview, runId]);
 
-  async function createPreview() {
-    if (!city || !participantToken || busy) return;
+  async function createPreview(
+    requestedCity: { code: string; name: string } | null = city,
+  ) {
+    if (!requestedCity || !participantToken || busy) return;
     setBusy(true);
     setMessage("");
     try {
-      const response = await fetch(`/api/plans/${code}/previews`, {
-        method: "POST",
-        headers: { "content-type": "application/json", "x-participant-token": participantToken },
-        body: JSON.stringify({ cityCode: city.code, cityName: city.name }),
+      const response = await requestAlternativePreview({
+        code,
+        participantToken,
+        city: requestedCity,
       });
       const json = await response.json().catch(() => ({}));
       if (!response.ok) {
@@ -91,9 +125,12 @@ export function AlternativeCityFlow({
       }
       const nextRunId = json.runId as string;
       setRunId(nextRunId);
+      setCity(requestedCity);
       setPreview({
         runId: nextRunId,
         status: json.status as AlternativePreviewData["status"],
+        requestedCityCode: requestedCity.code,
+        requestedCityName: requestedCity.name,
         pendingGroups: 0,
         result: null,
       });
@@ -142,7 +179,7 @@ export function AlternativeCityFlow({
           <button
             className="w-full rounded-lg bg-black py-3 font-medium text-white disabled:opacity-50"
             disabled={!city || !participantToken || busy}
-            onClick={createPreview}
+            onClick={() => void createPreview()}
             type="button"
           >
             {busy ? "处理中" : "先算给我看"}
@@ -161,20 +198,43 @@ export function AlternativeCityFlow({
           diagnosticCode: preview.diagnosticCode ?? null,
         }} />
       ) : null}
+      {preview && TERMINAL_FAILURE_STATUSES.has(preview.status) ? (
+        <section className="atmosphere-panel space-y-3 rounded-xl p-4">
+          <Notice>
+            {preview.status === "incomplete"
+              ? `${preview.requestedCityName}有几位朋友的票价没查全，过一会再试一次`
+              : `${preview.requestedCityName}这次没安排成，稍后再试一次`}
+          </Notice>
+          <p className="text-xs leading-5 text-[var(--atmosphere-muted)]">
+            诊断编号 {diagnosticRunId(preview.runId)}
+          </p>
+          <button
+            className="atmosphere-ghost w-full rounded-xl py-3 text-sm font-medium disabled:opacity-50"
+            disabled={!participantToken || busy}
+            onClick={() => void createPreview({
+              code: preview.requestedCityCode,
+              name: preview.requestedCityName,
+            })}
+            type="button"
+          >
+            {busy ? "正在重新查询" : "重新查询这座城"}
+          </button>
+        </section>
+      ) : null}
       {preview?.result ? <SharedRecommendation result={preview.result} /> : null}
 
-      {hostToken && preview?.status === "awaiting_host_confirmation" ? (
-        <button
-          className="w-full rounded-lg bg-black py-3 font-medium text-white disabled:opacity-50"
-          disabled={busy}
-          onClick={confirmReplacement}
-          type="button"
-        >
-          确认替换共享结果
-        </button>
-      ) : (
-        <Notice>请发起人确认替换</Notice>
-      )}
+      {preview?.status === "awaiting_host_confirmation" ? (
+        hostToken ? (
+          <button
+            className="w-full rounded-lg bg-black py-3 font-medium text-white disabled:opacity-50"
+            disabled={busy}
+            onClick={confirmReplacement}
+            type="button"
+          >
+            确认替换共享结果
+          </button>
+        ) : <Notice>请发起人确认替换</Notice>
+      ) : null}
       {message ? <p aria-live="polite" className="text-sm leading-6 text-gray-600">{message}</p> : null}
     </div>
   );

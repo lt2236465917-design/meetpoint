@@ -205,6 +205,28 @@ describe("fallback publication guard", () => {
     expect(readFallbackPlan(input.created.code)?.latestSharedResult).toMatchObject({ cityCode: "wuhan", isShared: true });
   });
 
+  it("keeps an incomplete private preview readable without exposing a result", async () => {
+    const input = await setup();
+    await completeAutomatic(input);
+    const preview = await createFallbackAlternativePreview({
+      code: input.created.code,
+      participantToken: input.second.editToken,
+      cityCode: "wuhan",
+    });
+    await advanceFallbackRun({ runId: preview.runId, planId: input.planId });
+    await advanceFallbackRun({ runId: preview.runId, planId: input.planId });
+
+    await expect(readFallbackPrivatePreview({
+      runId: preview.runId,
+      participantToken: input.second.editToken,
+    })).resolves.toMatchObject({
+      status: "incomplete",
+      requestedCityCode: "wuhan",
+      requestedCityName: "武汉",
+      result: null,
+    });
+  });
+
   it("rejects host confirmation when newer evidence invalidates the private preview", async () => {
     const input = await setup();
     await completeAutomatic(input);

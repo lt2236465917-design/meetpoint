@@ -56,11 +56,11 @@
 
 **Files:** `src/lib/recommendation/alternative-preview.ts`, `src/components/result/AlternativeCityFlow.tsx`, API error copy, alternative flow/read tests.
 
-- [ ] Add failing SSR/client cases for `incomplete` and `failed` previews after direct-link reload.
-- [ ] Return the requested canonical city in authorized private reads.
-- [ ] Render terminal diagnosis and a true new-preview retry; hide host-confirmation guidance in unrelated states.
-- [ ] Assert retry posts to `/previews` and never advances or refreshes the terminal run.
-- [ ] Verify focused tests and commit `fix: keep terminal private previews actionable`.
+- [x] Add failing SSR/client cases for `incomplete` and `failed` previews after direct-link reload.
+- [x] Return the requested canonical city in authorized private reads.
+- [x] Render terminal diagnosis and a true new-preview retry; hide host-confirmation guidance in unrelated states.
+- [x] Assert retry posts to `/previews` and never advances or refreshes the terminal run.
+- [x] Verify focused tests and commit `fix: keep terminal private previews actionable`.
 
 ### Task 6: Full Verification And Handoff
 
