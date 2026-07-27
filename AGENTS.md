@@ -45,7 +45,11 @@ This project is a mobile-usable Web app for multi-person cross-city meeting plan
 - Run the gateway lint, test, and build commands before reporting gateway changes complete.
 - Ignore generated gateway `dist`, coverage, probe output, and cache artifacts.
 - Live supplier publication requires a reachable travel gateway at `TRAVEL_GATEWAY_URL`; do not treat `GATEWAY_UNAVAILABLE` with zero verified quotes as supplier cooldown evidence.
-- Multi-Agent Tasks 1–14 are complete. Canonical evidence: `docs/acceptance/2026-07-15-multi-agent-live-acceptance.md`. Do not claim Supabase credentials were rotated; the operator waived rotation on 2026-07-17.
+- Production uses the Vercel Services project defined by `vercel.json`; `git push` is not deployment. Because this product targets China, a `*.vercel.app` alias alone is not an accepted release endpoint: require a custom domain or compliant China-reachable target plus real mainland-phone acceptance before declaring production stable or deleting release-safety worktrees/stashes.
+- The primary China deployment target is an Alibaba Cloud mainland ECS instance. Keep the Next.js frontend and travel gateway in separate containers on one private Docker network; expose only the frontend through the host reverse proxy. The gateway must not publish a host port. Keep production secrets in an untracked runtime env file, never Docker build arguments, image layers, Compose files, or repository files. Before ICP approval, bind the frontend only to loopback for SSH-tunneled smoke tests; do not publish the filing domain or open the website publicly.
+- The filed canonical production host is `www.meetpoint.space`; redirect `meetpoint.space` to it. Every shipped page must expose the public filing link `京ICP备2026025115号-3` to `https://beian.miit.gov.cn/` without embedding filing-owner identity or contact details. The mainland build must not depend on Google Fonts or other blocked presentation resources.
+- The current ECS has 3 Mbps public bandwidth and must not origin-serve the scenic MP4 set in production. Upload `public/scenic/*.mp4` to Alibaba Cloud OSS, deliver it through the filed `media.meetpoint.space` CDN hostname, and build the ECS frontend with `NEXT_PUBLIC_SCENIC_BASE_URL=https://media.meetpoint.space`. Keep same-origin scenic paths as the local/Vercel fallback. On a shared ECS, bind the Compose frontend to host loopback `3001` (not `3000`) and point Nginx there.
+- Do not claim Supabase credentials were rotated; the operator waived rotation on 2026-07-17.
 
 ## Structure
 

@@ -67,6 +67,9 @@ export function ShellScenicBackdrop({ scene }: { scene: ScenicSceneId }) {
             autoPlay
             loop
             playsInline
+            disablePictureInPicture
+            disableRemotePlayback
+            controlsList="nodownload nofullscreen noremoteplayback"
             {...MOBILE_INLINE_VIDEO_ATTRIBUTES}
             preload="auto"
             onLoadedMetadata={(event) => restorePlaybackPosition(event.currentTarget)}

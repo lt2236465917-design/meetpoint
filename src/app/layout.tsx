@@ -15,6 +15,10 @@ export const metadata: Metadata = {
   },
   other: {
     google: "notranslate",
+    // Keep scenic clips in-page on TBS / some Android OEM browsers (e.g. Mi Browser).
+    "x5-video-player-type": "h5",
+    "x5-video-player-fullscreen": "false",
+    "x5-playsinline": "true",
   },
 };
 

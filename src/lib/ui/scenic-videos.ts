@@ -1,34 +1,58 @@
+export function resolveScenicAssetUrl(baseUrl: string, assetPath: string) {
+  const normalizedBaseUrl = baseUrl.trim().replace(/\/+$/, "");
+  const normalizedAssetPath = assetPath.startsWith("/")
+    ? assetPath
+    : `/${assetPath}`;
+  return `${normalizedBaseUrl}${normalizedAssetPath}`;
+}
+
+const scenicBaseUrl = process.env.NEXT_PUBLIC_SCENIC_BASE_URL ?? "";
+
 export const SCENIC_VIDEOS = [
   {
     label: "金色黄昏",
-    src: "/scenic/golden-hour.mp4",
-    mobileSrc: "/scenic/golden-hour-mobile.mp4",
+    src: resolveScenicAssetUrl(scenicBaseUrl, "/scenic/golden-hour.mp4"),
+    mobileSrc: resolveScenicAssetUrl(
+      scenicBaseUrl,
+      "/scenic/golden-hour-mobile.mp4",
+    ),
     startAt: 2.8,
   },
   {
     label: "静水",
-    src: "/scenic/still-water.mp4",
-    mobileSrc: "/scenic/still-water-mobile.mp4",
+    src: resolveScenicAssetUrl(scenicBaseUrl, "/scenic/still-water.mp4"),
+    mobileSrc: resolveScenicAssetUrl(
+      scenicBaseUrl,
+      "/scenic/still-water-mobile.mp4",
+    ),
     startAt: 2.8,
   },
   {
     label: "密林",
-    src: "/scenic/forest.mp4",
-    mobileSrc: "/scenic/forest-mobile.mp4",
+    src: resolveScenicAssetUrl(scenicBaseUrl, "/scenic/forest.mp4"),
+    mobileSrc: resolveScenicAssetUrl(
+      scenicBaseUrl,
+      "/scenic/forest-mobile.mp4",
+    ),
     startAt: 2.8,
   },
   {
     label: "破晓",
-    src: "/scenic/dawn.mp4",
-    mobileSrc: "/scenic/dawn-mobile.mp4",
+    src: resolveScenicAssetUrl(scenicBaseUrl, "/scenic/dawn.mp4"),
+    mobileSrc: resolveScenicAssetUrl(
+      scenicBaseUrl,
+      "/scenic/dawn-mobile.mp4",
+    ),
     startAt: 5.2,
   },
 ] as const;
 
 export const MOBILE_INLINE_VIDEO_ATTRIBUTES = {
   "webkit-playsinline": "true",
+  "x5-playsinline": "true",
   "x5-video-player-type": "h5-page",
   "x5-video-player-fullscreen": "false",
+  "x5-video-orientation": "portrait",
 } as const;
 
 export const SCENIC_SCENES = {

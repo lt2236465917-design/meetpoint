@@ -26,6 +26,32 @@ The harness rejects remote hosts, protected/default databases, and names without
 
 For local browser testing, open `http://127.0.0.1:<port>`; for real-phone testing, open the current Network URL printed by `npm run dev`. `next.config.ts` discovers active LAN IPv4 addresses at startup so the browser can load Next.js development resources after switching Wi-Fi networks.
 
+## Production Deployment
+
+### Overseas fallback: Vercel Services
+
+The overseas release is one Vercel Services project described by `vercel.json`: the `frontend` Next.js service receives a private URL binding to the `travel_gateway` container through `TRAVEL_GATEWAY_URL`. A Git push may trigger Vercel's Git integration, but it is not the deployment procedure or proof of readiness.
+
+From a clean, verified release commit:
+
+```bash
+vercel project inspect meetpoint
+vercel env ls production
+vercel deploy --prod --yes --logs
+vercel inspect <deployment-url> --wait --timeout 3m
+vercel logs --no-branch --environment production --level error --since 1h
+```
+
+Do not accept a `*.vercel.app` alias as the final endpoint for mainland-China users. Vercel documents that these subdomains may be blocked or throttled in mainland China, and the 2026-07-27 release acceptance reproduced direct timeouts.
+
+### Primary China release: Alibaba Cloud ECS
+
+The approved mainland topology is defined by `deploy/aliyun/compose.yaml`: one loopback-bound Next.js frontend and one unexposed private travel-gateway container on a single mainland ECS instance. The filed canonical host is `www.meetpoint.space`, with the apex redirecting to it. Detailed commands and the Nginx template live in `deploy/aliyun/README.md`.
+
+The ICP filing is approved and public DNS for `www` / apex / `media` is live. Compose binds the frontend to `127.0.0.1:3001` (not host `3000`, which may already be used by other sites on a shared ECS). Host Nginx terminates HTTPS for `www.meetpoint.space`, redirects the apex, and proxies to that loopback port. Scenic MP4 files are on OSS bucket `meetpoint-media` and delivered through CDN hostname `media.meetpoint.space` with `NEXT_PUBLIC_SCENIC_BASE_URL=https://media.meetpoint.space`. Keep security-group application ingress limited to `80`/`443`, and complete full mainland-phone create/join/plan/result acceptance before treating the release as stable. Public-security filing after website launch remains an operator compliance step outside this repository.
+
+Before either deployment, run the root lint/test/build gates and the gateway lint/test/build gates. Confirm environment variable names without printing their values. A reachable homepage alone is not sufficient: verify create, join, plan, result, scenic media, Supabase access, Amap, DeepSeek, and the private gateway path from the target network.
+
 ## Local Fallback Mode
 
 If `NEXT_PUBLIC_SUPABASE_URL` or `SUPABASE_SERVICE_ROLE_KEY` is missing, create, participant, candidate, calculate, and result routes use the server-side in-memory fallback store. It is non-persistent and never calls a supplier or creates an estimated result.

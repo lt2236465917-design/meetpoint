@@ -23,5 +23,7 @@ describe("RootLayout", () => {
     expect(source).toContain("date: false");
     expect(source).toContain("email: false");
     expect(source).toContain("address: false");
+    expect(source).toContain('"x5-video-player-type": "h5"');
+    expect(source).toContain('"x5-playsinline": "true"');
   });
 });

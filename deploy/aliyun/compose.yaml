@@ -1,0 +1,61 @@
+name: meetpoint
+
+services:
+  frontend:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:?required}
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY:?required}
+        NEXT_PUBLIC_SCENIC_BASE_URL: ${NEXT_PUBLIC_SCENIC_BASE_URL:?required}
+    environment:
+      NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:?required}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY:?required}
+      NEXT_PUBLIC_SCENIC_BASE_URL: ${NEXT_PUBLIC_SCENIC_BASE_URL:?required}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:?required}
+      AMAP_API_KEY: ${AMAP_API_KEY:?required}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:?required}
+      DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-v4-flash}
+      TRAVEL_GATEWAY_URL: http://travel-gateway:8080
+      TRAVEL_GATEWAY_TOKEN: ${TRAVEL_GATEWAY_TOKEN:?required}
+      TRAVEL_GATEWAY_TIMEOUT_MS: ${TRAVEL_GATEWAY_TIMEOUT_MS:-30000}
+      AGENT_QUERY_CONCURRENCY: ${AGENT_QUERY_CONCURRENCY:-4}
+    ports:
+      # Host 3000 may already be used by other sites on a shared ECS.
+      - "127.0.0.1:3001:3000"
+    depends_on:
+      travel-gateway:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    restart: unless-stopped
+    networks:
+      - private
+
+  travel-gateway:
+    build:
+      context: ../../services/travel-provider-gateway
+      dockerfile: Dockerfile
+    environment:
+      PORT: "8080"
+      FLYAI_API_KEY: ${FLYAI_API_KEY:?required}
+      TRAVEL_GATEWAY_TOKEN: ${TRAVEL_GATEWAY_TOKEN:?required}
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/healthz').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+    networks:
+      - private
+
+networks:
+  private:
+    driver: bridge
+    internal: false

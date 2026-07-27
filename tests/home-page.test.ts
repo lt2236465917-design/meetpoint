@@ -32,6 +32,11 @@ describe("HomePage", () => {
     expect(html.match(/preload="none"/g)).toHaveLength(3);
     expect(html.match(/x5-video-player-type="h5-page"/g)).toHaveLength(4);
     expect(html.match(/webkit-playsinline="true"/g)).toHaveLength(4);
+    expect(html.match(/x5-playsinline="true"/g)).toHaveLength(4);
+    expect(html.match(/disablepictureinpicture/gi)).toHaveLength(4);
+    expect(html.match(/controlslist="nodownload nofullscreen noremoteplayback"/gi)).toHaveLength(
+      4,
+    );
     expect(html.match(/src="\/scenic\//g)).toHaveLength(8);
     expect(html).toContain("最近记录");
     expect(html).toContain('href="/records"');
@@ -72,5 +77,8 @@ describe("HomePage", () => {
     expect(heroSource).toContain("shouldAdvanceScenicVideo(event.currentTarget)");
     expect(heroSource).toContain("onEnded={() => advanceToNextVideo(index)}");
     expect(heroSource).toContain("onCanPlay");
+    expect(heroSource).toContain("heldVideo");
+    expect(heroSource).toContain("markSceneReady");
+    expect(heroSource).toContain("setHeldVideo(index)");
   });
 });

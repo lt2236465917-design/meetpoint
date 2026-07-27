@@ -12,6 +12,11 @@ The approved product and Multi-Agent architecture is documented separately in `d
 - Browser-side Supabase access must use only the anon client from `src/lib/supabase/client.ts`, but business-table reads are not exposed to `anon` or `authenticated`. Public plan/result data is an explicit HTTP projection from server route handlers; business tables are not members of the Realtime publication.
 - Deterministic business logic lives in `src/lib/`; route handlers orchestrate validation, persistence, and service calls.
 - Amap is called only from the Next.js server-side city provider after a local city miss. The main application calls the isolated Node travel gateway at `services/travel-provider-gateway/` only from server-side calculation code.
+- The overseas release uses the Vercel Services topology in `vercel.json`: the `frontend` Next.js service receives an internal `TRAVEL_GATEWAY_URL` binding to the private `travel_gateway` container service, and only the frontend is routed publicly.
+- The primary China topology is `deploy/aliyun/compose.yaml` on one Alibaba Cloud mainland ECS instance. The frontend binds only to host loopback port `3001` (container port `3000`) so co-hosted sites can keep host `3000`; the gateway is available only by Docker service name on the private application network and publishes no host port. After ICP approval, host Nginx is the only public application entry point on `80`/`443`, proxying to `127.0.0.1:3001`.
+- `www.meetpoint.space` is the filed canonical host; the apex redirects to it. `media.meetpoint.space` serves scenic MP4 through Alibaba Cloud CDN backed by OSS bucket `meetpoint-media`. The ECS build rewrites scenic URLs through `NEXT_PUBLIC_SCENIC_BASE_URL`; local and Vercel builds retain same-origin `/scenic/*` paths.
+- The mainland UI uses system font stacks and does not request Google Fonts. Every page renders only the public ICP number/link; filing-owner identity and contact data never enter the repository or response HTML.
+- A Vercel `*.vercel.app` alias is not a sufficient production endpoint for this China-targeted product. The filed HTTPS domain is live on Alibaba Cloud ECS; treat production as accepted for China only after full mainland-phone create/join/plan/result acceptance remains stable.
 
 ## User-Facing Routes
 

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { IcpFooter } from "@/components/legal/IcpFooter";
 import {
   readScenicSceneIndex,
   subscribeScenicSceneIndex,
@@ -131,6 +132,9 @@ export function HomeHero() {
   // Gates opacity for whichever scene is active (not only index 0 — remount after
   // visiting /records must reveal the persisted non-zero scene too).
   const [sceneReady, setSceneReady] = useState(false);
+  // Keep the previous clip visible until the newly active clip has a frame, so
+  // scene switches do not flash the black canvas underneath.
+  const [heldVideo, setHeldVideo] = useState(0);
   const hasSceneChanged = useRef(false);
   const switchLockRef = useRef(false);
   const transitionTimeoutRef = useRef<number | undefined>(undefined);
@@ -161,6 +165,7 @@ export function HomeHero() {
       const stopPlaybackRecovery = startScenicPlayback(video, {
         onStarted: () => {
           setSceneReady(true);
+          setHeldVideo(index);
         },
       });
       playbackCleanups.push(() => {
@@ -170,6 +175,12 @@ export function HomeHero() {
     });
     return () => playbackCleanups.forEach((cleanup) => cleanup());
   }, [activeVideo]);
+
+  const markSceneReady = (index: number) => {
+    if (index !== activeVideo) return;
+    setSceneReady(true);
+    setHeldVideo(index);
+  };
 
   const releaseSwitchLockAfterFade = () => {
     if (transitionTimeoutRef.current !== undefined) {
@@ -182,7 +193,9 @@ export function HomeHero() {
   };
 
   const activateVideo = (index: number) => {
-    setSceneReady(false);
+    if (index !== activeVideo) {
+      setSceneReady(false);
+    }
     writeScenicSceneIndex(index);
     setIsTransitioning(true);
     releaseSwitchLockAfterFade();
@@ -241,7 +254,10 @@ export function HomeHero() {
                 videoRefs.current[index] = element;
               }}
               className={`pointer-events-none absolute inset-0 z-10 h-full w-full object-cover transition-opacity duration-[1400ms] ease-in-out ${
-                activeVideo === index && sceneReady
+                (activeVideo === index && sceneReady) ||
+                (heldVideo === index &&
+                  heldVideo !== activeVideo &&
+                  !sceneReady)
                   ? "opacity-100"
                   : "opacity-0"
               }`}
@@ -249,12 +265,15 @@ export function HomeHero() {
               autoPlay={activeVideo === index}
               muted
               playsInline
+              disablePictureInPicture
+              disableRemotePlayback
+              controlsList="nodownload nofullscreen noremoteplayback"
               {...MOBILE_INLINE_VIDEO_ATTRIBUTES}
               onCanPlay={() => {
-                if (index === activeVideo) setSceneReady(true);
+                markSceneReady(index);
               }}
               onPlaying={() => {
-                if (index === activeVideo) setSceneReady(true);
+                markSceneReady(index);
               }}
               onTimeUpdate={(event) => {
                 if (shouldAdvanceScenicVideo(event.currentTarget)) {
@@ -349,6 +368,8 @@ export function HomeHero() {
             </div>
           </div>
         </div>
+
+        <IcpFooter className="readable-body shrink-0 text-white/70" />
       </div>
     </section>
   );

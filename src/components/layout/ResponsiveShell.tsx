@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
+import { IcpFooter } from "@/components/legal/IcpFooter";
 
 export function ResponsiveShell({
   title,
@@ -52,6 +53,8 @@ export function ResponsiveShell({
             {aside}
           </footer>
         )}
+
+        <IcpFooter className="shrink-0 border-t border-white/10 px-5 py-2 text-[var(--atmosphere-muted)] opacity-80 sm:px-8" />
       </div>
     </main>
   );
