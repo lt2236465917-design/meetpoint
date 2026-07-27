@@ -19,9 +19,9 @@
 **Files:** `AGENTS.md`, `src/lib/validation/calendar-date.ts`, `src/lib/validation/schemas.ts`, `src/lib/ui/create-plan-form.ts`, date/form/API tests.
 
 - [x] Add approved permanent rules to `AGENTS.md` before implementation.
-- [ ] Add failing cases for nonexistent dates, leap years, and Shanghai minimum boundaries.
-- [ ] Implement one round-trip Gregorian calendar parser shared by API and form validation.
-- [ ] Verify focused tests and commit `fix: validate real plan calendar dates`.
+- [x] Add failing cases for nonexistent dates, leap years, and Shanghai minimum boundaries.
+- [x] Implement one round-trip Gregorian calendar parser shared by API and form validation.
+- [x] Verify focused tests and commit `fix: validate real plan calendar dates`.
 
 ### Task 2: Validate Canonical Departure Identity
 

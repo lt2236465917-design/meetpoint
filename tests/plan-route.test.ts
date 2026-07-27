@@ -30,6 +30,22 @@ describe("POST /api/plans", () => {
     expect(mocks.rpc).not.toHaveBeenCalled();
   });
 
+  it("rejects a nonexistent calendar date before calling storage", async () => {
+    const { POST } = await import("@/app/api/plans/route");
+    const response = await POST(new Request("http://localhost/api/plans", {
+      method: "POST",
+      body: JSON.stringify({
+        title: "不存在的日期",
+        arrivalDate: "2026-02-31",
+        participantLimit: 4,
+      }),
+    }));
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({ error: "INVALID_INPUT" });
+    expect(mocks.rpc).not.toHaveBeenCalled();
+  });
+
   it("atomically creates a plan and host credential through one RPC", async () => {
     mocks.rpc.mockResolvedValue({ data: "plan-1", error: null });
     const { POST } = await import("@/app/api/plans/route");

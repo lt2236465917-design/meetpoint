@@ -1,5 +1,6 @@
 import {
   calendarDateInShanghai,
+  isCalendarDate,
   isCalendarDateOnOrAfter,
 } from "@/lib/validation/calendar-date";
 
@@ -31,6 +32,9 @@ export function parseCreatePlanForm(
   }
   if (!arrivalDate) {
     return { ok: false, error: "请选择计划到达日期" };
+  }
+  if (!isCalendarDate(arrivalDate)) {
+    return { ok: false, error: "请选择真实存在的到达日期" };
   }
   if (!isCalendarDateOnOrAfter(arrivalDate, minimumArrivalDate)) {
     return { ok: false, error: "请选择今天或之后的到达日期" };

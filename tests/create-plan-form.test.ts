@@ -64,6 +64,18 @@ describe("parseCreatePlanForm", () => {
     });
   });
 
+  it("explains when the selected calendar date does not exist", () => {
+    const formData = new FormData();
+    formData.set("title", "周末跨城见面测试");
+    formData.set("arrivalDate", "2026-02-31");
+    formData.set("participantLimit", "4");
+
+    expect(parseCreatePlanForm(formData, "2026-01-01")).toEqual({
+      ok: false,
+      error: "请选择真实存在的到达日期",
+    });
+  });
+
   it("allows today as the arrival date", () => {
     const formData = new FormData();
     formData.set("title", "周末跨城见面测试");

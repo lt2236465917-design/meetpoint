@@ -1,6 +1,7 @@
 import { z } from "zod";
 import {
   calendarDateInShanghai,
+  isCalendarDate,
   isCalendarDateOnOrAfter,
 } from "@/lib/validation/calendar-date";
 
@@ -19,10 +20,12 @@ export function createPlanSchema(
 ) {
   return z.object({
     title: z.string().trim().min(1).max(60),
-    arrivalDate: calendarDateSchema.refine(
-      (value) => isCalendarDateOnOrAfter(value, minimumArrivalDate),
-      "Arrival date cannot be in the past",
-    ),
+    arrivalDate: calendarDateSchema
+      .refine(isCalendarDate, "Arrival date must exist")
+      .refine(
+        (value) => isCalendarDateOnOrAfter(value, minimumArrivalDate),
+        "Arrival date cannot be in the past",
+      ),
     participantLimit: z.number().int().min(2).max(6),
   }).strict();
 }
