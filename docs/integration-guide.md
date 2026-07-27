@@ -14,6 +14,8 @@ The same user-facing routes must remain usable on phones (shareable plan links) 
 
 The hardening migrations are `supabase/migrations/202607210001_publication_safety_and_run_recovery.sql` and `supabase/migrations/202607260001_atomic_materialization_and_policy_replay.sql`; the Batch B migration remains synchronized with `supabase/schema.sql`. Both were applied to the linked Supabase project on 2026-07-27. Postflight migration, privilege, Realtime, and rollback-safe publication checks passed. The controlled supplier-backed run ended safely incomplete because real quote coverage was insufficient; see `docs/acceptance/2026-07-27-repository-audit-batch-b-remote-acceptance.md`.
 
+Batch C requires real calendar dates and a server-canonical departure code/name pair. Participant creation may return `INVALID_DEPARTURE_CITY` (search and select the city again) or `CITY_VALIDATION_UNAVAILABLE` (temporary 503; retry later). Plan creation may return `PLAN_CODE_EXHAUSTED` after five genuine code collisions. Private preview terminal states remain readable only to the requester or host; their retry creates a new preview run. See `docs/acceptance/2026-07-27-repository-audit-batch-c-local-acceptance.md`.
+
 For local database verification, point only at a disposable loopback PostgreSQL database whose name ends in `_test`:
 
 ```bash

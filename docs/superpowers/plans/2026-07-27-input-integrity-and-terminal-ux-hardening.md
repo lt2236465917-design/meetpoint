@@ -1,6 +1,6 @@
 # Input Integrity And Terminal UX Hardening Implementation Plan
 
-**Status:** Reviewed — executing failing-first
+**Status:** Completed locally
 
 **Design:** `docs/superpowers/specs/2026-07-27-input-integrity-and-terminal-ux-hardening-design.md`
 
@@ -66,9 +66,9 @@
 
 **Files:** current documentation and `.superpowers/sdd/progress.md`.
 
-- [ ] Run focused Batch C tests.
-- [ ] Run `npm run lint`, `npm run test`, and `npm run build`.
-- [ ] If any database files changed, run the guarded PostgreSQL suite and document why.
-- [ ] Review diff, staged paths, secrets, user-facing copy, and fallback parity.
-- [ ] Update authority/current-runtime documentation and mark Batch C complete only from fresh evidence.
-- [ ] Commit `docs: record Batch C input and terminal hardening`.
+- [x] Run focused Batch C tests.
+- [x] Run `npm run lint`, `npm run test`, and `npm run build`.
+- [x] If any database files changed, run the guarded PostgreSQL suite and document why. No database files changed.
+- [x] Review diff, staged paths, secrets, user-facing copy, and fallback parity.
+- [x] Update authority/current-runtime documentation and mark Batch C complete only from fresh evidence.
+- [x] Commit `docs: record Batch C input and terminal hardening`.
