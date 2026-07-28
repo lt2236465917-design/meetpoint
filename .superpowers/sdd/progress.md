@@ -132,6 +132,19 @@ Initial reviewed HEAD: `7797e99`
 - Batch C local implementation (2026-07-27): complete through `ef4ce2f` before final documentation. Real Gregorian date validation, server-canonical built-in/Amap departure identity, five-attempt durable/fallback plan-code collision handling, epoch-based fallback arrival aggregates, and actionable private-preview terminal states are implemented. Public automatic-progress isolation remained unchanged because it was already fixed.
 - Batch C verification (2026-07-27): focused regressions passed throughout; final root lint passed, full Vitest passed 74 files / 476 tests, and production build/TypeScript passed after the expected managed-sandbox Turbopack port denial was rerun with local-process permission. No database or gateway files changed, so their gates were not required. Credential rotation remains explicitly deferred; no push or deployment is claimed. Canonical evidence: `docs/acceptance/2026-07-27-repository-audit-batch-c-local-acceptance.md`.
 
+# Background Recommendation Run Worker
+
+- Design approved 2026-07-28 on `codex/repository-audit-complete` commit `34a9af8`: `docs/superpowers/specs/2026-07-28-background-recommendation-run-worker-design.md` (Compose private `run-worker`; automatic + alternative; reuse lease/`advanceRun`; host confirm remains human; ECS leave-and-finish; Vercel worker not required).
+- Implementation plan written 2026-07-28: `docs/superpowers/plans/2026-07-28-background-recommendation-run-worker.md`. Operator approved Subagent-Driven execution the same day.
+- Task 1: complete (commits 34a9af8..8591d35, review clean) — 2h active stale window + migration `202607280001`.
+- Task 2: complete (commits 8591d35..7b33613, review clean; Minors for final: nextRefreshDelayMs empty-ladder 21000 fallback; slight leave-copy test duplication) — leave-friendly UX / `RUN_STALE_EXPIRED` framing.
+- Task 3: complete (commits 7b33613..54ed8a7, review clean after mock stub fix; Minors for final: no listing unit test; 50-row cap; redundant in-memory re-sort) — worker selection helpers.
+- Task 4: complete (commits 54ed8a7..ff33283, review clean; controller resolution: keep tick→heartbeat→sleep over Step 3 sample order; Minor: unused now? on RunWorkerDeps header; no maxInFlight throw test) — tick loop.
+- Task 5: complete (commits ff33283..f455683, review clean; Minors for final: no upper-bound poll env test; heartbeat parent dir; console.error default; triple pollIntervalMs call; heartbeat write fatal) — process entry.
+- Task 6: complete (commits f455683..cbc3255, review clean; worker stage before runtime so default final stays frontend; Minors: compose config skipped locally; full npm ci in worker image; heartbeat /tmp writability for ECS) — Compose packaging.
+- Task 7: complete (docs + verification on branch after `cbc3255`) — `architecture.md` / `integration-guide.md` / authority index record three-service Compose topology, optional browser advance, and 2h stale foundation. ECS leave-and-finish acceptance is checklist-only and not claimed executed. Apply migration `202607280001` and rebuild Compose with healthy `run-worker` before that operator gate.
+- Do not claim Vercel ships a worker. Do not claim ECS leave-and-finish acceptance until the operator records it in `docs/acceptance/2026-07-28-aliyun-mainland-phone-acceptance.md`.
+
 # Production Release Progress
 
 - Release integration (2026-07-27): Repository Audit Batches A–C advanced linearly to `origin/main`; product commit `206cd7e` and release-evidence commit `b38e60c` were pushed without force.

@@ -40,6 +40,7 @@ Fill every row on a real mainland mobile network. Prefer WeChat in-app browser p
 | 8 | If `completed`: one city, 省钱/省时 only, verified-fare trust copy, no estimates / average fare / booking CTAs | | PENDING | City: |
 | 9 | Functional scenes: create/join=静水, plan=密林, result=破晓; no four-clip cycling on those routes | | PENDING | |
 | 10 | CDN video: Network shows `media.meetpoint.space`, not ECS origin for MP4 | | PENDING | |
+| 11 | Leave-and-finish: after calculate/preview start, close all browsers; with healthy Compose `run-worker` and applied `202607280001`, run reaches terminal or `awaiting_host_confirmation`; worker logs show advances; one open result tab still respects the lease (no double-work) | | PENDING | Operator reminder only — not executed in Task 7. Prerequisites: apply stale-window migration; `docker compose ... up --build -d` so `run-worker` is healthy. |
 
 **Fresh supplier-backed success is desirable but not required to close the China reachability gate.** If coverage ends `incomplete`, confirm zero shared schemes and record the diagnostic; do not publish estimates.
 
@@ -73,7 +74,7 @@ docker compose \
   ps
 ```
 
-Confirm frontend is `Up` / `healthy` on host loopback `127.0.0.1:3001` only. Do not publish gateway `8080`.
+Confirm frontend is `Up` / `healthy` on host loopback `127.0.0.1:3001` only. Confirm `run-worker` is `Up` / `healthy` with no published host port. Do not publish gateway `8080`.
 
 ## Cleanup gate (do not run yet)
 
