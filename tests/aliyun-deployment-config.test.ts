@@ -53,4 +53,29 @@ describe("Alibaba Cloud ECS deployment configuration", () => {
     expect(dockerignore).toMatch(/^services\/travel-provider-gateway\/\.env\*$/m);
     expect(dockerignore).toMatch(/^services\/travel-provider-gateway\/node_modules$/m);
   });
+
+  it("packages a private run-worker that does not publish a host port", async () => {
+    const [dockerfile, compose, envExample] = await Promise.all([
+      read("Dockerfile"),
+      read("deploy/aliyun/compose.yaml"),
+      read("deploy/aliyun/production.env.example"),
+    ]);
+
+    expect(dockerfile).toMatch(/^FROM node:20-slim AS worker$/m);
+    expect(dockerfile).toMatch(/CMD \["npx", "tsx", "src\/worker\/recommendation-run-worker\.ts"\]/);
+    expect(dockerfile).toMatch(/^USER node$/m);
+
+    expect(compose).toMatch(/^  run-worker:/m);
+    const workerSection = compose.split(/^  run-worker:/m)[1]?.split(/^  [a-z]/m)[0] ?? "";
+    expect(workerSection).toContain("target: worker");
+    expect(workerSection).not.toMatch(/^\s+ports:/m);
+    expect(workerSection).toContain("TRAVEL_GATEWAY_URL: http://travel-gateway:8080");
+    expect(workerSection).toContain("SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:?required}");
+    expect(workerSection).toContain("restart: unless-stopped");
+    expect(workerSection).toContain("condition: service_healthy");
+    expect(workerSection).toContain("run-worker-heartbeat");
+
+    expect(envExample).toContain("RUN_WORKER_POLL_INTERVAL_MS=");
+    expect(envExample).not.toMatch(/RUN_WORKER_POLL_INTERVAL_MS=\S+/);
+  });
 });

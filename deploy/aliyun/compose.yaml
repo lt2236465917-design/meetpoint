@@ -55,6 +55,42 @@ services:
     networks:
       - private
 
+  run-worker:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+      target: worker
+    environment:
+      NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:?required}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:?required}
+      AMAP_API_KEY: ${AMAP_API_KEY:?required}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:?required}
+      DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-v4-flash}
+      TRAVEL_GATEWAY_URL: http://travel-gateway:8080
+      TRAVEL_GATEWAY_TOKEN: ${TRAVEL_GATEWAY_TOKEN:?required}
+      TRAVEL_GATEWAY_TIMEOUT_MS: ${TRAVEL_GATEWAY_TIMEOUT_MS:-30000}
+      AGENT_QUERY_CONCURRENCY: ${AGENT_QUERY_CONCURRENCY:-4}
+      RUN_WORKER_POLL_INTERVAL_MS: ${RUN_WORKER_POLL_INTERVAL_MS:-3000}
+      RUN_WORKER_HEARTBEAT_PATH: /tmp/run-worker-heartbeat
+    depends_on:
+      travel-gateway:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "const fs=require('fs');const p=process.env.RUN_WORKER_HEARTBEAT_PATH||'/tmp/run-worker-heartbeat';const st=fs.statSync(p);if(Date.now()-st.mtimeMs>30000)process.exit(1)",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+    restart: unless-stopped
+    networks:
+      - private
+
 networks:
   private:
     driver: bridge

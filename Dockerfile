@@ -17,6 +17,21 @@ ENV NEXT_PUBLIC_SCENIC_BASE_URL=$NEXT_PUBLIC_SCENIC_BASE_URL
 RUN npm run build
 RUN npm prune --omit=dev
 
+FROM node:20-slim AS worker
+
+WORKDIR /app
+
+ENV NODE_ENV=production
+
+COPY package.json package-lock.json ./
+RUN npm ci
+
+COPY tsconfig.json ./
+COPY src ./src
+
+USER node
+CMD ["npx", "tsx", "src/worker/recommendation-run-worker.ts"]
+
 FROM node:20-slim AS runtime
 
 WORKDIR /app
