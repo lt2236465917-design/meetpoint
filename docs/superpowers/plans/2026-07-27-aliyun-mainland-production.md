@@ -32,6 +32,6 @@
 - [x] Deploy both containers while the frontend remains loopback-only.
 - [x] Smoke through an SSH tunnel and verify mainland outbound dependencies.
 - [x] Configure DNS, HTTPS, Nginx, and public security-group ports.
-- [ ] Complete real mainland-phone acceptance for the full flow and scenic video.
+- [ ] Complete real mainland-phone acceptance for the full flow and scenic video. Checklist + remote preflight: `docs/acceptance/2026-07-28-aliyun-mainland-phone-acceptance.md`.
 - [ ] Complete post-launch public-security filing (operator compliance outside this repository).
 - [ ] Only after the release is stable, inspect and remove duplicate Batch B worktrees/stashes, then commit and push the authorized knowledge changes.
