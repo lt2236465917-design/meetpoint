@@ -5,6 +5,8 @@ import {
   runWorkerTick,
   selectNextWorkerRun,
   isWorkerAdvanceableStatus,
+  workerPollIntervalMs,
+  workerHeartbeatPath,
   type WorkerAdvanceableRun,
 } from "@/lib/recommendation/run-worker";
 
@@ -108,5 +110,20 @@ describe("recommendation run worker tick", () => {
     expect(advanceRun).toHaveBeenCalled();
     expect(heartbeats[0]).toBe(1);
     expect(sleeps[0]).toBe(3_000);
+  });
+});
+
+describe("recommendation run worker env helpers", () => {
+  it("defaults poll interval to 3s and rejects out-of-range values", () => {
+    expect(workerPollIntervalMs({})).toBe(3_000);
+    expect(workerPollIntervalMs({ RUN_WORKER_POLL_INTERVAL_MS: "5000" })).toBe(5_000);
+    expect(() => workerPollIntervalMs({ RUN_WORKER_POLL_INTERVAL_MS: "100" })).toThrow(
+      /RUN_WORKER_POLL_INTERVAL_MS/,
+    );
+  });
+
+  it("defaults the heartbeat path", () => {
+    expect(workerHeartbeatPath({})).toBe("/tmp/run-worker-heartbeat");
+    expect(workerHeartbeatPath({ RUN_WORKER_HEARTBEAT_PATH: "/tmp/x" })).toBe("/tmp/x");
   });
 });

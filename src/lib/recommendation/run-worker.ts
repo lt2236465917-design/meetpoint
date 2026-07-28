@@ -91,3 +91,16 @@ export async function runWorkerLoop(options: RunWorkerLoopOptions): Promise<void
     await sleep(options.pollIntervalMs);
   }
 }
+
+export function workerPollIntervalMs(env: NodeJS.ProcessEnv = process.env): number {
+  const raw = env.RUN_WORKER_POLL_INTERVAL_MS;
+  const parsed = raw ? Number.parseInt(raw, 10) : 3_000;
+  if (!Number.isFinite(parsed) || parsed < 500 || parsed > 60_000) {
+    throw new Error("RUN_WORKER_POLL_INTERVAL_MS must be between 500 and 60000");
+  }
+  return parsed;
+}
+
+export function workerHeartbeatPath(env: NodeJS.ProcessEnv = process.env): string {
+  return env.RUN_WORKER_HEARTBEAT_PATH?.trim() || "/tmp/run-worker-heartbeat";
+}
