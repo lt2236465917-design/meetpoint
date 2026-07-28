@@ -67,6 +67,7 @@ export async function GET(
     participants: participants ?? [],
     latestRun: latestRun
       ? {
+          runId: latestRun.id,
           status: latestRun.status,
           traceId: latestRun.trace_id,
           pendingGroups: pendingGroups ?? 0,

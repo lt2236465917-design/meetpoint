@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { ParticipantList } from "@/components/plan/ParticipantList";
 import {
+  advanceAutomaticRun,
   getRunProgressMessage,
   isNonterminal,
+  nextRefreshDelayMs,
   type PublicRunProgress,
 } from "@/components/result/RefreshingResultNotice";
 import { Notice } from "@/components/ui/Notice";
@@ -47,10 +49,14 @@ export function PublicPlanContent({
   );
   const [calculateMessage, setCalculateMessage] = useState("");
   const [calculating, setCalculating] = useState(false);
+  const latestRunRef = useRef(data.latestRun);
   const isCalculatingResult = data.latestRun
     ? isNonterminal(data.latestRun.status)
     : false;
   const hasCompletedResult = data.latestRun?.status === "completed";
+  const terminalFailure =
+    data.latestRun?.status === "incomplete" ||
+    data.latestRun?.status === "failed";
   const participantsFull =
     data.participants.length >= data.plan.participant_limit;
   const canCalculateHere =
@@ -80,9 +86,26 @@ export function PublicPlanContent({
   }, [code, initialData.latestRun, initialData.plan]);
 
   useEffect(() => {
+    latestRunRef.current = data.latestRun;
+  }, [data.latestRun]);
+
+  useEffect(() => {
     let active = true;
 
-    async function refresh() {
+    async function refresh(currentRun = latestRunRef.current) {
+      if (
+        currentRun &&
+        isNonterminal(currentRun.status) &&
+        localParticipantEditToken &&
+        currentRun.runId
+      ) {
+        await advanceAutomaticRun({
+          code,
+          runId: currentRun.runId,
+          participantToken: localParticipantEditToken,
+        }).catch(() => false);
+      }
+
       try {
         const response = await fetch(`/api/plans/${code}`, {
           cache: "no-store",
@@ -90,6 +113,7 @@ export function PublicPlanContent({
         if (!response.ok) return null;
         const nextData = (await response.json()) as PublicPlanData;
         if (active) {
+          latestRunRef.current = nextData.latestRun;
           setData(nextData);
         }
         return nextData;
@@ -99,30 +123,32 @@ export function PublicPlanContent({
       }
     }
 
-    const delays = [2_000, 3_000, 5_000, 8_000, 13_000, 21_000];
     let refreshCount = 0;
     let timer: number | undefined;
 
     function scheduleRefresh(latestRun: PublicRunProgress | null) {
       if (!active || !latestRun || !isNonterminal(latestRun.status)) return;
-      const delay = delays[refreshCount];
-      if (delay === undefined) return;
+      const delay = nextRefreshDelayMs(refreshCount);
       timer = window.setTimeout(async () => {
         refreshCount += 1;
-        const nextData = await refresh();
-        scheduleRefresh(nextData?.latestRun ?? latestRun);
+        const nextData = await refresh(latestRunRef.current ?? latestRun);
+        scheduleRefresh(
+          nextData?.latestRun ?? latestRunRef.current ?? latestRun,
+        );
       }, delay);
     }
 
-    void refresh().then((nextData) => {
-      scheduleRefresh(nextData?.latestRun ?? initialData.latestRun);
-    });
+    void refresh(latestRunRef.current ?? initialData.latestRun).then(
+      (nextData) => {
+        scheduleRefresh(nextData?.latestRun ?? initialData.latestRun);
+      },
+    );
 
     return () => {
       active = false;
       if (timer !== undefined) window.clearTimeout(timer);
     };
-  }, [code, initialData.latestRun]);
+  }, [code, initialData.latestRun, localParticipantEditToken]);
 
   async function calculate() {
     if (calculating || !localParticipantEditToken) return;
@@ -178,6 +204,29 @@ export function PublicPlanContent({
             >
               {calculating ? "见面安排中" : "开始见面"}
             </button>
+          ) : null}
+
+          {isCalculatingResult ? (
+            <>
+              <Link
+                className="atmosphere-cta block w-full rounded-xl py-3 text-center font-medium"
+                href={`/p/${code}/result`}
+              >
+                看看安排进度
+              </Link>
+              <p className="text-xs leading-5 text-[var(--atmosphere-muted)]">
+                可以离开，系统会继续安排；点上面可随时回来看进度。
+              </p>
+            </>
+          ) : null}
+
+          {terminalFailure ? (
+            <Link
+              className="atmosphere-cta block w-full rounded-xl py-3 text-center font-medium"
+              href={`/p/${code}/result`}
+            >
+              去重新查询
+            </Link>
           ) : null}
 
           {hasCompletedResult ? (

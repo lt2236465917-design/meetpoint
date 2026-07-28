@@ -9,6 +9,14 @@ import { readMeetingHistory } from "@/lib/ui/meeting-history";
 
 const REFRESH_DELAYS_MS = [2_000, 3_000, 5_000, 8_000, 13_000, 21_000];
 
+export function nextRefreshDelayMs(
+  refreshCount: number,
+  delays: readonly number[] = REFRESH_DELAYS_MS,
+) {
+  if (delays.length === 0) return 21_000;
+  return delays[Math.min(Math.max(refreshCount, 0), delays.length - 1)]!;
+}
+
 export type PublicRunProgress = {
   runId: string;
   status: RunStatus;
@@ -73,7 +81,7 @@ export function RefreshingResultNotice({
   const [restartMessage, setRestartMessage] = useState("");
   const autoRefresh = isNonterminal(progress.status);
   const terminalFailure = progress.status === "incomplete" || progress.status === "failed";
-  const delay = REFRESH_DELAYS_MS[refreshCount];
+  const delay = nextRefreshDelayMs(refreshCount);
 
   const refresh = useCallback(async () => {
     if (code && autoRefresh) {
@@ -117,7 +125,7 @@ export function RefreshingResultNotice({
   }, [code, restarting, router]);
 
   useEffect(() => {
-    if (!autoRefresh || delay === undefined) return;
+    if (!autoRefresh) return;
     const timer = window.setTimeout(() => void refresh(), delay);
     return () => window.clearTimeout(timer);
   }, [autoRefresh, delay, refresh]);
@@ -125,6 +133,11 @@ export function RefreshingResultNotice({
   const body = (
     <div aria-live="polite" className="space-y-2" role="status">
       <Notice>{getRunProgressMessage(progress, now)}</Notice>
+      {autoRefresh ? (
+        <p className="text-xs leading-5 text-[var(--atmosphere-muted)]">
+          可以离开，系统会继续查票；回来打开本页即可查看进度。
+        </p>
+      ) : null}
       {progress.status === "incomplete" || progress.status === "failed" ? (
         <p className="text-xs leading-5 text-[var(--atmosphere-muted)]">
           诊断编号 {diagnosticRunId(progress.runId)}
@@ -189,6 +202,9 @@ export function getRunProgressMessage(progress: PublicRunProgress, now = new Dat
     case "incomplete":
       return "有几位朋友的票价没查全，过一会再试一次";
     case "failed":
+      if (progress.diagnosticCode === "RUN_STALE_EXPIRED") {
+        return "查询暂停太久中断了。多半是后台服务停太久，点「重新查询」后再等一会儿。";
+      }
       return "这次没安排成，稍后再试一次。如果反复失败，把下面这串编号发给发起人。";
     case "completed":
       return "选好了！去看看这次在哪儿见";

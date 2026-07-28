@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 import { ResultContent } from "@/app/p/[code]/result/page";
 import {
   advanceAutomaticRun,
+  nextRefreshDelayMs,
   restartAutomaticRun,
 } from "@/components/result/RefreshingResultNotice";
 
@@ -45,6 +46,13 @@ function renderStatus(
 }
 
 describe("result page public states", () => {
+  it("keeps polling after the initial backoff ladder so long collections can finish", () => {
+    expect(nextRefreshDelayMs(0)).toBe(2_000);
+    expect(nextRefreshDelayMs(5)).toBe(21_000);
+    expect(nextRefreshDelayMs(6)).toBe(21_000);
+    expect(nextRefreshDelayMs(40)).toBe(21_000);
+  });
+
   it("advances a nonterminal automatic run with the stored participant token", async () => {
     const request = vi.fn(async () => new Response(null, { status: 200 }));
 
@@ -86,11 +94,20 @@ describe("result page public states", () => {
       const html = renderStatus(status);
 
       expect(html).toContain("正在替大家查 8 组真实车票和机票");
+      expect(html).toContain("可以离开");
+      expect(html).not.toContain("请保持本页打开");
       expect(html).toContain("刷新结果");
       expect(html).not.toContain("省钱方案");
       expect(html).not.toContain("省时方案");
     },
   );
+
+  it("tells waiting users they can leave while querying continues", () => {
+    const html = renderStatus("collecting");
+    expect(html).toContain("可以离开");
+    expect(html).not.toContain("请保持本页打开");
+    expect(html).not.toContain("关掉页面会暂停");
+  });
 
   it("shows the bounded supplier cooldown", () => {
     const html = renderStatus("cooling_down", {
@@ -148,6 +165,18 @@ describe("result page public states", () => {
     expect(html).toContain("返回计划页");
     expect(html).not.toContain("刷新结果");
     expect(html).not.toContain("省钱方案");
+  });
+
+  it("explains stale expiry as system interruption, not a keep-page-open duty", () => {
+    const html = renderStatus("failed", {
+      diagnosticCode: "RUN_STALE_EXPIRED",
+    });
+
+    expect(html).toContain("查询暂停太久中断了");
+    expect(html).toContain("后台服务");
+    expect(html).not.toContain("请保持本页打开");
+    expect(html).toContain("重新查询");
+    expect(html).not.toContain("开算");
   });
 
   it("renders no recommendation before a run exists", () => {

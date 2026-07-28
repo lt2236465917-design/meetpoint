@@ -153,6 +153,7 @@ describe("GET /api/plans/[code]", () => {
       },
       participants,
       latestRun: {
+        runId: "run-1",
         status: "collecting",
         traceId: "11111111-1111-4111-8111-111111111111",
         pendingGroups: 3,
@@ -237,6 +238,7 @@ describe("GET /api/plans/[code]", () => {
 
     expect(response.status).toBe(200);
     expect(body.latestRun).toEqual({
+      runId: "run-shared",
       status: "completed",
       traceId: "11111111-1111-4111-8111-111111111111",
       pendingGroups: 0,

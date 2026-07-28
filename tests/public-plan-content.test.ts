@@ -136,7 +136,7 @@ describe("PublicPlanContent", () => {
     expect(html).not.toContain("加入这场见面");
   });
 
-  it("keeps the result action unavailable while the calculation is running", () => {
+  it("links to the progress page while the calculation is running", () => {
     const html = renderToStaticMarkup(
       createElement(PublicPlanContent, {
         code: "ABC123",
@@ -155,14 +155,19 @@ describe("PublicPlanContent", () => {
     );
 
     expect(html).toContain("正在替大家查 6 组真实车票和机票");
+    expect(html).toContain("看看安排进度");
+    expect(html).toContain('href="/p/ABC123/result"');
+    expect(html).toContain("可以离开");
+    expect(html).not.toContain("有人打开进度页时才会继续查票");
+    expect(html).not.toContain("关掉页面会暂停");
     expect(html).not.toContain("结果生成中");
     expect(html).not.toContain("暂无结果");
     expect(html).not.toContain("正在生成结果");
-    expect(html).not.toContain('href="/p/ABC123/result"');
     expect(html).not.toContain("已有结果");
+    expect(html).not.toContain("省钱方案");
   });
 
-  it("shows validation progress on the public plan without exposing result cards", () => {
+  it("links to the progress page during validation without exposing result cards", () => {
     const html = renderToStaticMarkup(
       createElement(PublicPlanContent, {
         code: "ABC123",
@@ -181,8 +186,45 @@ describe("PublicPlanContent", () => {
     );
 
     expect(html).toContain("正在逐条确认每个人的路线真实可订");
-    expect(html).not.toContain('href="/p/ABC123/result"');
+    expect(html).toContain("看看安排进度");
+    expect(html).toContain('href="/p/ABC123/result"');
     expect(html).not.toContain("省钱方案");
+  });
+
+  it("sends terminal failures to the result page for a fresh query", () => {
+    const html = renderToStaticMarkup(
+      createElement(PublicPlanContent, {
+        code: "ABC123",
+        initialData: {
+          ...planData,
+          latestRun: {
+            runId: "run-1",
+            status: "failed",
+            traceId: "trace-1",
+            pendingGroups: 0,
+            retryAt: null,
+            diagnosticCode: "RUN_STALE_EXPIRED",
+          },
+        },
+      }),
+    );
+
+    expect(html).toContain("查询暂停太久中断了");
+    expect(html).toContain("去重新查询");
+    expect(html).toContain('href="/p/ABC123/result"');
+    expect(html).not.toContain("看看安排进度");
+    expect(html).not.toContain("省钱方案");
+  });
+
+  it("advances an in-progress run from the public plan when a local participant token exists", () => {
+    const componentSource = readFileSync(
+      path.join(process.cwd(), "src/components/plan/PublicPlanContent.tsx"),
+      "utf8",
+    );
+
+    expect(componentSource).toContain("advanceAutomaticRun");
+    expect(componentSource).toContain("localParticipantEditToken");
+    expect(componentSource).toContain("nextRefreshDelayMs");
   });
 
   it("shows a direct meetup entry for local participants when participants are full", () => {
