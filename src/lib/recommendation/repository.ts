@@ -12,6 +12,12 @@ import type {
 import { calculationOutputSchema } from "@/lib/agent/contracts";
 import { createServiceSupabaseClient } from "@/lib/supabase/server";
 import { staleAfterForStatus } from "@/lib/recommendation/run-deadlines";
+import {
+  WORKER_ADVANCEABLE_KINDS,
+  WORKER_ADVANCEABLE_STATUSES,
+  isWorkerAdvanceableStatus,
+  type WorkerAdvanceableRun,
+} from "@/lib/recommendation/run-worker";
 import type { RouteTaskDraft } from "./query-matrix";
 
 export type CandidateRecord = {
@@ -142,6 +148,7 @@ export interface RunOrchestratorRepository extends RecommendationRepository, Age
   ): Promise<boolean>;
   releaseAdvanceLease(runId: string, token: string): Promise<void>;
   failAdvance(runId: string, token: string, errorCode: string): Promise<boolean>;
+  listWorkerAdvanceableRuns(): Promise<WorkerAdvanceableRun[]>;
   listRunTasks(runId: string): Promise<StoredRouteTask[]>;
   listVerifiedQuotes(runId: string): Promise<VerifiedQuote[]>;
   getLatestApprovedProposal(runId: string): Promise<ApprovedProposal | null>;
@@ -602,6 +609,35 @@ export class SupabaseRecommendationRepository
       .select("id");
     if (error) throw new Error(`Failed to fail recommendation run advance: ${error.message}`);
     return Array.isArray(data) && data.length === 1 && data[0]?.id === runId;
+  }
+
+  async listWorkerAdvanceableRuns(): Promise<WorkerAdvanceableRun[]> {
+    const { data, error } = await createServiceSupabaseClient()
+      .from("recommendation_runs")
+      .select("id,plan_id,status,kind,started_at")
+      .in("kind", [...WORKER_ADVANCEABLE_KINDS])
+      .in("status", [...WORKER_ADVANCEABLE_STATUSES])
+      .order("started_at", { ascending: true })
+      .limit(50);
+    if (error) throw new Error(`Failed to list worker advanceable runs: ${error.message}`);
+    return (data ?? []).flatMap((row) => {
+      if (
+        typeof row.id !== "string" ||
+        typeof row.plan_id !== "string" ||
+        typeof row.started_at !== "string" ||
+        (row.kind !== "automatic" && row.kind !== "alternative") ||
+        !isWorkerAdvanceableStatus(row.status)
+      ) {
+        return [];
+      }
+      return [{
+        id: row.id,
+        planId: row.plan_id,
+        status: row.status,
+        kind: row.kind,
+        startedAt: row.started_at,
+      }];
+    });
   }
 
   async listRunTasks(runId: string): Promise<StoredRouteTask[]> {
