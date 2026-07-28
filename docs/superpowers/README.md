@@ -7,17 +7,18 @@ Use this order when documents disagree:
 3. `specs/2026-07-26-atomic-materialization-and-database-policy-replay-design.md` — approved and locally implemented Repository Audit Batch B contract.
 4. `specs/2026-07-27-input-integrity-and-terminal-ux-hardening-design.md` — approved and locally implemented Repository Audit Batch C contract.
 5. `specs/2026-07-27-aliyun-mainland-production-design.md` — approved mainland deployment and ICP safety boundary.
-6. `plans/2026-07-27-aliyun-mainland-production.md` — current mainland release execution plan.
-7. `plans/2026-07-27-input-integrity-and-terminal-ux-hardening.md` — completed failing-first Batch C execution record.
-8. `plans/2026-07-26-atomic-materialization-and-database-policy-replay.md` — completed failing-first Batch B execution record.
-9. `plans/2026-07-21-publication-safety-and-run-recovery.md` — completed failing-first Batch A execution record.
-10. `specs/2026-07-15-multi-agent-recommendation-design.md` — approved product and architecture contract.
-11. `specs/2026-07-17-ui-copy-and-visual-direction.md` — approved Chinese copy tone and visual direction (phases 1–4 shipped; phase 3 IA in `specs/2026-07-17-plan-result-ia-design.md`; phase 4 wait/reveal `PeakScenicAccent`).
-12. `specs/2026-07-17-desktop-adaptive-shell-design.md` — **shipped UI shell:** no fake phone frame; adaptive `max-w-2xl` shell; home opening zero-scroll; records on `/records`.
-13. `specs/2026-07-18-inner-atmosphere-meetup-copy-design.md` — **shipped + approved follow-up:** home cycles all four clips; every functional route loops one root-mounted deterministic scenic clip; host CTA「开始见面」; departure prefecture search hardening; create participant dropdown expands inline without covering the CTA. Plan: `plans/2026-07-18-inner-atmosphere-meetup-copy.md` (historical original execution plan).
-14. `plans/2026-07-15-multi-agent-recommendation-implementation.md` — reviewed Task 1–14 execution sequence.
-15. `.superpowers/sdd/progress.md` — authoritative completion ledger and next task.
-16. `docs/architecture.md` and `docs/integration-guide.md` — current runtime and operator-facing reference.
+6. `specs/2026-07-28-background-recommendation-run-worker-design.md` — approved Compose `run-worker` so automatic and alternative runs advance without an open browser tab.
+7. `plans/2026-07-27-aliyun-mainland-production.md` — current mainland release execution plan.
+8. `plans/2026-07-27-input-integrity-and-terminal-ux-hardening.md` — completed failing-first Batch C execution record.
+9. `plans/2026-07-26-atomic-materialization-and-database-policy-replay.md` — completed failing-first Batch B execution record.
+10. `plans/2026-07-21-publication-safety-and-run-recovery.md` — completed failing-first Batch A execution record.
+11. `specs/2026-07-15-multi-agent-recommendation-design.md` — approved product and architecture contract.
+12. `specs/2026-07-17-ui-copy-and-visual-direction.md` — approved Chinese copy tone and visual direction (phases 1–4 shipped; phase 3 IA in `specs/2026-07-17-plan-result-ia-design.md`; phase 4 wait/reveal `PeakScenicAccent`).
+13. `specs/2026-07-17-desktop-adaptive-shell-design.md` — **shipped UI shell:** no fake phone frame; adaptive `max-w-2xl` shell; home opening zero-scroll; records on `/records`.
+14. `specs/2026-07-18-inner-atmosphere-meetup-copy-design.md` — **shipped + approved follow-up:** home cycles all four clips; every functional route loops one root-mounted deterministic scenic clip; host CTA「开始见面」; departure prefecture search hardening; create participant dropdown expands inline without covering the CTA. Plan: `plans/2026-07-18-inner-atmosphere-meetup-copy.md` (historical original execution plan).
+15. `plans/2026-07-15-multi-agent-recommendation-implementation.md` — reviewed Task 1–14 execution sequence.
+16. `.superpowers/sdd/progress.md` — authoritative completion ledger and next task.
+17. `docs/architecture.md` and `docs/integration-guide.md` — current runtime and operator-facing reference.
 
 All earlier dated plans and specifications are historical implementation records. They intentionally preserve the target-time, estimated-fare, three-city, explanation-only, and phone-canvas designs that existed when authored; they are not the current backlog or publication contract. Do not update their original checklists to represent current progress. (`plans/2026-07-17-atmosphere-tokens-responsive-shell.md` is historical for phase 2; shell sizing now follows the adaptive-shell spec.)
 
