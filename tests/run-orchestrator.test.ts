@@ -91,6 +91,7 @@ function repository(input: { current: StoredRun; tasks?: StoredRouteTask[]; quot
       this.leased = false;
       return true;
     },
+    async listWorkerAdvanceableRuns() { return []; },
     async listRunTasks() { return this.tasks; },
     async listVerifiedQuotes() { return this.quotes; },
     async getLatestApprovedProposal() { return null; },
