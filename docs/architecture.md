@@ -62,7 +62,7 @@ In fallback mode, the same logical records are kept in process memory instead of
 
 ## Run Deadlines And Recovery
 
-- Every active run transition refreshes a 15-minute inactivity deadline. An expired active run is compare-and-set to `failed` with the safe diagnostic `RUN_STALE_EXPIRED` before another advance lease can be acquired.
+- Every active run transition refreshes a 2-hour inactivity deadline. An expired active run is compare-and-set to `failed` with the safe diagnostic `RUN_STALE_EXPIRED` before another advance lease can be acquired.
 - A Supervisor-approved private preview receives a seven-day host-confirmation deadline. Completed confirmation stays idempotent; an expired unconfirmed preview fails closed and returns `PREVIEW_EXPIRED` instead of publishing.
 - Route recovery is isolated per task. When one route exhausts its bounded retries, it becomes `terminal_failure`; other ready or cooling-down route tasks continue. The run becomes `incomplete` only after no complete city coverage remains and every remaining route is terminal.
 

@@ -190,7 +190,7 @@ The first request returns HTTP 202 with `disposition: "created"`; an identical a
 
 `POST /api/plans/[code]/runs/[runId]/advance`
 
-Requires `x-participant-token`. Each request performs at most one state transition or one bounded query batch, then returns `{ runId, status, traceId, retryAt, diagnosticCode }`. The durable path persists an advance lease so repeated or concurrent requests return the current state rather than duplicate supplier work. Active work has a rolling 15-minute inactivity deadline; an advance after expiry fails the run with `RUN_STALE_EXPIRED` before acquiring a new lease.
+Requires `x-participant-token`. Each request performs at most one state transition or one bounded query batch, then returns `{ runId, status, traceId, retryAt, diagnosticCode }`. The durable path persists an advance lease so repeated or concurrent requests return the current state rather than duplicate supplier work. Active work has a rolling 2-hour inactivity deadline; an advance after expiry fails the run with `RUN_STALE_EXPIRED` before acquiring a new lease.
 
 Run statuses are `pending`, `collecting`, `cooling_down`, `calculating`, `validating`, `awaiting_host_confirmation`, `completed`, `incomplete`, and `failed`. Exhausting recovery terminalizes only the affected route task; other ready or cooling-down routes continue. The run becomes `incomplete` only when no complete city coverage remains and all remaining route work is terminal. Only the `completed` run that owns the current non-superseded shared result may expose scheme cards. Before a shared result exists, every other automatic status exposes progress, retry, or diagnostic guidance instead.
 

@@ -593,7 +593,7 @@ begin
     stale_after
   ) values (
     p_run_id, p_plan_id, 'pending', p_kind, p_requested_city_code,
-    p_requested_by_participant_id, now() + interval '15 minutes'
+    p_requested_by_participant_id, now() + interval '2 hours'
   );
 
   insert into public.candidate_cities (
@@ -873,7 +873,7 @@ begin
   end if;
 
   update public.recommendation_runs
-  set stale_after = now() + interval '15 minutes'
+  set stale_after = now() + interval '2 hours'
   where id = v_task.run_id
     and status in ('pending', 'collecting', 'cooling_down', 'calculating', 'validating');
 

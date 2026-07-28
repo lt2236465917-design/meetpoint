@@ -190,4 +190,15 @@ describe("active recommendation run database guard", () => {
       expect(planLock).toBeLessThan(runLock);
     },
   );
+
+  it("refreshes active-run stale_after with a 2-hour window in the live schema", async () => {
+    const schema = await readFile("supabase/schema.sql", "utf8");
+    const createMatrix = extractLastFunction(schema, "create_recommendation_run_matrix");
+    const saveOutcome = extractLastFunction(schema, "save_route_task_outcome");
+
+    expect(createMatrix).toContain("now() + interval '2 hours'");
+    expect(createMatrix).not.toContain("now() + interval '15 minutes'");
+    expect(saveOutcome).toContain("set stale_after = now() + interval '2 hours'");
+    expect(saveOutcome).not.toContain("set stale_after = now() + interval '15 minutes'");
+  });
 });
