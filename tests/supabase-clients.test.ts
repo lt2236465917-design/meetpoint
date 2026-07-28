@@ -1,4 +1,15 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+const createClientMock = vi.hoisted(() =>
+  vi.fn(() => ({
+    from: () => ({}),
+  })),
+);
+
+vi.mock("@supabase/supabase-js", () => ({
+  createClient: createClientMock,
+}));
+
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 import { createServiceSupabaseClient } from "@/lib/supabase/server";
 
@@ -11,6 +22,7 @@ function resetEnv() {
 describe("Supabase clients", () => {
   afterEach(() => {
     resetEnv();
+    createClientMock.mockClear();
   });
 
   it("creates a browser client from public Supabase environment variables", () => {
@@ -39,6 +51,24 @@ describe("Supabase clients", () => {
     const client = createServiceSupabaseClient();
 
     expect(client.from("plans")).toBeDefined();
+  });
+
+  it("passes an explicit realtime WebSocket transport for Node service-role clients", () => {
+    process.env.NEXT_PUBLIC_SUPABASE_URL = "https://example.supabase.co";
+    process.env.SUPABASE_SERVICE_ROLE_KEY = "server-service-role-key";
+
+    createServiceSupabaseClient();
+
+    expect(createClientMock).toHaveBeenCalledWith(
+      "https://example.supabase.co",
+      "server-service-role-key",
+      expect.objectContaining({
+        auth: { persistSession: false },
+        realtime: expect.objectContaining({
+          transport: expect.any(Function),
+        }),
+      }),
+    );
   });
 
   it("fails clearly when server environment variables are missing", () => {

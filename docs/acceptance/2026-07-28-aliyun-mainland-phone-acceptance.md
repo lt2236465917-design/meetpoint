@@ -40,9 +40,16 @@ Fill every row on a real mainland mobile network. Prefer WeChat in-app browser p
 | 8 | If `completed`: one city, 省钱/省时 only, verified-fare trust copy, no estimates / average fare / booking CTAs | | PENDING | City: |
 | 9 | Functional scenes: create/join=静水, plan=密林, result=破晓; no four-clip cycling on those routes | | PENDING | |
 | 10 | CDN video: Network shows `media.meetpoint.space`, not ECS origin for MP4 | | PENDING | |
-| 11 | Leave-and-finish: after calculate/preview start, close all browsers; with healthy Compose `run-worker` and applied `202607280001`, run reaches terminal or `awaiting_host_confirmation`; worker logs show advances; one open result tab still respects the lease (no double-work) | | PENDING | Operator reminder only — not executed in Task 7. Prerequisites: apply stale-window migration; `docker compose ... up --build -d` so `run-worker` is healthy. |
+| 11 | Leave-and-finish: after calculate/preview start, close all browsers; with healthy Compose `run-worker` and applied `202607280001`, run reaches terminal or `awaiting_host_confirmation`; worker logs show advances; one open result tab still respects the lease (no double-work) | public API + ECS Compose | **PASS** | **2026-07-28.** Synced `f53acbd` (+ service Supabase `ws` transport hotfix; Compose images later moved to Node 22) into `/opt/meetpoint`; Compose `run-worker` `Up (healthy)`, no host port; `202607280001` applied on linked Supabase. Plan `ZNM4ZK` / run `4482833d-f84a-4fec-9df1-5d3cd5428d5c`: after「开始见面」all browsers closed; public `GET /api/plans/ZNM4ZK` showed `pendingGroups` 152→0 over ~12 min with no client advance; terminal `incomplete` + `REAL_QUOTE_COVERAGE_INCOMPLETE`; `latestSharedResult=null` (no estimates). Worker container logs show process `starting` + heartbeat health (successful ticks are quiet by design; advance evidence is the pendingGroups curve). Reopened `/p/ZNM4ZK/result` showed terminal「票价没查全」+「重新查询」(refresh is not silent retry; no second concurrent advance). Fresh supplier `completed` still desirable for phone rows #7–8, not required for #11. |
 
 **Fresh supplier-backed success is desirable but not required to close the China reachability gate.** If coverage ends `incomplete`, confirm zero shared schemes and record the diagnostic; do not publish estimates.
+
+### Leave-and-finish evidence (#11) — 2026-07-28
+
+- ECS: `frontend` / `travel-gateway` / `run-worker` all healthy; worker publishes no host port; frontend `127.0.0.1:3001` only.
+- Migration: `supabase/migrations/202607280001_extend_active_run_stale_window.sql` executed in Supabase SQL Editor (Success).
+- Hotfix on live tree: `createServiceSupabaseClient` passes `ws` realtime transport; `listRuns` failures no longer exit the process; Compose images use `node:22-slim`.
+- Public poll: `https://www.meetpoint.space/api/plans/ZNM4ZK` — participants 李磊/李方; run reached `incomplete` without an open result tab during collection.
 
 ## Public-security filing (outside repository)
 
@@ -52,29 +59,30 @@ Fill every row on a real mainland mobile network. Prefer WeChat in-app browser p
 
 ## ECS sync note (`/opt/meetpoint` is not a git repo)
 
-If phone check #2 still blanks mid-transition, the live frontend image may predate `74ec1a4`. On the ECS (Workbench/SSH):
+Sync source for leave-and-finish / worker: local branch `codex/repository-audit-complete` @ `f53acbd` (rsync/scp/archive — not `git pull`). After sync:
 
 ```bash
-# After syncing the 74ec1a4 tree into /opt/meetpoint (rsync/scp/archive — not git pull)
 cd /opt/meetpoint
 
 docker compose \
   --env-file deploy/aliyun/.env.production \
   -f deploy/aliyun/compose.yaml \
-  build frontend
-
-docker compose \
-  --env-file deploy/aliyun/.env.production \
-  -f deploy/aliyun/compose.yaml \
-  up -d frontend
+  up --build -d
 
 docker compose \
   --env-file deploy/aliyun/.env.production \
   -f deploy/aliyun/compose.yaml \
   ps
+
+docker compose \
+  --env-file deploy/aliyun/.env.production \
+  -f deploy/aliyun/compose.yaml \
+  logs --tail=50 run-worker
 ```
 
 Confirm frontend is `Up` / `healthy` on host loopback `127.0.0.1:3001` only. Confirm `run-worker` is `Up` / `healthy` with no published host port. Do not publish gateway `8080`.
+
+If phone check #2 still blanks mid-transition on an older tree, rebuild `frontend` alone after syncing at least `74ec1a4`.
 
 ## Cleanup gate (do not run yet)
 

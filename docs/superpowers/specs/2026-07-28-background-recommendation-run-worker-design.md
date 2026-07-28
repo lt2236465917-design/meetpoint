@@ -1,6 +1,6 @@
 # Background Recommendation Run Worker Design
 
-**Status:** Approved direction 2026-07-28 (operator chose Compose `run-worker`; scope = automatic + alternative preview advancement)
+**Status:** Approved 2026-07-28; implemented on branch `codex/repository-audit-complete` @ `f53acbd`. ECS Compose `run-worker` live; leave-and-finish checklist #11 PASS (2026-07-28, `ZNM4ZK`).
 
 **Date:** 2026-07-28
 

@@ -83,6 +83,23 @@ describe("recommendation run worker tick", () => {
     );
   });
 
+  it("logs and swallows listRuns failures so the process does not exit", async () => {
+    const logError = vi.fn();
+    const advanceRun = vi.fn();
+    await expect(runWorkerTick({
+      listRuns: async () => {
+        throw new Error("LIST_FAILED");
+      },
+      advanceRun,
+      logError,
+    })).resolves.toBeNull();
+    expect(advanceRun).not.toHaveBeenCalled();
+    expect(logError).toHaveBeenCalledWith(
+      "[recommendation-run-worker] list failed",
+      expect.objectContaining({ error: expect.any(Error) }),
+    );
+  });
+
   it("runs an immediate tick before the first sleep and stops on abort", async () => {
     const advanceRun = vi.fn(async () => ({ status: "collecting" }));
     const sleeps: number[] = [];

@@ -49,7 +49,16 @@ export type RunWorkerDeps = {
 export async function runWorkerTick(
   deps: RunWorkerDeps,
 ): Promise<WorkerAdvanceableRun | null> {
-  const selected = selectNextWorkerRun(await deps.listRuns());
+  let runs: WorkerAdvanceableRun[];
+  try {
+    runs = await deps.listRuns();
+  } catch (error) {
+    (deps.logError ?? console.error)("[recommendation-run-worker] list failed", {
+      error,
+    });
+    return null;
+  }
+  const selected = selectNextWorkerRun(runs);
   if (!selected) return null;
   try {
     await deps.advanceRun({ runId: selected.id, planId: selected.planId });

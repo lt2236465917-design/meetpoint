@@ -6,9 +6,9 @@ Mobile-usable Web MVP for choosing a fair cross-city meeting city for 2-6 people
 
 The Multi-Agent flow and Repository Audit Batches A–C are implemented on `main`: one city, saving/fast schemes from verified quotes, private host-confirmed alternatives, deterministic database replay, canonical departure identity, and fail-closed terminal recovery. Policy `2026-07-19.v2` defines saving as the exact lowest verified fare in each participant's direct-first accepted-mode set (including direct normal train) and keeps fast within 130% of the saving total.
 
-The linked Supabase project has migrations through `202607260001_atomic_materialization_and_policy_replay.sql`; remote privilege, Realtime, automatic-publication, and alternative-confirmation checks passed. Other Supabase environments must apply the repository migrations before running the matching application code.
+The Vercel Services deployment builds the Next.js frontend and private travel-gateway container together and is operational outside mainland China. It is **not accepted as stable for the China target audience** while only `*.vercel.app` aliases exist. The primary China host is the filed Alibaba Cloud domain `https://www.meetpoint.space` (Nginx → loopback frontend on `3001`, private gateway). Compose `run-worker` is packaged on branch `codex/repository-audit-complete` @ `f53acbd` but not yet claimed live on ECS. See [mainland phone acceptance](docs/acceptance/2026-07-28-aliyun-mainland-phone-acceptance.md), [prior Vercel evidence](docs/acceptance/2026-07-27-production-release-acceptance.md), and [operator guide](docs/integration-guide.md).
 
-The Vercel Services deployment builds the Next.js frontend and private travel-gateway container together and is operational outside mainland China. It is **not accepted as stable for the China target audience** while only `*.vercel.app` aliases exist; real mainland requests timed out during release acceptance. The approved primary China target is an Alibaba Cloud mainland ECS deployment, kept loopback-only while the first ICP filing is pending. See [production acceptance](docs/acceptance/2026-07-27-production-release-acceptance.md), [mainland deployment design](docs/superpowers/specs/2026-07-27-aliyun-mainland-production-design.md), and [operator guide](docs/integration-guide.md).
+The linked Supabase project has migrations through `202607280001_extend_active_run_stale_window.sql` applied (2-hour active stale; required for leave-and-finish).
 
 ## Scripts
 
@@ -16,6 +16,7 @@ The Vercel Services deployment builds the Next.js frontend and private travel-ga
 - `npm run lint`
 - `npm run test`
 - `npm run build`
+- `npm run worker:recommendation` — local/process entry for the Compose recommendation worker (`tsx src/worker/recommendation-run-worker.ts`); production uses the Compose `run-worker` service, not this script on the host.
 
 ## Current Flow
 
@@ -50,10 +51,11 @@ The Vercel Services deployment builds the Next.js frontend and private travel-ga
 - `src/lib/recommendation/policy.ts` and `validators.ts`: deterministic direct-first saving/fast schemes, unique-city ranking, evidence replay, and bounded policy evaluation.
 - `src/lib/recommendation/repository.ts`: durable run persistence and guarded result materialization. A gateway `quoteId` may repeat when multiple participants share a physical route, so selected evidence is resolved by participant plus quote ID rather than a global quote-ID lookup.
 - `src/lib/agent/`: provider-neutral model boundary plus Manager, Query, Calculation, Supervisor, Fallback, tracing, and bounded orchestration modules.
-- `src/lib/agent/run-orchestrator.ts`: creates and incrementally advances durable runs with a persisted lease and rolling 15-minute inactivity deadline; one exhausted route becomes terminal while other healthy route tasks continue. It dispatches to the guarded in-memory fallback when Supabase is absent.
+- `src/lib/agent/run-orchestrator.ts`: creates and incrementally advances durable runs with a persisted lease and rolling **2-hour** inactivity deadline; one exhausted route becomes terminal while other healthy route tasks continue. It dispatches to the guarded in-memory fallback when Supabase is absent.
+- `src/lib/recommendation/run-worker.ts` and `src/worker/recommendation-run-worker.ts`: Compose `run-worker` selection/tick loop and process entry (independent heartbeat); live on ECS; leave-and-finish checklist #11 PASS (2026-07-28).
 - `src/lib/recommendation/alternative-preview.ts` and `src/lib/security/host-confirmation.ts`: bind a private run to one canonical city and requesting participant, authorize private reads, and pass the exact Supervisor-approved proposal to host-only atomic confirmation.
 - `src/components/result/SharedRecommendation.tsx` and `SchemeCard.tsx`: render the published city once and map persisted participant routes directly on `.atmosphere-panel` glass (no nested white route cards), including team totals, route facts, quote fingerprints, and China-time freshness; they never render booking links or client-side route selection.
-- `src/components/result/RefreshingResultNotice.tsx`: maps every run status to Chinese progress/retry guidance. Nonterminal runs can post one bounded authenticated advance; terminal `incomplete` / `failed` runs create a fresh automatic run when the device still holds a participant token, instead of presenting a no-op refresh.
+- `src/components/result/RefreshingResultNotice.tsx`: maps every run status to Chinese progress/retry guidance. Leave-friendly copy (users can leave); optional bounded authenticated advance; terminal `incomplete` / `failed` create a fresh automatic run when the device still holds a participant token.
 - `src/components/home/HomeHero.tsx`: product `/` full-bleed train-window hero (brand `meetpoint`, train overlay, glass CTA to `/create`, entry to `/records`). It continuously cycles all four scenic clips, uses a near-end guard when a browser misses `ended`, and still supports manual scene selection.
 - `src/components/layout/FunctionalScenicBackdrop.tsx`, `ShellScenicBackdrop.tsx`, `ResponsiveShell.tsx`, and `src/app/globals.css`: one root-mounted route-fixed clip stays alive through functional-page loading/navigation, with playback checkpoints after unavoidable remounts; a transient media error falls through to the static fallback without permanently hiding a recovered video. `ResponsiveShell` renders adaptive `max-w-2xl` content above it.
 - `src/components/result/PeakScenicAccent.tsx` + `src/lib/ui/scenic-videos.ts`: transparent wait/reveal glass over the single route-fixed scene, plus the same-origin desktop/mobile scenic source catalog. `PeakScenicAccent` does not mount another video.

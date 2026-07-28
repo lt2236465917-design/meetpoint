@@ -31,7 +31,7 @@ The canonical public host is `www.meetpoint.space`; the apex redirects to it. Th
 ## Runtime Contract
 
 - Build both services from the same verified source commit.
-- Use Node.js 20 production images and run as the unprivileged `node` user.
+- Use Node.js 22 production images and run as the unprivileged `node` user.
 - Install dependencies with `npm ci`, run production builds, and prune development dependencies.
 - Inject `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` as public build arguments for the frontend. All server credentials remain runtime-only variables.
 - Build the mainland frontend with `NEXT_PUBLIC_SCENIC_BASE_URL=https://media.meetpoint.space`. OSS plus Alibaba Cloud CDN serves the large scenic MP4 files; the 3 Mbps ECS origin serves application HTML, Next.js assets, and APIs only.
