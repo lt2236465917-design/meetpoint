@@ -19,7 +19,7 @@ import type { StoredRouteTask } from "@/lib/recommendation/repository";
 function run(status: StoredRun["status"]): StoredRun {
   const staleAfter = ["completed", "incomplete", "failed"].includes(status)
     ? null
-    : "2026-08-01T00:15:00.000Z";
+    : "2999-01-01T00:00:00.000Z";
   return {
     id: "run-1", planId: "plan-1", status, traceId: "11111111-1111-4111-8111-111111111111",
     retryAfter: null, staleAfter, errorCode: null, policyVersion: "2026-07-19.v2", kind: "automatic",
