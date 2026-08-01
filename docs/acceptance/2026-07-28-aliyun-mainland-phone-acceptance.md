@@ -40,7 +40,7 @@ Fill every row on a real mainland mobile network. Prefer WeChat in-app browser p
 | 8 | If `completed`: one city, 省钱/省时 only, verified-fare trust copy, no estimates / average fare / booking CTAs | | PENDING | City: |
 | 9 | Functional scenes: create/join=静水, plan=密林, result=破晓; no four-clip cycling on those routes | | PENDING | |
 | 10 | CDN video: Network shows `media.meetpoint.space`, not ECS origin for MP4 | | PENDING | |
-| 11 | Leave-and-finish: after calculate/preview start, close all browsers; with healthy Compose `run-worker` and applied `202607280001`, run reaches terminal or `awaiting_host_confirmation`; worker logs show advances; one open result tab still respects the lease (no double-work) | public API + ECS Compose | **PASS** | **2026-07-28.** Synced `f53acbd` (+ service Supabase `ws` transport hotfix; Compose images later moved to Node 22) into `/opt/meetpoint`; Compose `run-worker` `Up (healthy)`, no host port; `202607280001` applied on linked Supabase. Plan `ZNM4ZK` / run `4482833d-f84a-4fec-9df1-5d3cd5428d5c`: after「开始见面」all browsers closed; public `GET /api/plans/ZNM4ZK` showed `pendingGroups` 152→0 over ~12 min with no client advance; terminal `incomplete` + `REAL_QUOTE_COVERAGE_INCOMPLETE`; `latestSharedResult=null` (no estimates). Worker container logs show process `starting` + heartbeat health (successful ticks are quiet by design; advance evidence is the pendingGroups curve). Reopened `/p/ZNM4ZK/result` showed terminal「票价没查全」+「重新查询」(refresh is not silent retry; no second concurrent advance). Fresh supplier `completed` still desirable for phone rows #7–8, not required for #11. |
+| 11 | Leave-and-finish: after calculate/preview start, close all browsers; with healthy Compose `run-worker` and applied `202607280001`, run reaches terminal or `awaiting_host_confirmation`; worker logs show advances; one open result tab still respects the lease (no double-work) | public API + ECS Compose | **PASS** | **2026-07-28.** Synced worker tree into `/opt/meetpoint` (base `f53acbd` + service Supabase `ws` transport / listRuns resilience); Compose `run-worker` `Up (healthy)` on `node:20-slim`, no host port; `202607280001` applied on linked Supabase. Plan `ZNM4ZK` / run `4482833d-f84a-4fec-9df1-5d3cd5428d5c`: after「开始见面」all browsers closed; public `GET /api/plans/ZNM4ZK` showed `pendingGroups` 152→0 over ~12 min with no client advance; terminal `incomplete` + `REAL_QUOTE_COVERAGE_INCOMPLETE`; `latestSharedResult=null` (no estimates). Worker logs show process `starting` + heartbeat health (successful ticks are quiet by design; advance evidence is the pendingGroups curve). Reopened `/p/ZNM4ZK/result` showed terminal「票价没查全」+「重新查询」(refresh is not silent retry). Fresh supplier `completed` still desirable for phone rows #7–8, not required for #11. |
 
 **Fresh supplier-backed success is desirable but not required to close the China reachability gate.** If coverage ends `incomplete`, confirm zero shared schemes and record the diagnostic; do not publish estimates.
 
@@ -48,7 +48,7 @@ Fill every row on a real mainland mobile network. Prefer WeChat in-app browser p
 
 - ECS: `frontend` / `travel-gateway` / `run-worker` all healthy; worker publishes no host port; frontend `127.0.0.1:3001` only.
 - Migration: `supabase/migrations/202607280001_extend_active_run_stale_window.sql` executed in Supabase SQL Editor (Success).
-- Hotfix on live tree: `createServiceSupabaseClient` passes `ws` realtime transport; `listRuns` failures no longer exit the process; Compose images use `node:22-slim`.
+- Live runtime: Compose images stay on `node:20-slim` (Docker Hub pull of `node:22-slim` timed out from ECS on 2026-07-28); `createServiceSupabaseClient` passes explicit `ws` realtime transport; `listRuns` failures must not exit the worker process.
 - Public poll: `https://www.meetpoint.space/api/plans/ZNM4ZK` — participants 李磊/李方; run reached `incomplete` without an open result tab during collection.
 
 ## Public-security filing (outside repository)
@@ -59,7 +59,7 @@ Fill every row on a real mainland mobile network. Prefer WeChat in-app browser p
 
 ## ECS sync note (`/opt/meetpoint` is not a git repo)
 
-Sync source for leave-and-finish / worker: local branch `codex/repository-audit-complete` @ `f53acbd` (rsync/scp/archive — not `git pull`). After sync:
+`/opt/meetpoint` is not a git checkout. Sync with rsync/scp/archive/Workbench upload (not `git pull`). Keep `deploy/aliyun/.env.production` untracked and never overwrite it. Current live worker tree matches the leave-and-finish hotfix set (service `ws` transport + listRuns resilience) on `node:20-slim`. After sync:
 
 ```bash
 cd /opt/meetpoint

@@ -10,7 +10,7 @@ describe("gateway container configuration", () => {
   it("builds a production image with the required runtime policy", async () => {
     const dockerfile = await readFile(path.join(gatewayRoot, "Dockerfile"), "utf8");
 
-    expect(dockerfile).toMatch(/^FROM node:22-slim AS build$/m);
+    expect(dockerfile).toMatch(/^FROM node:20-slim AS build$/m);
     expect(dockerfile).toMatch(/\bRUN npm ci\b/);
     expect(dockerfile).toMatch(/\bRUN npm run build\b/);
     expect(dockerfile).toMatch(/\bRUN npm prune --omit=dev\b/);

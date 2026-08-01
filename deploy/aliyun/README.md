@@ -6,7 +6,7 @@ This directory packages the verified Next.js frontend and private travel gateway
 
 - **frontend** — Next.js app, loopback-only on host `3001`.
 - **travel-gateway** — private supplier gateway on the Compose network; no host port.
-- **run-worker** — private recommendation worker (`target: worker`); advances automatic and alternative runs without browser POSTs. Host confirmation of alternatives stays manual. ECS acceptance should prove leave-and-finish: close the tab, wait, and confirm the run still completes.
+- **run-worker** — private recommendation worker (`target: worker`); advances automatic and alternative runs without browser POSTs. Host confirmation of alternatives stays manual. Leave-and-finish checklist #11 is PASS (2026-07-28); keep the service healthy with no host port.
 
 ## ECS baseline
 

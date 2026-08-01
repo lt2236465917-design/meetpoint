@@ -13,7 +13,7 @@ describe("Alibaba Cloud ECS deployment configuration", () => {
   it("builds the frontend as an unprivileged production image without server secrets", async () => {
     const dockerfile = await read("Dockerfile");
 
-    expect(dockerfile).toMatch(/^FROM node:22-slim AS build$/m);
+    expect(dockerfile).toMatch(/^FROM node:20-slim AS build$/m);
     expect(dockerfile).toMatch(/\bRUN npm ci\b/);
     expect(dockerfile).toMatch(/\bRUN npm run build\b/);
     expect(dockerfile).toMatch(/\bRUN npm prune --omit=dev\b/);
@@ -61,7 +61,7 @@ describe("Alibaba Cloud ECS deployment configuration", () => {
       read("deploy/aliyun/production.env.example"),
     ]);
 
-    expect(dockerfile).toMatch(/^FROM node:22-slim AS worker$/m);
+    expect(dockerfile).toMatch(/^FROM node:20-slim AS worker$/m);
     expect(dockerfile).toMatch(/CMD \["npx", "tsx", "src\/worker\/recommendation-run-worker\.ts"\]/);
     expect(dockerfile).toMatch(/^USER node$/m);
 

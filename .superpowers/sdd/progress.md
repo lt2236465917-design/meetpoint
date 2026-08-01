@@ -134,9 +134,8 @@ Initial reviewed HEAD: `7797e99`
 
 # Background Recommendation Run Worker
 
-- Design approved 2026-07-28 (`34a9af8`); plan Tasks **1–7 complete** on `codex/repository-audit-complete` @ **`f53acbd`** (+ live hotfix: explicit `ws` transport, listRuns resilience, Compose Node 22).
-- ECS leave-and-finish checklist **#11 PASS** (2026-07-28): plan `ZNM4ZK` / run `4482833d-…` → `incomplete` (`REAL_QUOTE_COVERAGE_INCOMPLETE`) with browsers closed; `pendingGroups` 152→0 via healthy Compose `run-worker`; migration `202607280001` applied. Evidence: `docs/acceptance/2026-07-28-aliyun-mainland-phone-acceptance.md`.
-- Do not claim Vercel ships a worker.
+- Design approved 2026-07-28 (`34a9af8`); plan Tasks **1–7 complete**; live ECS `run-worker` healthy on `node:20-slim` with service-role `ws` transport; leave-and-finish checklist **#11 PASS** (2026-07-28, plan `ZNM4ZK` → `incomplete`; migration `202607280001` applied).
+- Do not claim Vercel ships a worker. Do not claim Node 22 Compose on mainland ECS until a registry mirror can pull `node:22-slim`.
 
 # Production Release Progress
 

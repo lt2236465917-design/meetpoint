@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Status:** Tasks 1–7 complete on `codex/repository-audit-complete` @ `f53acbd` (2026-07-28 Subagent-Driven). ECS leave-and-finish checklist #11 **PASS** (2026-07-28, plan `ZNM4ZK` → `incomplete`); `202607280001` applied on linked Supabase; live `/opt/meetpoint` runs healthy `run-worker` (plus Node-20 `ws` transport hotfix).
+**Status:** Tasks 1–7 complete on `codex/repository-audit-complete` (2026-07-28 Subagent-Driven). ECS leave-and-finish checklist #11 **PASS** (2026-07-28, plan `ZNM4ZK` → `incomplete`); `202607280001` applied; live `/opt/meetpoint` healthy `run-worker` on `node:20-slim` with service-role `ws` transport.
 
 **Goal:** On Alibaba Cloud ECS Compose, add a private `run-worker` that continuously advances nonterminal automatic and alternative recommendation runs through the existing lease-guarded `advanceRun` path so users can leave the page and still reach a terminal (or host-confirmation) state.
 
@@ -804,7 +804,7 @@ it("packages a private run-worker that does not publish a host port", async () =
     read("deploy/aliyun/production.env.example"),
   ]);
 
-  expect(dockerfile).toMatch(/^FROM node:22-slim AS worker$/m);
+  expect(dockerfile).toMatch(/^FROM node:20-slim AS worker$/m);
   expect(dockerfile).toMatch(/CMD \["npx", "tsx", "src\/worker\/recommendation-run-worker\.ts"\]/);
   expect(dockerfile).toMatch(/^USER node$/m);
 
@@ -836,7 +836,7 @@ Expected: FAIL (no `run-worker` / no `AS worker`).
 Append to root `Dockerfile` (do not change the default final stage used by frontend builds):
 
 ```dockerfile
-FROM node:22-slim AS worker
+FROM node:20-slim AS worker
 
 WORKDIR /app
 
