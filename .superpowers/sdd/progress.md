@@ -96,6 +96,44 @@ Shipped HEAD (Tasks 1–7 + final copy fix): `4972560`
 - Task 7: complete (`35bae2e..a49b554` incl. CityCombobox lint fix + authority docs)
 - Final review: post-ship recovery is locally complete; remote v2 migration verification closed on 2026-07-27.
 
+# Reliable Baseline City And Live-Fare Enhancement
+
+Date: 2026-08-01
+
+- Local implementation is complete under `docs/superpowers/specs/2026-08-01-reliable-baseline-and-live-fare-enhancement-design.md`.
+- The confirmed FlyAI 1.0.16 Chinese enum drift is fixed failing-first; exact Chinese/English enum allowlists, redacted live contract probe, and patterned invalid-response circuit are implemented.
+- Automatic plans now persist a deterministic baseline city from server-canonical coordinates and hub evidence. `amap-*` origins influence the midpoint; missing coordinates fail closed. Baseline UI remains visible while real fares are pending/incomplete/failed and never exposes fare/saving/fast/route claims.
+- Candidate-first participant-interleaved task order and an explicit secondary-query capability seam are implemented. No secondary commercial provider is configured or claimed.
+- Fresh local gates: gateway lint, 8 files / 133 tests, build, and uncredentialed structural contract probe passed; root lint, 75 files / 483 tests, and production build passed; disposable PostgreSQL 17.10 passed 6 files / 76 tests including the new migration and permission behavior.
+- Next: operator review/apply migration `202608010001`, guarded PostgreSQL smoke, credentialed FlyAI contract probe, deployment, and phone acceptance. A second commercial provider still requires procurement and implementation. No push or deployment was performed. Canonical local evidence: `docs/acceptance/2026-08-01-reliable-baseline-local-acceptance.md`.
+
+## 2026-08-01 Recovery onto the newer mainland/worker baseline
+
+- Authoritative `/8fdd` reliable-baseline/FlyAI working patch was three-way audited onto target baseline `a27476e`; `/8fdd` remained read only. Twenty-eight tracked paths match the clean three-way result exactly; five manual text conflicts preserve both newer worker/Node 20/mainland semantics and reliable-baseline semantics. Nine source-untracked implementation/test/migration files are byte-identical; the spec/plan are source-preserving extensions for the separately authorized DeepSeek transport work.
+- Fresh recovery gates passed: gateway lint, 8 files / 133 tests, build; root lint, 78 files / 513 tests, production build; disposable PostgreSQL 17.10, 6 files / 76 tests; `git diff --check`. The root count increase over 75 / 483 is preserved newer-runtime coverage plus five DeepSeek transport tests, not loss of source coverage.
+- No merge scratch files remain and the disposable PostgreSQL server was stopped. No remote migration, credentialed probe, deployment, production plan write, push, stash, or source-worktree mutation occurred.
+- Canonical recovery checklist: `docs/acceptance/2026-08-01-reliable-baseline-recovery-audit.md`.
+
+## 2026-08-01 DeepSeek transport and production-operations follow-up
+
+- Chat Completions remains the code/runtime default and one-variable rollback. Responses is integrated behind `AgentModel`; unknown primary/shadow config fails closed. Shadow is off by default, sampled/capped when enabled, and has no business-state writer.
+- DeepSeek credentialed production-like comparison passed 102 paired calls: Responses 102/102 schema/downstream qualified, Calculation 34/34, Supervisor 34/34, p95 2242 ms, no timeout/unavailable/4xx/5xx, estimated base-rate cost ~1.012× Chat. The gate permits a controlled future switch but does not prove or change current ECS selection. Evidence: `docs/acceptance/2026-08-01-deepseek-transport-comparison.md`.
+- Historical production agent events through 2026-07-20 record `deepseek-v4-flash`; current ECS env override remains unverified because no SSH/Workbench or authenticated Chrome session was available.
+- Credentialed FlyAI contract canary passed sampled flight/飞机 (10 normalized) and high-speed-rail/火车 (9 normalized). This is sample contract evidence, not full supplier recovery.
+- Supabase project is healthy; migration history omits both `202607280001` and `202608010001`, while prior acceptance says 20260728 SQL was applied manually. Dry-run would push both. Backup/PITR listing exposed no restorable row; official logical dump was blocked by missing Docker/database password. Per backup-first rule no remote migration ran.
+- No second commercial provider credential/adapter exists; failover remains disabled. Gateway now emits redacted schema-circuit open/short-circuit events. External alert wiring, scheduled coverage/divergence checks, ECS deployment, authenticated search, new production plan, and phone acceptance remain operator actions.
+- Canonical operations report: `docs/acceptance/2026-08-01-reliable-baseline-production-operations.md`. No push, deployment, remote schema write, production-plan write, credential rotation, worktree cleanup, or stash cleanup occurred.
+- Final post-change gates passed: gateway lint, 8 files / 133 tests, build; root lint, 79 files / 518 tests, production build; fresh disposable PostgreSQL 17.10, 6 files / 76 tests; `git diff --check`. The temporary database server was stopped.
+
+## 2026-08-02 Reliable baseline production acceptance
+
+- A 738,147-byte custom-format backup (SHA-256 `40434dd9639c4a0bf1d0c339faa34ab9112b67b94e230745a2262d7ce985a05b`) passed a PostgreSQL 17.10 restore rehearsal before any remote migration.
+- `202607280001` and `202608010001` were applied in order and recorded; production columns, constraints, RPC signatures, role denial/service execution, and rollback/no-residue checks passed.
+- The verified tree was deployed through ECS Compose. All three services are healthy; authenticated flight/train gateway smokes passed. Both DeepSeek protocols and bounded shadow passed; the one-variable rollback was exercised and final runtime is Chat primary with shadow off.
+- Fresh production plans passed baseline-first background completion (`B1PGOO`), canonical Amap coordinates, complete live evidence, incomplete terminal UX (`2N4UPO`), controlled failed terminal UX (`71WJ0V`), credentialed new-run retry (`FPVSTV`), and transaction-wrapped deterministic policy replay.
+- Current evidence: `docs/acceptance/2026-08-02-reliable-baseline-production-acceptance.md`. Remaining residuals: WeChat direct-open ICP interstitial, external alert routing, and unprocured second supplier. No push, credential rotation, worktree deletion, or stash deletion occurred.
+- Final gates passed: Web lint, 79 files / 518 tests, production build; gateway lint, 8 files / 133 tests, TypeScript build; `git diff --check`.
+
 # FlyAI Quote Normalization And Six-Person Publication Regression
 
 Date: 2026-07-20

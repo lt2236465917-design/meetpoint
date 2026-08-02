@@ -40,6 +40,13 @@ function renderStatus(
       title: "杭州周末见面",
       progress: { ...baseProgress, ...overrides, status },
       result: null,
+      baseline: {
+        cityCode: "wuhan",
+        cityName: "武汉",
+        policyVersion: "2026-08-01.baseline.v1",
+        evidenceLevel: "canonical_coordinates_and_hubs",
+        inputFingerprint: "a".repeat(64),
+      },
       now: new Date("2026-07-15T10:00:00.000Z"),
     }),
   );
@@ -99,6 +106,9 @@ describe("result page public states", () => {
       expect(html).toContain("刷新结果");
       expect(html).not.toContain("省钱方案");
       expect(html).not.toContain("省时方案");
+      expect(html).toContain("先在这里见");
+      expect(html).toContain("武汉");
+      expect(html).toContain("真实票价还在确认");
     },
   );
 
@@ -116,6 +126,8 @@ describe("result page public states", () => {
 
     expect(html).toContain("票务平台有点忙，12 秒后自动再试");
     expect(html).not.toContain("省钱方案");
+    expect(html).toContain("武汉");
+    expect(html).not.toMatch(/¥|￥|元\/人/);
   });
 
   it("shows calculation progress without result cards", () => {
@@ -158,7 +170,7 @@ describe("result page public states", () => {
       diagnosticCode: "AGENT_PROPOSAL_INVALID",
     });
 
-    expect(html).toContain("这次没安排成，稍后再试一次");
+    expect(html).toContain("真实票价这次没查完，稍后再试一次");
     expect(html).toContain("把下面这串编号发给发起人");
     expect(html).toContain("诊断编号 RUN-12345678");
     expect(html).toContain("重新查询");

@@ -46,6 +46,8 @@ describe("POST /api/plans/[code]/participants", () => {
         p_name: "李雷",
         p_departure_city_code: "shanghai",
         p_departure_city_name: "上海",
+        p_departure_lat: 31.2304,
+        p_departure_lng: 121.4737,
         p_accepted_modes: ["high_speed_rail", "flight"],
       }),
     );

@@ -472,8 +472,11 @@ describe("searchFlyAI", () => {
 
   it.each([
     ["flight", "MU5101", "flight"],
+    ["flight", "MU5101", "飞机"],
     ["high_speed_rail", "G1", "train"],
+    ["high_speed_rail", "G1", "火车"],
     ["normal_train", "K123", "train"],
+    ["normal_train", "K123", "火车"],
   ] as const)("accepts the confirmed exact transport type for %s", async (mode, serviceName, transportType) => {
     const item = {
       ...liveFlightItem,

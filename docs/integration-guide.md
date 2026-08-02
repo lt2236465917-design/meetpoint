@@ -7,12 +7,14 @@ This guide is the quick reference for running and calling the MVP locally.
 1. Install dependencies with `npm install`.
 2. Copy `.env.example` to `.env.local`.
 3. Fill Supabase variables for persistent Supabase-backed runs. Without Supabase variables, the app uses an in-memory fallback store for local smoke testing.
-4. Before running code that changes `POLICY_VERSION`, apply pending database migrations with `npx supabase migration list`, `npx supabase db push --dry-run`, then `npx supabase db push`. Never paste the database password into chat, logs, or project files.
+4. Before running code that changes persisted policy/schema, prove a restorable backup, then inspect `npx supabase migration list` and `npx supabase db push --dry-run` before any `db push`. Never paste the database password into chat, logs, or project files.
 5. Run the app with `npm run dev`.
 
 The same user-facing routes must remain usable on phones (shareable plan links) and on desktop. Shipped UI uses a true adaptive layout without fake phone chrome — see `docs/superpowers/specs/2026-07-17-desktop-adaptive-shell-design.md`.
 
 The hardening migrations are `supabase/migrations/202607210001_publication_safety_and_run_recovery.sql` and `supabase/migrations/202607260001_atomic_materialization_and_policy_replay.sql`; the Batch B migration remains synchronized with `supabase/schema.sql`. Both were applied to the linked Supabase project on 2026-07-27. Postflight migration, privilege, Realtime, and rollback-safe publication checks passed. The controlled supplier-backed run ended safely incomplete because real quote coverage was insufficient; see `docs/acceptance/2026-07-27-repository-audit-batch-b-remote-acceptance.md`.
+
+Migration `supabase/migrations/202608010001_reliable_baseline_recommendation.sql` adds server-verified departure coordinates and a versioned baseline city on automatic runs. On 2026-08-02 a restorable logical backup and restore rehearsal were completed; `202607280001` and `202608010001` were then applied in order, recorded in migration history, and passed column/constraint/RPC/role/rollback postflight. Evidence: `docs/acceptance/2026-08-02-reliable-baseline-production-acceptance.md`. The baseline remains visible when real fares are incomplete but never exposes fare, route, saving, or fast claims; supplier-backed scheme publication still requires complete verified evidence.
 
 Batch C requires real calendar dates and a server-canonical departure code/name pair. Participant creation may return `INVALID_DEPARTURE_CITY` (search and select the city again) or `CITY_VALIDATION_UNAVAILABLE` (temporary 503; retry later). Plan creation may return `PLAN_CODE_EXHAUSTED` after five genuine code collisions. Private preview terminal states remain readable only to the requester or host; their retry creates a new preview run. See `docs/acceptance/2026-07-27-repository-audit-batch-c-local-acceptance.md`.
 
@@ -52,6 +54,8 @@ The ICP filing is approved and public DNS for `www` / apex / `media` is live. Co
 
 Before either deployment, run the root lint/test/build gates and the gateway lint/test/build gates. Confirm environment variable names without printing their values. A reachable homepage alone is not sufficient: verify create, join, plan, result, scenic media, Supabase access, Amap, DeepSeek, and the private gateway path from the target network.
 
+Keep `DEEPSEEK_TRANSPORT=chat_completions` and `DEEPSEEK_SHADOW_TRANSPORT=off` for the first deployment of the dual-transport build. Inspect the effective server-only Compose configuration without printing interpolated secrets, run an authenticated real agent smoke, then optionally enable a bounded Responses shadow. A production primary switch is a later environment-only operation and must retain immediate rollback to Chat; a passing local comparison is not deployment evidence.
+
 ## Local Fallback Mode
 
 If `NEXT_PUBLIC_SUPABASE_URL` or `SUPABASE_SERVICE_ROLE_KEY` is missing, create, participant, candidate, calculate, and result routes use the server-side in-memory fallback store. It is non-persistent and never calls a supplier or creates an estimated result.
@@ -81,9 +85,17 @@ Pre-migration `city_recommendations` and `travel_options` are historical read-on
 | `AMAP_API_KEY` | Server only | Amap administrative-district lookup for non-hub prefecture-level departure cities. |
 | `DEEPSEEK_API_KEY` | Server only | Provider-neutral Calculation/Supervisor model. |
 | `DEEPSEEK_MODEL` | Server only | Optional server-side model override; defaults to `deepseek-v4-flash`. |
+| `DEEPSEEK_TRANSPORT` | Server only | Primary DeepSeek protocol: `chat_completions` (default/rollback) or gated `responses`; unknown values fail closed. |
+| `DEEPSEEK_SHADOW_TRANSPORT` | Server only | Read-only candidate protocol; defaults to `off` and must differ from the primary. |
+| `DEEPSEEK_SHADOW_SAMPLE_RATE` | Server only | Shadow sampling ratio `0..1`; `0` is the immediate kill switch. |
+| `DEEPSEEK_SHADOW_MAX_CONCURRENCY` | Server only | Per-process shadow concurrency cap, `1..4`. |
+| `DEEPSEEK_SHADOW_MAX_CALLS_PER_PROCESS` | Server only | Per-process shadow call budget, maximum `100`. |
+| `DEEPSEEK_SHADOW_MAX_TOTAL_TOKENS_PER_PROCESS` | Server only | Per-process shadow token/cost proxy cap, maximum `500000`. |
+| `DEEPSEEK_COMPARE_ITERATIONS` | Operator shell only | Paired transport-probe iterations, `1..100`; the rollout gate requires at least 50 iterations across calculation and supervisor cases. |
 | `FLYAI_PROBE_CLI_PATH` | Server only | Optional operator-only executable override for the redacted FlyAI probe. |
 | `PROBE_TRAVEL_DATE` | Operator shell only | Optional `YYYY-MM-DD` provider-probe date; defaults to the next UTC date. |
 | `PROBE_FLYAI_SORT_TYPE` | Operator shell only | Optional redacted FlyAI probe sort: `3` for price ascending (default) or `8` for direct first. It never changes gateway production queries. |
+| `FLYAI_API_KEY` for `probe:contract` | Gateway/operator shell only | Required to run the deploy-time normalization canary; output contains only mode/status/count and allowlisted schema-drift categories. |
 | `TRAVEL_GATEWAY_URL` | Server only | Internal gateway URL used by the main-app travel provider. |
 | `TRAVEL_GATEWAY_TOKEN` | Server only | Bearer token for the internal gateway. |
 | `TRAVEL_GATEWAY_TIMEOUT_MS` | Server only | Main-app gateway request timeout; defaults to `30000` ms. |
@@ -327,6 +339,13 @@ PROBE_TRAVEL_DATE=2026-08-20 PROBE_FLYAI_SORT_TYPE=3 npm run probe:providers
 PROBE_TRAVEL_DATE=2026-08-20 PROBE_FLYAI_SORT_TYPE=8 npm run probe:providers
 ```
 
+Before deploying a gateway build, run the adapter-level contract canary from the gateway directory. It exercises the same normalization path as production and fails visibly through stable status/category output without printing ticket facts:
+
+```bash
+cd services/travel-provider-gateway
+FLYAI_API_KEY=... npm run probe:contract
+```
+
 The FlyAI probe leaves journey type unfiltered to mirror production route discovery and outputs only redacted status/count/latency/field-name plus direct/connecting/unclassified-count summaries. The sort switch exists only for fixed-route operator comparisons. It is not supplier acceptance evidence: coverage remains unverified until a new full plan has produced route-fingerprint diagnostics after cooldown, and neither `/healthz` nor a single successful fare row proves supplier-wide authorization, quota recovery, or production readiness.
 
 After a supplier cooldown, use a new full plan for a live-ticket check. Confirm both the Next.js app and `services/travel-provider-gateway` are reachable first (`GET /healthz` → `{ "status": "ok" }`); runs that end with `GATEWAY_UNAVAILABLE` and zero verified quotes are operator setup failures, not supplier-cooldown evidence. Prefer `npm run build && npm run start` for live publication when sandboxed `next dev` is unstable. A completed shared result must contain verified FlyAI routes for every participant in both schemes; any coverage gap must remain unpublished and end with retry/diagnostic guidance.
@@ -349,6 +368,17 @@ Use these checks after wiring FlyAI/Fliggy or another ticket source and Amap cit
 ## DeepSeek Acceptance
 
 1. Store a valid `DEEPSEEK_API_KEY` only in `.env.local` and optionally set `DEEPSEEK_MODEL`; never paste the key into commands, logs, or documentation.
-2. DeepSeek V4 JSON mode requires the prompt to name JSON and describe the expected object shape. The adapter enforces this, caps the response at 4096 tokens, sends the top-level OpenAI-format `thinking: { type: "disabled" }` switch, and retries once on `MODEL_INVALID_OUTPUT`; do not move that thinking switch into a nested `extra_body` field in the JavaScript SDK.
+2. Both transports require explicit JSON instructions and the same strict local schema. Chat Completions caps output at 4096 tokens and sends the top-level OpenAI-format `thinking: { type: "disabled" }` switch; Responses uses documented `max_output_tokens`, `reasoning.effort=none`, and `text.format`. Both retry once on `MODEL_INVALID_OUTPUT`; do not copy Chat-only fields into Responses or assume unsupported OpenAI Responses state/tool features.
 3. For the active Supabase-backed flow, advance a fully covered run through `calculating` and `validating`; confirm Calculation selects only from persisted verified quote IDs, canonicalizes schemes for the winning city via deterministic policy replay, and the publication guard rechecks the approved proposal before `completed`.
 4. Remove or invalidate the key and repeat with a new run; confirm it fails closed with `AGENT_MODEL_UNAVAILABLE` or a model validation diagnostic and publishes no result.
+5. Run `DEEPSEEK_COMPARE_ITERATIONS=<count> npm run probe:deepseek-transports` only from a credentialed operator shell. The command compares identical safe cases and schemas and emits aggregate qualification, latency, token/cost proxy, retry, and stable-error data without prompts, raw responses, participant facts, or trace IDs.
+6. Before enabling a production shadow, keep Chat primary, set Responses shadow with a nonzero bounded sample and explicit concurrency/call/token caps, then prove that only the primary writes proposal/events/run/result state. Set `DEEPSEEK_SHADOW_TRANSPORT=off` or sample rate `0` to stop it immediately.
+7. Before a primary switch, verify the predeclared gate in the 2026-08-01 spec, inspect the effective ECS model/transport, deploy the verified build, and exercise both Responses smoke and the one-variable rollback to `chat_completions`. Protocol switching is not a model upgrade and does not grant tools or database/provider authority.
+
+## Operational Monitoring
+
+- Alert immediately on `schema_drift_circuit_open`; escalate repeated `PROVIDER_INVALID_RESPONSE` with the same allowlisted signature. `schema_drift_circuit_short_circuit` confirms fail-fast protection, not supplier recovery.
+- Track `flyai_diagnostic` normalized success and dropped-reason distribution separately by mode, plus p95 latency and rate-limit count. `/healthz` cannot clear an authenticated-search alert.
+- Query recent automatic runs for participant coverage, maximum complete-city coverage, verified-quote count, and terminal status. A completed run without complete verified coverage is critical.
+- Track baseline/live city divergence as a distribution, not an automatic error: baseline uses geography/hubs while the live city uses verified fares. Alert on missing baseline, missing completed evidence, or sudden shifts rather than on every difference.
+- Until external alert routing exists, inspect recent `travel-gateway` and `run-worker` Compose logs, run the redacted contract canary, and query recent coverage. Never paste raw provider output, prompts, responses, participant data, or credentials into incident records.

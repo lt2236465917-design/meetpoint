@@ -71,8 +71,10 @@ describe("SupabaseRecommendationRepository", () => {
     }));
   });
 
-  it("creates the entire run matrix through one atomic RPC", async () => {
-    mocks.rpc.mockImplementation(async (_name, params) => ({
+  it("creates the run matrix atomically before persisting query priorities", async () => {
+    mocks.rpc.mockImplementation(async (name, params) => name === "ensure_run_task_priorities"
+      ? { data: null, error: null }
+      : ({
       data: {
         disposition: "created",
         runId: params.p_run_id,
@@ -83,7 +85,7 @@ describe("SupabaseRecommendationRepository", () => {
     }));
     const result = await new SupabaseRecommendationRepository().createRunMatrix(createRunInput);
 
-    expect(mocks.rpc).toHaveBeenCalledTimes(1);
+    expect(mocks.rpc).toHaveBeenCalledTimes(2);
     expect(mocks.rpc).toHaveBeenCalledWith(
       "create_recommendation_run_matrix",
       expect.objectContaining({ p_plan_id: "plan-1" }),
@@ -91,6 +93,47 @@ describe("SupabaseRecommendationRepository", () => {
     expect(mocks.from).not.toHaveBeenCalled();
     expect(result).toMatchObject({ disposition: "created", status: "pending" });
     expect(result.taskIds).toHaveLength(1);
+  });
+
+  it("persists the automatic baseline through the guarded idempotent RPC", async () => {
+    mocks.rpc.mockImplementation(async (name, params) => {
+      if (name === "ensure_run_baseline" || name === "ensure_run_task_priorities") {
+        return { data: null, error: null };
+      }
+      return {
+        data: {
+          disposition: "created",
+          runId: params.p_run_id,
+          status: "pending",
+          taskIds: params.p_tasks.map((task: { id: string }) => task.id),
+        },
+        error: null,
+      };
+    });
+
+    await new SupabaseRecommendationRepository().createRunMatrix({
+      ...createRunInput,
+      baseline: {
+        cityCode: "wuhan",
+        cityName: "武汉",
+        policyVersion: "2026-08-01.baseline.v1",
+        evidenceLevel: "canonical_coordinates_and_hubs",
+        inputFingerprint: "a".repeat(64),
+      },
+    });
+
+    expect(mocks.rpc).toHaveBeenNthCalledWith(2, "ensure_run_baseline", {
+      p_run_id: expect.any(String),
+      p_city_code: "wuhan",
+      p_city_name: "武汉",
+      p_policy_version: "2026-08-01.baseline.v1",
+      p_evidence_level: "canonical_coordinates_and_hubs",
+      p_input_fingerprint: "a".repeat(64),
+    });
+    expect(mocks.rpc).toHaveBeenNthCalledWith(3, "ensure_run_task_priorities", expect.objectContaining({
+      p_run_id: expect.any(String),
+      p_priorities: [expect.objectContaining({ priority: 0, city_code: "wuhan" })],
+    }));
   });
 
   it("returns an existing compatible active run unchanged", async () => {

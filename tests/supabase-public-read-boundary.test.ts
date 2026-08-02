@@ -47,7 +47,6 @@ const broadPublicReadPolicies = [
 
 const serviceOnlyFunctions = [
   "create_plan_with_host_credential(text, text, date, integer, text)",
-  "create_participant_with_credential(text, text, text, text, text[], text)",
   "create_recommendation_run_matrix(uuid, uuid, date, jsonb, jsonb, text, text, uuid)",
   "save_route_task_outcome(uuid, jsonb, jsonb)",
   "publish_shared_result(uuid, uuid)",
@@ -110,8 +109,14 @@ describe("Supabase public read boundary", () => {
   it("keeps every service-only RPC revoked from browser roles and granted to service_role", async () => {
     for (const path of [migrationPath, schemaPath]) {
       const sql = normalizeSql(await readFile(path, "utf8"));
+      const signatures = [
+        ...serviceOnlyFunctions,
+        path === schemaPath
+          ? "create_participant_with_credential(text, text, text, text, double precision, double precision, text[], text)"
+          : "create_participant_with_credential(text, text, text, text, text[], text)",
+      ];
 
-      for (const signature of serviceOnlyFunctions) {
+      for (const signature of signatures) {
         expect(sql).toContain(
           `revoke execute on function ${signature} from public, anon, authenticated;`,
         );

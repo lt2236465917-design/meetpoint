@@ -22,6 +22,7 @@ import type {
 import { validateRecommendationPolicy } from "@/lib/recommendation/validators";
 import { generateToken, hashToken, verifyToken } from "@/lib/security/tokens";
 import type { TransportMode } from "@/types/domain";
+import { createBaselineRecommendation, type BaselineRecommendation } from "@/lib/recommendation/baseline";
 
 type PlanRow = {
   id: string;
@@ -38,6 +39,8 @@ type ParticipantRow = {
   name: string;
   departureCityCode: string;
   departureCityName: string;
+  departureLat: number;
+  departureLng: number;
   acceptedModes: TransportMode[];
 };
 
@@ -55,6 +58,7 @@ type RunRow = {
   startedAt: string;
   completedAt: string | null;
   staleAfter: string | null;
+  baseline: BaselineRecommendation | null;
 };
 
 type ProposalRow = {
@@ -247,6 +251,7 @@ function publicProgress(run: RunRow | null) {
     pendingGroups: state().tasks.filter((task) => task.runId === run.id && ["pending", "running", "retryable_failure"].includes(task.status)).length,
     retryAt: run.retryAfter,
     diagnosticCode: run.errorCode,
+    baseline: run.baseline,
   };
 }
 
@@ -283,13 +288,22 @@ export async function createFallbackPlan(
 }
 
 export async function createFallbackParticipant(code: string, input: {
-  name: string; departureCityCode: string; departureCityName: string; acceptedModes: TransportMode[];
+  name: string; departureCityCode: string; departureCityName: string; departureLat?: number; departureLng?: number; acceptedModes: TransportMode[];
 }) {
   const plan = planFor(code);
   if (!plan) return { ok: false as const, status: 404, error: "PLAN_NOT_FOUND" };
   if (participantsFor(plan.id).length >= plan.participantLimit) return { ok: false as const, status: 409, error: "PARTICIPANT_LIMIT_REACHED" };
   const editToken = generateToken();
-  const participant: ParticipantRow = { id: id("participant"), planId: plan.id, ...input };
+  const local = findCityByCode(input.departureCityCode);
+  const departureLat = input.departureLat ?? local?.lat;
+  const departureLng = input.departureLng ?? local?.lng;
+  if (!Number.isFinite(departureLat) || !Number.isFinite(departureLng)) {
+    return { ok: false as const, status: 503, error: "CITY_VALIDATION_UNAVAILABLE" };
+  }
+  const participant: ParticipantRow = {
+    id: id("participant"), planId: plan.id, ...input,
+    departureLat: departureLat!, departureLng: departureLng!,
+  };
   state().participants.push(participant);
   state().participantCredentials.push({ participantId: participant.id, editTokenHash: await hashToken(editToken) });
   return { ok: true as const, participantId: participant.id, editToken };
@@ -310,14 +324,30 @@ function createMatrix(plan: PlanRow, kind: RunRow["kind"], requestedCityCode: st
   const participants = participantsFor(plan.id);
   const candidates = requestedCityCode
     ? [findCityByCode(requestedCityCode)].filter((city): city is NonNullable<typeof city> => Boolean(city))
-    : generateCandidateCities({ departureCityCodes: participants.map((participant) => participant.departureCityCode) });
+    : generateCandidateCities({
+        departureCityCodes: participants.map((participant) => participant.departureCityCode),
+        departureCoordinates: participants.map((participant) => ({
+          code: participant.departureCityCode,
+          lat: participant.departureLat,
+          lng: participant.departureLng,
+        })),
+      });
   if (candidates.length === 0) throw new Error("RUN_CREATE_FAILED");
   const run: RunRow = {
     id: id("run"), planId: plan.id, status: "pending", traceId: randomUUID(), retryAfter: null,
     errorCode: null, policyVersion: POLICY_VERSION, kind, requestedCityCode, requestedByParticipantId,
     startedAt: timestamp(), completedAt: null,
     staleAfter: staleAfterForStatus("pending", nowDate()),
+    baseline: requestedCityCode ? null : createBaselineRecommendation({
+      candidates,
+      departures: participants.map((participant) => ({
+        code: participant.departureCityCode,
+        lat: participant.departureLat,
+        lng: participant.departureLng,
+      })),
+    }),
   };
+  if (!requestedCityCode && !run.baseline) throw new Error("RUN_CREATE_FAILED");
   state().runs.push(run);
   recordEvent(run, "run_created");
   for (const draft of buildRouteTasks({

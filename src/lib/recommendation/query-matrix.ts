@@ -63,6 +63,7 @@ export function buildRouteTasks({
   arrivalDate: string;
 }): RouteTaskDraft[] {
   const tasks: RouteTaskDraft[] = [];
+  const candidateRank = new Map(candidates.map((candidate, index) => [candidate.code, index]));
 
   for (const participant of participants) {
     const modes = [...new Set(participant.acceptedModes)]
@@ -94,8 +95,11 @@ export function buildRouteTasks({
   }
 
   return tasks.sort((left, right) => {
-    const leftKey = [left.participantId, left.cityCode, left.mode, left.searchDate].join(":");
-    const rightKey = [right.participantId, right.cityCode, right.mode, right.searchDate].join(":");
+    const cityOrder = (candidateRank.get(left.cityCode) ?? Number.MAX_SAFE_INTEGER)
+      - (candidateRank.get(right.cityCode) ?? Number.MAX_SAFE_INTEGER);
+    if (cityOrder !== 0) return cityOrder;
+    const leftKey = [left.mode, left.searchDate, left.participantId].join(":");
+    const rightKey = [right.mode, right.searchDate, right.participantId].join(":");
     return leftKey.localeCompare(rightKey);
   });
 }

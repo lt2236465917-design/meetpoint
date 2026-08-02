@@ -11,6 +11,7 @@
     "test:postgres": "vitest run --config vitest.postgres.config.ts",
     "test:watch": "vitest",
     "probe:providers": "node scripts/probe-travel-providers.mjs",
+    "probe:deepseek-transports": "tsx scripts/probe-deepseek-transports.ts",
     "worker:recommendation": "tsx src/worker/recommendation-run-worker.ts"
   },
   "dependencies": {

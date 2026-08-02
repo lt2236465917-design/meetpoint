@@ -19,6 +19,7 @@ import {
   type WorkerAdvanceableRun,
 } from "@/lib/recommendation/run-worker";
 import type { RouteTaskDraft } from "./query-matrix";
+import type { BaselineRecommendation } from "./baseline";
 
 export type CandidateRecord = {
   cityCode: string;
@@ -56,6 +57,7 @@ export type CreateRunMatrixInput = {
   kind?: "automatic" | "alternative";
   requestedCityCode?: string | null;
   requestedByParticipantId?: string | null;
+  baseline?: BaselineRecommendation | null;
 };
 
 export const runCreationErrorCodes = [
@@ -370,6 +372,28 @@ export class SupabaseRecommendationRepository
     )) {
       throw new Error("Failed to create recommendation run matrix: invalid RPC result");
     }
+    if (input.kind !== "alternative" && input.baseline) {
+      const { error: baselineError } = await supabase.rpc("ensure_run_baseline", {
+        p_run_id: parsed.data.runId,
+        p_city_code: input.baseline.cityCode,
+        p_city_name: input.baseline.cityName,
+        p_policy_version: input.baseline.policyVersion,
+        p_evidence_level: input.baseline.evidenceLevel,
+        p_input_fingerprint: input.baseline.inputFingerprint,
+      });
+      if (baselineError) throw new Error(`Failed to persist baseline recommendation: ${baselineError.message}`);
+    }
+    const { error: priorityError } = await supabase.rpc("ensure_run_task_priorities", {
+      p_run_id: parsed.data.runId,
+      p_priorities: input.tasks.map((task, priority) => ({
+        participant_id: task.participantId,
+        city_code: task.cityCode,
+        mode: task.mode,
+        search_date: task.searchDate,
+        priority,
+      })),
+    });
+    if (priorityError) throw new Error(`Failed to persist route task priorities: ${priorityError.message}`);
     return parsed.data;
   }
 
@@ -645,6 +669,7 @@ export class SupabaseRecommendationRepository
       .from("route_tasks")
       .select(ROUTE_TASK_SELECT)
       .eq("run_id", runId)
+      .order("query_priority", { ascending: true, nullsFirst: false })
       .order("id", { ascending: true });
     if (error) throw new Error(`Failed to load route tasks: ${error.message}`);
     return (data ?? []).map((row) => toStoredTask(row as RouteTaskRow));

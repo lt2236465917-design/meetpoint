@@ -141,6 +141,84 @@ describe("createTravelSearchService", () => {
     expect(searchProvider).toHaveBeenCalledTimes(2);
   });
 
+  it("fails fast after repeated matching schema drift instead of fanning out across routes", async () => {
+    let nowMs = Date.parse("2026-07-12T08:00:00Z");
+    const operationalLogger = vi.fn();
+    const searchProvider = vi.fn().mockRejectedValue(
+      new FlyAIAdapterError(
+        "PROVIDER_INVALID_RESPONSE",
+        "sensitive supplier detail",
+        "mixed_transport_category",
+      ),
+    );
+    const service = createTravelSearchService({
+      searchProvider,
+      now: () => new Date(nowMs),
+      operationalLogger,
+    });
+
+    await expect(service.search(request)).rejects.toMatchObject({ code: "PROVIDER_INVALID_RESPONSE" });
+    await expect(service.search({
+      ...request,
+      destinationCityCode: "wuhan",
+      destinationCityName: "武汉",
+    })).rejects.toMatchObject({ code: "PROVIDER_INVALID_RESPONSE" });
+    await expect(service.search({
+      ...request,
+      destinationCityCode: "nanjing",
+      destinationCityName: "南京",
+    })).rejects.toMatchObject({ code: "PROVIDER_INVALID_RESPONSE" });
+    expect(searchProvider).toHaveBeenCalledTimes(2);
+    expect(operationalLogger).toHaveBeenNthCalledWith(1, {
+      event: "schema_drift_circuit_open",
+      provider: "flyai",
+      signature: "mixed_transport_category",
+      ttlMs: 60_000,
+    });
+    expect(operationalLogger).toHaveBeenNthCalledWith(2, {
+      event: "schema_drift_circuit_short_circuit",
+      provider: "flyai",
+      signature: "mixed_transport_category",
+    });
+
+    nowMs += 60_001;
+    await expect(service.search({
+      ...request,
+      destinationCityCode: "hangzhou",
+      destinationCityName: "杭州",
+    })).rejects.toMatchObject({ code: "PROVIDER_INVALID_RESPONSE" });
+    expect(searchProvider).toHaveBeenCalledTimes(3);
+  });
+
+  it("does not open the schema-drift circuit for unrelated invalid response signatures", async () => {
+    const searchProvider = vi.fn()
+      .mockRejectedValueOnce(new FlyAIAdapterError(
+        "PROVIDER_INVALID_RESPONSE",
+        "detail one",
+        "mixed_transport_category",
+      ))
+      .mockRejectedValueOnce(new FlyAIAdapterError(
+        "PROVIDER_INVALID_RESPONSE",
+        "detail two",
+        "invalid_segment_sequence",
+      ))
+      .mockResolvedValueOnce([option]);
+    const service = createTravelSearchService({ searchProvider });
+
+    await expect(service.search(request)).rejects.toMatchObject({ code: "PROVIDER_INVALID_RESPONSE" });
+    await expect(service.search({
+      ...request,
+      destinationCityCode: "wuhan",
+      destinationCityName: "武汉",
+    })).rejects.toMatchObject({ code: "PROVIDER_INVALID_RESPONSE" });
+    await expect(service.search({
+      ...request,
+      destinationCityCode: "nanjing",
+      destinationCityName: "南京",
+    })).resolves.toMatchObject({ options: [option] });
+    expect(searchProvider).toHaveBeenCalledTimes(3);
+  });
+
   it("maps unknown failures to a stable internal error without echoing details", async () => {
     const service = createTravelSearchService({ searchProvider: vi.fn().mockRejectedValue(new Error("token=secret")) });
     const error = await service.search(request).catch((value: unknown) => value);

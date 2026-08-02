@@ -25,7 +25,7 @@ import type { AgentProposalRepository } from "@/lib/recommendation/repository";
 import { deterministicAgentProposalId } from "@/lib/recommendation/repository";
 
 const correctionCodeSchema = z.enum(CORRECTION_CODES);
-const supervisorOutputSchema = z.discriminatedUnion("decision", [
+export const supervisorOutputSchema = z.discriminatedUnion("decision", [
   z.object({ decision: z.literal("approve") }).strict(),
   z.object({ decision: z.literal("correct"), codes: z.array(correctionCodeSchema).min(1).max(8) }).strict(),
 ]);

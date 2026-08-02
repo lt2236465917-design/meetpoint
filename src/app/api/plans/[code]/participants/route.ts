@@ -34,6 +34,8 @@ export async function POST(
     ...parsed.data,
     departureCityCode: departure.city.code,
     departureCityName: departure.city.name,
+    departureLat: departure.city.lat,
+    departureLng: departure.city.lng,
   };
 
   if (!hasSupabaseEnvironment()) {
@@ -60,6 +62,8 @@ export async function POST(
       p_name: participant.name,
       p_departure_city_code: participant.departureCityCode,
       p_departure_city_name: participant.departureCityName,
+      p_departure_lat: departure.city.lat,
+      p_departure_lng: departure.city.lng,
       p_accepted_modes: participant.acceptedModes,
       p_edit_token_hash: editTokenHash,
     },

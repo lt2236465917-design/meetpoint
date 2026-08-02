@@ -33,9 +33,17 @@ interface ServiceDependencies {
   cache?: TtlCache<GatewaySearchResult>;
   limiter?: FifoLimiter;
   now?: () => Date;
+  operationalLogger?: (event: {
+    event: "schema_drift_circuit_open" | "schema_drift_circuit_short_circuit";
+    provider: "flyai";
+    signature: string;
+    ttlMs?: number;
+  }) => void;
 }
 
 const providerOptionsSchema = z.array(gatewayTravelOptionSchema);
+const SCHEMA_DRIFT_CIRCUIT_TTL_MS = 60_000;
+const SCHEMA_DRIFT_TRIP_COUNT = 2;
 
 function cloneSearchResult(result: GatewaySearchResult): GatewaySearchResult {
   return {
@@ -89,6 +97,10 @@ function writeGatewayDiagnostic(event: FlyAIDiagnostic): void {
   }));
 }
 
+function writeOperationalEvent(event: Parameters<NonNullable<ServiceDependencies["operationalLogger"]>>[0]): void {
+  console.warn(JSON.stringify(event));
+}
+
 export function createTravelSearchService(dependencies: ServiceDependencies = {}): TravelSearchService {
   const diagnosticLogger = dependencies.diagnosticLogger ?? writeGatewayDiagnostic;
   const searchProvider = dependencies.searchProvider ?? ((request: GatewaySearchRequest) =>
@@ -96,9 +108,13 @@ export function createTravelSearchService(dependencies: ServiceDependencies = {}
   const cache = dependencies.cache ?? new TtlCache<GatewaySearchResult>();
   const limiter = dependencies.limiter ?? new FifoLimiter();
   const now = dependencies.now ?? (() => new Date());
+  const operationalLogger = dependencies.operationalLogger ?? writeOperationalEvent;
   const inFlight = new Map<string, Promise<GatewaySearchResult>>();
   let cooldownUntil = 0;
   let nextCooldownMs = 5_000;
+  let schemaDriftSignature: string | null = null;
+  let schemaDriftCount = 0;
+  let schemaDriftCircuitUntil = 0;
 
   async function waitForCooldown(): Promise<void> {
     if (cooldownUntil <= 0) return;
@@ -111,14 +127,50 @@ export function createTravelSearchService(dependencies: ServiceDependencies = {}
 
   async function callProvider(request: GatewaySearchRequest): Promise<unknown> {
     await waitForCooldown();
+    if (schemaDriftCircuitUntil > 0 && schemaDriftCircuitUntil > now().getTime()) {
+      operationalLogger({
+        event: "schema_drift_circuit_short_circuit",
+        provider: "flyai",
+        signature: schemaDriftSignature ?? "unknown_schema_drift",
+      });
+      throw new FlyAIAdapterError(
+        "PROVIDER_INVALID_RESPONSE",
+        "Provider schema circuit is open",
+        schemaDriftSignature,
+      );
+    }
     try {
       const rawOptions = await searchProvider(request);
       nextCooldownMs = 5_000;
+      schemaDriftSignature = null;
+      schemaDriftCount = 0;
+      schemaDriftCircuitUntil = 0;
       return rawOptions;
     } catch (error) {
       if (error instanceof FlyAIAdapterError && error.code === "PROVIDER_RATE_LIMITED") {
         cooldownUntil = now().getTime() + nextCooldownMs;
         nextCooldownMs = 15_000;
+      }
+      if (
+        error instanceof FlyAIAdapterError
+        && error.code === "PROVIDER_INVALID_RESPONSE"
+        && error.schemaDriftSignature
+      ) {
+        if (error.schemaDriftSignature === schemaDriftSignature) {
+          schemaDriftCount += 1;
+        } else {
+          schemaDriftSignature = error.schemaDriftSignature;
+          schemaDriftCount = 1;
+        }
+        if (schemaDriftCount >= SCHEMA_DRIFT_TRIP_COUNT) {
+          schemaDriftCircuitUntil = now().getTime() + SCHEMA_DRIFT_CIRCUIT_TTL_MS;
+          operationalLogger({
+            event: "schema_drift_circuit_open",
+            provider: "flyai",
+            signature: schemaDriftSignature,
+            ttlMs: SCHEMA_DRIFT_CIRCUIT_TTL_MS,
+          });
+        }
       }
       throw error;
     }

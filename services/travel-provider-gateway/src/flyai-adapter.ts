@@ -106,11 +106,13 @@ type ExecFile = (
 
 export class FlyAIAdapterError extends Error {
   readonly code: GatewayErrorCode;
+  readonly schemaDriftSignature: string | null;
 
-  constructor(code: GatewayErrorCode, message: string) {
+  constructor(code: GatewayErrorCode, message: string, schemaDriftSignature: string | null = null) {
     super(message);
     this.name = "FlyAIAdapterError";
     this.code = code;
+    this.schemaDriftSignature = schemaDriftSignature;
   }
 }
 
@@ -302,10 +304,10 @@ type LiveNormalizationResult =
 function classifyLiveSegment(
   segment: z.infer<typeof liveSegmentSchema>,
 ): GatewaySearchRequest["mode"] | null {
-  if (segment.transportType === "flight") {
+  if (segment.transportType === "flight" || segment.transportType === "飞机") {
     return "flight";
   }
-  if (segment.transportType !== "train") return null;
+  if (segment.transportType !== "train" && segment.transportType !== "火车") return null;
   return /^[GCD]/i.test(segment.marketingTransportNo) ? "high_speed_rail" : "normal_train";
 }
 
@@ -543,7 +545,11 @@ export async function searchFlyAI(
       };
       if (items.length > 0 && result.length === 0) {
         emitDiagnostic(dependencies.diagnosticLogger, diagnosticFor(input, "PROVIDER_INVALID_RESPONSE", details));
-        throw new FlyAIAdapterError("PROVIDER_INVALID_RESPONSE", "FlyAI returned an invalid response");
+        throw new FlyAIAdapterError(
+          "PROVIDER_INVALID_RESPONSE",
+          "FlyAI returned an invalid response",
+          details.droppedReasons.join("+"),
+        );
       }
       emitDiagnostic(dependencies.diagnosticLogger, diagnosticFor(input, "SUCCESS", details));
       return result;
@@ -558,7 +564,11 @@ export async function searchFlyAI(
       .join("\n");
     const code = classifyProviderText(providerText) ?? "PROVIDER_INVALID_RESPONSE";
     emitDiagnostic(dependencies.diagnosticLogger, diagnosticFor(input, code));
-    throw new FlyAIAdapterError(code, "FlyAI returned an invalid response");
+    throw new FlyAIAdapterError(
+      code,
+      "FlyAI returned an invalid response",
+      code === "PROVIDER_INVALID_RESPONSE" ? "invalid_envelope_shape" : null,
+    );
   } catch (error) {
     if (error instanceof FlyAIAdapterError) {
       throw error;

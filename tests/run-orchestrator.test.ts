@@ -151,6 +151,28 @@ describe("RunOrchestrator", () => {
     expect(store.transitions).toEqual([]);
   });
 
+  it("uses an explicitly configured secondary capability for eligible recovery", async () => {
+    const store = repository({
+      current: run("collecting"),
+      tasks: [task({
+        status: "retryable_failure",
+        attemptCount: 1,
+        errorCode: "PROVIDER_UNAVAILABLE",
+      })],
+    });
+    const primary = vi.fn(async () => ({ status: "empty" as const }));
+    const secondary = vi.fn(async () => ({ status: "empty" as const }));
+
+    await new RunOrchestrator({
+      repository: store,
+      query: { execute: primary },
+      secondaryQuery: { configured: true, execute: secondary },
+    }).advanceRun("run-1");
+
+    expect(secondary).toHaveBeenCalledWith("task-1");
+    expect(primary).not.toHaveBeenCalled();
+  });
+
   it("reports cooldown progress without bypassing its retry time", async () => {
     const retryAt = "2030-01-01T00:00:00.000Z";
     const store = repository({

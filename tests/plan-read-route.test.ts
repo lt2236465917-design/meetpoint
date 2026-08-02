@@ -159,6 +159,7 @@ describe("GET /api/plans/[code]", () => {
         pendingGroups: 3,
         retryAt: null,
         diagnosticCode: null,
+        baseline: null,
       },
       latestSharedResult: null,
     });
@@ -176,7 +177,7 @@ describe("GET /api/plans/[code]", () => {
       ascending: false,
     });
     expect(latestRunLookup.limit).toHaveBeenCalledWith(1);
-    expect(latestRunLookup.select).toHaveBeenCalledWith("id, status, trace_id, retry_after, error_summary, started_at");
+    expect(latestRunLookup.select).toHaveBeenCalledWith("id, status, trace_id, retry_after, error_summary, started_at,baseline_city_code,baseline_city_name,baseline_policy_version,baseline_evidence_level,baseline_input_fingerprint");
     expect(pendingGroups.inStatus).toHaveBeenCalledWith("status", ["pending", "running", "retryable_failure"]);
   });
 
@@ -244,6 +245,7 @@ describe("GET /api/plans/[code]", () => {
       pendingGroups: 0,
       retryAt: null,
       diagnosticCode: null,
+      baseline: null,
     });
     expect(body.latestSharedResult).toEqual({
       id: "result-shared",
@@ -258,7 +260,7 @@ describe("GET /api/plans/[code]", () => {
     expect(runLookup.eq).toHaveBeenCalledWith("id", "run-shared");
     expect(runLookup.eq).not.toHaveBeenCalledWith("plan_id", "plan-1");
     expect(runLookup.select).toHaveBeenCalledWith(
-      "id, status, trace_id, retry_after, error_summary, started_at",
+      "id, status, trace_id, retry_after, error_summary, started_at,baseline_city_code,baseline_city_name,baseline_policy_version,baseline_evidence_level,baseline_input_fingerprint",
     );
   });
 });

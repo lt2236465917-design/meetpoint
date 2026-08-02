@@ -22,17 +22,20 @@ import { advanceFallbackRun } from "@/lib/fallback/mvp-store";
 import { createServiceSupabaseClient, hasSupabaseEnvironment } from "@/lib/supabase/server";
 import { verifyParticipantCanCalculatePlan } from "@/lib/security/participant-calculation";
 import { randomUUID } from "node:crypto";
+import { resolveDepartureCityIdentity } from "@/lib/city/departure-city";
 
 export type StoredRun = StoredRecommendationRun;
 export type RunOrchestratorRepository = Repository;
 
 type QueryExecutor = Pick<QueryAgent, "execute">;
+type SecondaryQueryCapability = QueryExecutor & { configured: true };
 
 type RunOrchestratorOptions = {
   repository?: RunOrchestratorRepository;
   query?: QueryExecutor;
   logicalConcurrency?: number;
   now?: () => Date;
+  secondaryQuery?: SecondaryQueryCapability;
 };
 
 const terminalStatuses = new Set<RunStatus>(["completed", "incomplete", "failed"]);
@@ -105,12 +108,14 @@ export class RunOrchestrator {
   private readonly query: QueryExecutor;
   private readonly logicalConcurrency: number;
   private readonly now: () => Date;
+  private readonly secondaryQuery: SecondaryQueryCapability | null;
 
   constructor(options: RunOrchestratorOptions = {}) {
     this.repository = options.repository ?? new SupabaseRecommendationRepository();
     this.query = options.query ?? new QueryAgent(this.repository);
     this.logicalConcurrency = options.logicalConcurrency ?? queryConcurrencyFromEnv();
     this.now = options.now ?? (() => new Date());
+    this.secondaryQuery = options.secondaryQuery ?? null;
   }
 
   async advanceRun(runId: string, expectedPlanId?: string): Promise<RunStatus> {
@@ -199,7 +204,7 @@ export class RunOrchestrator {
         errorCode: task.errorCode ?? "ROUTE_TASK_RETRYABLE_FAILURE",
         retryAfter: task.retryAfter,
         recoveryAttemptCount: Math.max(0, task.attemptCount - 1),
-        secondaryAdapterConfigured: false,
+        secondaryAdapterConfigured: this.secondaryQuery?.configured === true,
       })]));
     const stopped = [...recovery.entries()]
       .filter(([, action]) => action.type === "stop_incomplete");
@@ -211,12 +216,16 @@ export class RunOrchestrator {
         new Date(this.now().getTime() + ACTIVE_RUN_STALE_MS).toISOString(),
       );
     }));
-    const ready = tasks.filter((task) => task.status === "pending" || recovery.get(task.id)?.type === "rerun_task");
+    const ready = tasks.filter((task) => task.status === "pending"
+      || recovery.get(task.id)?.type === "rerun_task"
+      || recovery.get(task.id)?.type === "try_configured_adapter");
     if (ready.length > 0) {
       const batch = ready.slice(0, this.logicalConcurrency);
       await runQueryPool(batch.map((task) => task.id), {
         logicalConcurrency: this.logicalConcurrency,
-        execute: (taskId) => this.query.execute(taskId),
+        execute: (taskId) => recovery.get(taskId)?.type === "try_configured_adapter"
+          ? this.secondaryQuery!.execute(taskId)
+          : this.query.execute(taskId),
       });
       return (await this.repository.getRun(run.id))?.status ?? "collecting";
     }
@@ -318,10 +327,29 @@ export async function startAutomaticRun(input: StartAutomaticRunInput): Promise<
   if (planError || !plan) throw new Error("PLAN_NOT_FOUND");
   const { data: participants, error: participantsError } = await supabase
     .from("participants")
-    .select("id,departure_city_code,departure_city_name,accepted_modes")
+    .select("id,departure_city_code,departure_city_name,departure_lat,departure_lng,accepted_modes")
     .eq("plan_id", plan.id)
     .order("id", { ascending: true });
   if (participantsError || !participants || participants.length < 2) throw new Error("NOT_ENOUGH_PARTICIPANTS");
+  const canonicalParticipants = await Promise.all(participants.map(async (participant) => {
+    if (typeof participant.departure_lat === "number" && typeof participant.departure_lng === "number") {
+      return {
+        ...participant,
+        departureLat: participant.departure_lat,
+        departureLng: participant.departure_lng,
+      };
+    }
+    const resolved = await resolveDepartureCityIdentity({
+      code: participant.departure_city_code,
+      name: participant.departure_city_name,
+    });
+    if (!resolved.ok) throw new Error("CITY_VALIDATION_UNAVAILABLE");
+    return {
+      ...participant,
+      departureLat: resolved.city.lat,
+      departureLng: resolved.city.lng,
+    };
+  }));
   const { data: candidates, error: candidatesError } = await supabase
     .from("candidate_cities")
     .select("city_code,source,enabled")
@@ -334,10 +362,12 @@ export async function startAutomaticRun(input: StartAutomaticRunInput): Promise<
   const prepared = await manager.prepare({
       planId: plan.id,
       arrivalDate: plan.meeting_date,
-      participants: participants.map((participant) => ({
+      participants: canonicalParticipants.map((participant) => ({
         id: participant.id,
         departureCityCode: participant.departure_city_code,
         departureCityName: participant.departure_city_name,
+        departureLat: participant.departureLat,
+        departureLng: participant.departureLng,
         acceptedModes: participant.accepted_modes,
       })),
       manualAddCityCodes,

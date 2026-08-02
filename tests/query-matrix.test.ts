@@ -33,15 +33,32 @@ describe("arrival-date route matrix", () => {
     expect(tasks.map((task) => `${task.participantId}:${task.cityCode}:${task.mode}:${task.searchDate}`))
       .toEqual([
         "p1:wuhan:flight:2026-08-14",
-        "p1:wuhan:flight:2026-08-15",
         "p2:wuhan:flight:2026-08-14",
+        "p1:wuhan:flight:2026-08-15",
         "p2:wuhan:flight:2026-08-15",
       ]);
-    expect(tasks[0]?.physicalKey).toBe(tasks[2]?.physicalKey);
+    expect(tasks[0]?.physicalKey).toBe(tasks[1]?.physicalKey);
     expect(tasks[0]).toEqual(expect.objectContaining({
       originCityName: "北京",
       cityName: "武汉",
     }));
+  });
+
+  it("finishes participant coverage for the first candidate before querying the next city", () => {
+    const tasks = buildRouteTasks({
+      participants: [
+        { id: "p2", departureCityCode: "shanghai", acceptedModes: ["flight"] },
+        { id: "p1", departureCityCode: "beijing", acceptedModes: ["flight"] },
+      ],
+      candidates: [{ code: "wuhan" }, { code: "chengdu" }],
+      arrivalDate: "2026-08-15",
+    });
+
+    expect(tasks.map((task) => task.cityCode)).toEqual([
+      "wuhan", "wuhan", "wuhan", "wuhan",
+      "chengdu", "chengdu", "chengdu", "chengdu",
+    ]);
+    expect(tasks.slice(0, 2).map((task) => task.participantId)).toEqual(["p1", "p2"]);
   });
 
   it("emits no tasks for unsupported modes", () => {

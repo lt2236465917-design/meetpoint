@@ -6,6 +6,7 @@ const openAiSdk = vi.hoisted(() => ({
     | { baseURL?: string; apiKey?: string; timeout?: number; maxRetries?: number }
     | undefined,
   create: vi.fn(),
+  createResponse: vi.fn(),
 }));
 
 vi.mock("openai", () => ({
@@ -13,6 +14,7 @@ vi.mock("openai", () => ({
     readonly timeout: number | undefined;
     readonly maxRetries: number | undefined;
     readonly chat = { completions: { create: openAiSdk.create } };
+    readonly responses = { create: openAiSdk.createResponse };
 
     constructor(options: {
       baseURL?: string;
@@ -29,7 +31,11 @@ vi.mock("openai", () => ({
 
 import type { AgentModel } from "@/lib/agent/model";
 import { AgentModelError } from "@/lib/agent/model";
-import { createAgentModel } from "@/lib/agent/deepseek-model";
+import {
+  createAgentModel,
+  createAgentModelForTransport,
+  resetDeepSeekShadowStateForTests,
+} from "@/lib/agent/deepseek-model";
 
 const outputSchema = z.object({ cityCode: z.string() }).strict();
 
@@ -47,8 +53,12 @@ describe("AgentModel", () => {
   beforeEach(() => {
     vi.stubEnv("DEEPSEEK_API_KEY", "server-only-test-key");
     vi.stubEnv("DEEPSEEK_MODEL", "deepseek-v4-flash");
+    vi.stubEnv("DEEPSEEK_TRANSPORT", "chat_completions");
+    vi.stubEnv("DEEPSEEK_SHADOW_TRANSPORT", "off");
     openAiSdk.options = undefined;
     openAiSdk.create.mockReset();
+    openAiSdk.createResponse.mockReset();
+    resetDeepSeekShadowStateForTests();
   });
 
   afterEach(() => {
@@ -93,6 +103,175 @@ describe("AgentModel", () => {
         { role: "system", content: expect.stringContaining("JSON") },
         { role: "user", content: '{"quoteIds":["quote-1"]}' },
       ],
+    }));
+  });
+
+  it("uses Responses with the same safe input and concrete strict JSON schema when selected", async () => {
+    vi.stubEnv("DEEPSEEK_TRANSPORT", "responses");
+    openAiSdk.createResponse.mockResolvedValue({
+      id: "resp-1",
+      output_text: '{"cityCode":"420100"}',
+      usage: { input_tokens: 12, output_tokens: 4, total_tokens: 16 },
+    });
+
+    await expect(runDownstreamAgent(createAgentModel()!)).resolves.toEqual({
+      cityCode: "420100",
+    });
+
+    expect(openAiSdk.create).not.toHaveBeenCalled();
+    expect(openAiSdk.createResponse).toHaveBeenCalledWith(expect.objectContaining({
+      model: "deepseek-v4-flash",
+      instructions: expect.stringContaining("JSON"),
+      input: '{"quoteIds":["quote-1"]}',
+      max_output_tokens: 4096,
+      reasoning: { effort: "none" },
+      text: {
+        format: {
+          type: "json_schema",
+          name: "agent_output",
+          schema: z.toJSONSchema(outputSchema),
+          strict: true,
+        },
+      },
+    }));
+    const body = openAiSdk.createResponse.mock.calls[0]?.[0];
+    expect(body).not.toHaveProperty("previous_response_id");
+    expect(body).not.toHaveProperty("conversation");
+    expect(body).not.toHaveProperty("store");
+    expect(body).not.toHaveProperty("background");
+    expect(body).not.toHaveProperty("tools");
+  });
+
+  it("uses Responses JSON object mode for complex unions while enforcing the same strict schema locally", async () => {
+    vi.stubEnv("DEEPSEEK_TRANSPORT", "responses");
+    const unionSchema = z.discriminatedUnion("decision", [
+      z.object({ decision: z.literal("approve") }).strict(),
+      z.object({ decision: z.literal("correct"), codes: z.array(z.string()) }).strict(),
+    ]);
+    openAiSdk.createResponse.mockResolvedValue({
+      id: "resp-union",
+      output_text: '{"decision":"approve"}',
+    });
+
+    await expect(createAgentModel()!.generate({
+      agent: "supervisor",
+      system: "Review one proposal.",
+      input: { validation: { ok: true } },
+      outputSchema: unionSchema,
+      traceId: "00000000-0000-4000-8000-000000000013",
+    })).resolves.toEqual({ decision: "approve" });
+    expect(openAiSdk.createResponse).toHaveBeenCalledWith(expect.objectContaining({
+      text: { format: { type: "json_object" } },
+    }));
+  });
+
+  it("retries Responses once for invalid JSON through the shared validation boundary", async () => {
+    vi.stubEnv("DEEPSEEK_TRANSPORT", "responses");
+    openAiSdk.createResponse
+      .mockResolvedValueOnce({ id: "resp-bad", output_text: "not-json{" })
+      .mockResolvedValueOnce({ id: "resp-ok", output_text: '{"cityCode":"420100"}' });
+
+    await expect(runDownstreamAgent(createAgentModel()!)).resolves.toEqual({
+      cityCode: "420100",
+    });
+    expect(openAiSdk.createResponse).toHaveBeenCalledTimes(2);
+  });
+
+  it("accounts for every Responses attempt in redacted comparison usage", async () => {
+    const observations: Array<{ totalTokens: number; retryCount: number }> = [];
+    openAiSdk.createResponse
+      .mockResolvedValueOnce({
+        id: "resp-bad",
+        output_text: "not-json{",
+        usage: { input_tokens: 8, output_tokens: 2, total_tokens: 10 },
+      })
+      .mockResolvedValueOnce({
+        id: "resp-ok",
+        output_text: '{"cityCode":"420100"}',
+        usage: { input_tokens: 9, output_tokens: 3, total_tokens: 12 },
+      });
+    const model = createAgentModelForTransport("responses", (observation) => {
+      observations.push(observation);
+    });
+
+    await expect(runDownstreamAgent(model!)).resolves.toEqual({ cityCode: "420100" });
+    expect(observations).toEqual([expect.objectContaining({
+      totalTokens: 22,
+      retryCount: 1,
+    })]);
+  });
+
+  it("preserves timeout and unavailable mappings on Responses", async () => {
+    vi.stubEnv("DEEPSEEK_TRANSPORT", "responses");
+    openAiSdk.createResponse.mockRejectedValueOnce(Object.assign(new Error("timeout"), {
+      name: "APIConnectionTimeoutError",
+    }));
+    await expect(runDownstreamAgent(createAgentModel()!)).rejects.toMatchObject({
+      code: "MODEL_TIMEOUT",
+    });
+
+    openAiSdk.createResponse.mockRejectedValueOnce(new Error("provider unavailable"));
+    await expect(runDownstreamAgent(createAgentModel()!)).rejects.toMatchObject({
+      code: "MODEL_UNAVAILABLE",
+    });
+  });
+
+  it("fails closed for an unknown primary transport", () => {
+    vi.stubEnv("DEEPSEEK_TRANSPORT", "unknown-protocol");
+
+    expect(() => createAgentModel()).toThrow(expect.objectContaining({
+      code: "MODEL_UNAVAILABLE",
+    }));
+    expect(openAiSdk.create).not.toHaveBeenCalled();
+    expect(openAiSdk.createResponse).not.toHaveBeenCalled();
+  });
+
+  it("runs a sampled Responses shadow without changing the Chat Completions result", async () => {
+    vi.stubEnv("DEEPSEEK_SHADOW_TRANSPORT", "responses");
+    vi.stubEnv("DEEPSEEK_SHADOW_SAMPLE_RATE", "1");
+    vi.stubEnv("DEEPSEEK_SHADOW_MAX_CONCURRENCY", "1");
+    vi.stubEnv("DEEPSEEK_SHADOW_MAX_CALLS_PER_PROCESS", "2");
+    vi.stubEnv("DEEPSEEK_SHADOW_MAX_TOTAL_TOKENS_PER_PROCESS", "100");
+    openAiSdk.create.mockResolvedValue({
+      id: "chat-primary",
+      choices: [{ message: { role: "assistant", content: '{"cityCode":"420100"}' } }],
+    });
+    openAiSdk.createResponse.mockResolvedValue({
+      id: "responses-shadow",
+      output_text: '{"cityCode":"different-shadow-value"}',
+      usage: { input_tokens: 12, output_tokens: 4, total_tokens: 16 },
+    });
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+
+    await expect(runDownstreamAgent(createAgentModel()!)).resolves.toEqual({
+      cityCode: "420100",
+    });
+    await vi.waitFor(() => expect(openAiSdk.createResponse).toHaveBeenCalledTimes(1));
+
+    const logged = info.mock.calls.flat().join(" ");
+    expect(logged).toContain('"transport":"responses"');
+    expect(logged).toContain('"schemaQualified":true');
+    expect(logged).not.toContain("different-shadow-value");
+    expect(logged).not.toContain("quote-1");
+    expect(logged).not.toContain("server-only-test-key");
+  });
+
+  it("keeps shadow off at zero sample rate and enforces fail-closed shadow config", async () => {
+    vi.stubEnv("DEEPSEEK_SHADOW_TRANSPORT", "responses");
+    vi.stubEnv("DEEPSEEK_SHADOW_SAMPLE_RATE", "0");
+    openAiSdk.create.mockResolvedValue({
+      id: "chat-primary",
+      choices: [{ message: { role: "assistant", content: '{"cityCode":"420100"}' } }],
+    });
+
+    await expect(runDownstreamAgent(createAgentModel()!)).resolves.toEqual({
+      cityCode: "420100",
+    });
+    expect(openAiSdk.createResponse).not.toHaveBeenCalled();
+
+    vi.stubEnv("DEEPSEEK_SHADOW_TRANSPORT", "unknown-protocol");
+    expect(() => createAgentModel()).toThrow(expect.objectContaining({
+      code: "MODEL_UNAVAILABLE",
     }));
   });
 

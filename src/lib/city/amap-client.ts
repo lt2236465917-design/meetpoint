@@ -15,6 +15,7 @@ const amapDistrictResponseSchema = z.object({
     name: z.string().min(1),
     adcode: z.string().regex(/^\d{6}$/),
     level: z.string(),
+    center: z.string().regex(/^-?\d+(?:\.\d+)?,-?\d+(?:\.\d+)?$/).optional(),
   })).default([]),
 });
 
@@ -22,6 +23,7 @@ const amapDistrictTreeNodeSchema = z.object({
   name: z.string().min(1),
   adcode: z.string().regex(/^\d{6}$/),
   level: z.string(),
+  center: z.string().regex(/^-?\d+(?:\.\d+)?,-?\d+(?:\.\d+)?$/).optional(),
   districts: z.array(z.unknown()).default([]),
 });
 
@@ -34,6 +36,8 @@ export type AmapCityCandidate = {
   name: string;
   district: string;
   adcode: string;
+  lat?: number;
+  lng?: number;
 };
 
 export interface SearchAmapCitiesOptions {
@@ -87,7 +91,7 @@ export async function resolveAmapCityByAdcode(
     return district
       ? {
           status: "found",
-          city: { name: district.name, district: "", adcode: district.adcode },
+          city: { name: district.name, district: "", adcode: district.adcode, ...coordinates(district.center) },
         }
       : { status: "not_found" };
   }
@@ -150,6 +154,7 @@ export async function searchAmapCities(
         name: district.name,
         district: provinceTip?.district ?? "",
         adcode: district.adcode,
+        ...coordinates(district.center),
       });
     }
   }
@@ -159,10 +164,14 @@ export async function searchAmapCities(
   for (const tip of validTips) {
     if (!tip.adcode || !/^\d{4}00$/.test(tip.adcode)) continue;
     if (!merged.has(tip.adcode)) {
+      const canonical = districts.success
+        ? districts.data.districts.find((district) => district.adcode === tip.adcode)
+        : undefined;
       merged.set(tip.adcode, {
         name: tip.name,
         district: tip.district,
         adcode: tip.adcode,
+        ...coordinates(canonical?.center),
       });
     }
   }
@@ -219,6 +228,12 @@ function normalizeAmapCityName(name: string) {
   return name.trim().replace(/(特别行政区|市)$/, "");
 }
 
+function coordinates(center?: string) {
+  if (!center) return {};
+  const [lng, lat] = center.split(",").map(Number);
+  return { lat: lat!, lng: lng! };
+}
+
 function findIndexedCities(
   keywords: string,
   cities: AmapCityCandidate[],
@@ -263,6 +278,7 @@ async function loadAmapCityIndex(apiKey: string): Promise<AmapCityCandidate[]> {
         name: province.data.name,
         district: province.data.name,
         adcode: province.data.adcode,
+        ...coordinates(province.data.center),
       });
     }
 
@@ -273,6 +289,7 @@ async function loadAmapCityIndex(apiKey: string): Promise<AmapCityCandidate[]> {
         name: city.data.name,
         district: province.data.name,
         adcode: city.data.adcode,
+        ...coordinates(city.data.center),
       });
     }
   }

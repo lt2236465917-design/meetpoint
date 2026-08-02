@@ -44,7 +44,7 @@ export async function GET(
   const currentShared = currentSharedResults?.[0] ?? null;
   const runQuery = supabase
     .from("recommendation_runs")
-    .select("id, status, trace_id, retry_after, error_summary, started_at");
+    .select("id, status, trace_id, retry_after, error_summary, started_at,baseline_city_code,baseline_city_name,baseline_policy_version,baseline_evidence_level,baseline_input_fingerprint");
   const { data: runs } = currentShared
     ? await runQuery.eq("id", currentShared.run_id).limit(1)
     : await runQuery.eq("plan_id", plan.id).eq("kind", "automatic").order("started_at", { ascending: false }).limit(1);
@@ -73,6 +73,15 @@ export async function GET(
           pendingGroups: pendingGroups ?? 0,
           retryAt: latestRun.retry_after,
           diagnosticCode: latestRun.error_summary,
+          baseline: latestRun.baseline_city_code
+            ? {
+                cityCode: latestRun.baseline_city_code,
+                cityName: latestRun.baseline_city_name,
+                policyVersion: latestRun.baseline_policy_version,
+                evidenceLevel: latestRun.baseline_evidence_level,
+                inputFingerprint: latestRun.baseline_input_fingerprint,
+              }
+            : null,
         }
       : null,
     latestSharedResult: latestRun?.status === "completed" && currentShared

@@ -17,7 +17,7 @@ describe("resolveDepartureCityIdentity", () => {
       if (url.searchParams.get("keywords") === "440800") {
         return new Response(JSON.stringify({
           status: "1",
-          districts: [{ name: "湛江市", adcode: "440800", level: "city" }],
+          districts: [{ name: "湛江市", adcode: "440800", level: "city", center: "110.364977,21.274898" }],
         }), { status: 200 });
       }
       return new Response("unavailable", { status: 503 });
@@ -28,7 +28,7 @@ describe("resolveDepartureCityIdentity", () => {
       name: "湛江市",
     })).resolves.toEqual({
       ok: true,
-      city: { code: "amap-440800", name: "湛江" },
+      city: { code: "amap-440800", name: "湛江", lat: 21.274898, lng: 110.364977 },
     });
   });
 
@@ -36,7 +36,7 @@ describe("resolveDepartureCityIdentity", () => {
     vi.stubEnv("AMAP_API_KEY", "test-key");
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
       status: "1",
-      districts: [{ name: "湛江市", adcode: "440800", level: "city" }],
+      districts: [{ name: "湛江市", adcode: "440800", level: "city", center: "110.364977,21.274898" }],
     }), { status: 200 })));
 
     await expect(resolveDepartureCityIdentity({
@@ -64,7 +64,7 @@ describe("resolveDepartureCityIdentity", () => {
     vi.stubEnv("AMAP_API_KEY", "test-key");
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
       status: "1",
-      districts: [{ name: "济源市", adcode: "419001", level: "city" }],
+      districts: [{ name: "济源市", adcode: "419001", level: "city", center: "112.602347,35.069057" }],
     }), { status: 200 })));
 
     await expect(resolveDepartureCityIdentity({
@@ -72,7 +72,7 @@ describe("resolveDepartureCityIdentity", () => {
       name: "济源",
     })).resolves.toEqual({
       ok: true,
-      city: { code: "amap-419001", name: "济源" },
+      city: { code: "amap-419001", name: "济源", lat: 35.069057, lng: 112.602347 },
     });
   });
 
@@ -80,7 +80,7 @@ describe("resolveDepartureCityIdentity", () => {
     vi.stubEnv("AMAP_API_KEY", "test-key");
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
       status: "1",
-      districts: [{ name: "北京市", adcode: "110000", level: "province" }],
+      districts: [{ name: "北京市", adcode: "110000", level: "province", center: "116.4074,39.9042" }],
     }), { status: 200 })));
 
     await expect(resolveDepartureCityIdentity({
@@ -88,7 +88,7 @@ describe("resolveDepartureCityIdentity", () => {
       name: "北京市",
     })).resolves.toEqual({
       ok: true,
-      city: { code: "beijing", name: "北京" },
+      city: { code: "beijing", name: "北京", lat: 39.9042, lng: 116.4074 },
     });
   });
 });

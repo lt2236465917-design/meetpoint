@@ -46,8 +46,8 @@ const validInput = {
   planId: "plan-1",
   arrivalDate: "2026-08-15",
   participants: [
-    { id: "p2", departureCityCode: "beijing", departureCityName: "北京", acceptedModes: ["flight"] as const },
-    { id: "p1", departureCityCode: "beijing", departureCityName: "北京", acceptedModes: ["flight"] as const },
+    { id: "p2", departureCityCode: "beijing", departureCityName: "北京", departureLat: 39.9042, departureLng: 116.4074, acceptedModes: ["flight"] as const },
+    { id: "p1", departureCityCode: "beijing", departureCityName: "北京", departureLat: 39.9042, departureLng: 116.4074, acceptedModes: ["flight"] as const },
   ],
 };
 
@@ -78,9 +78,7 @@ describe("ManagerAgent", () => {
     expect(firstResult.taskIds).toEqual(first.tasks.map((task) => task.id));
     expect(firstResult.taskIds).toEqual(secondResult.taskIds);
     expect(first.tasks.every((task) => task.arrivalDate === "2026-08-15")).toBe(true);
-    expect(first.tasks.map((task) => task.participantId)).toEqual(
-      [...first.tasks.map((task) => task.participantId)].sort(),
-    );
+    expect(first.tasks.slice(0, 2).map((task) => task.participantId)).toEqual(["p1", "p2"]);
   });
 
   it("accepts an Amap prefecture as a departure without making it a meeting candidate", async () => {
@@ -93,6 +91,8 @@ describe("ManagerAgent", () => {
           ...validInput.participants[0],
           departureCityCode: "amap-230200",
           departureCityName: "齐齐哈尔",
+          departureLat: 47.3543,
+          departureLng: 123.9182,
         },
         validInput.participants[1],
       ],
@@ -103,6 +103,10 @@ describe("ManagerAgent", () => {
       && task.originCityName === "齐齐哈尔"
     ))).toBe(true);
     expect(store.candidates.map((candidate) => candidate.cityCode)).not.toContain("amap-230200");
+    expect(store.matrices[0]?.baseline).toMatchObject({
+      policyVersion: "2026-08-01.baseline.v1",
+      evidenceLevel: "canonical_coordinates_and_hubs",
+    });
   });
 
   it("rejects duplicate participant IDs before persistence", async () => {

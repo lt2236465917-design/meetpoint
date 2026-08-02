@@ -16,6 +16,8 @@ import {
   hasSupabaseEnvironment,
 } from "@/lib/supabase/server";
 import type { TransportMode } from "@/types/domain";
+import { BaselineRecommendation } from "@/components/result/BaselineRecommendation";
+import type { BaselineRecommendation as BaselineResult } from "@/lib/recommendation/baseline";
 
 type Relation<T> = T | T[] | null;
 
@@ -63,12 +65,14 @@ export function ResultContent({
   title,
   progress,
   result,
+  baseline,
   now,
 }: {
   code: string;
   title: string;
   progress: PublicRunProgress | null;
   result: SharedResult | null;
+  baseline?: BaselineResult | null;
   now?: Date;
 }) {
   const completed = progress?.status === "completed";
@@ -76,17 +80,20 @@ export function ResultContent({
   return (
     <ResponsiveShell
       title={title}
-      description="一座城市，两套走法，每一程都查得到真实票价。"
+      description={completed
+        ? "一座城市，两套走法，每一程都查得到真实票价。"
+        : "先定见面城市，再逐步补齐真实票价。"}
       backHref={`/p/${code}`}
       backLabel="返回计划页"
       aside={
         <p className="text-center text-xs text-gray-500">
-          {completed ? "结果来自已核验的真实票价" : "结果生成后才会公开方案"}
+          {completed ? "结果来自已核验的真实票价" : "基础建议不含票价，真实方案查全后再公开"}
         </p>
       }
     >
       <div className="space-y-4">
         {!progress ? <Notice>还没有见面结果</Notice> : null}
+        {progress && !completed && baseline ? <BaselineRecommendation result={baseline} /> : null}
         {progress && !completed ? (
           <RefreshingResultNotice code={code} progress={progress} now={now} />
         ) : null}
@@ -126,6 +133,7 @@ export default async function ResultPage({
       title={data.title}
       progress={data.progress}
       result={data.result}
+      baseline={data.baseline}
     />
   );
 }
@@ -134,7 +142,7 @@ async function loadResultPageData(code: string) {
   if (!hasSupabaseEnvironment()) {
     const data = readFallbackResult(code);
     return data
-      ? { title: data.plan.title, progress: data.latestRun, result: data.latestSharedResult }
+      ? { title: data.plan.title, progress: data.latestRun, result: data.latestSharedResult, baseline: data.latestRun?.baseline ?? null }
       : null;
   }
 
@@ -156,14 +164,14 @@ async function loadResultPageData(code: string) {
   const sharedRunId = sharedResults?.[0]?.run_id;
   const runQuery = supabase
     .from("recommendation_runs")
-    .select("id,status,trace_id,retry_after,error_summary,started_at");
+    .select("id,status,trace_id,retry_after,error_summary,started_at,baseline_city_code,baseline_city_name,baseline_policy_version,baseline_evidence_level,baseline_input_fingerprint");
   const { data: runs } = sharedRunId
     ? await runQuery.eq("id", sharedRunId).limit(1)
     : await runQuery.eq("plan_id", plan.id).eq("kind", "automatic").order("started_at", { ascending: false }).limit(1);
   const run = runs?.[0] ?? null;
   const parsedStatus = runStatusSchema.safeParse(run?.status);
   if (!run || !parsedStatus.success) {
-    return { title: plan.title, progress: null, result: null };
+    return { title: plan.title, progress: null, result: null, baseline: null };
   }
 
   const { count: pendingGroups } = await supabase
@@ -182,8 +190,21 @@ async function loadResultPageData(code: string) {
   const result = progress.status === "completed"
     ? await loadSharedResult(run.id)
     : null;
+  const baseline = run.baseline_city_code
+    && run.baseline_city_name
+    && run.baseline_policy_version === "2026-08-01.baseline.v1"
+    && run.baseline_evidence_level === "canonical_coordinates_and_hubs"
+    && typeof run.baseline_input_fingerprint === "string"
+    ? {
+        cityCode: run.baseline_city_code,
+        cityName: run.baseline_city_name,
+        policyVersion: run.baseline_policy_version,
+        evidenceLevel: run.baseline_evidence_level,
+        inputFingerprint: run.baseline_input_fingerprint,
+      } satisfies BaselineResult
+    : null;
 
-  return { title: plan.title, progress, result };
+  return { title: plan.title, progress, result, baseline };
 }
 
 async function loadSharedResult(runId: string): Promise<SharedResult | null> {

@@ -6,6 +6,7 @@ import { PeakScenicAccent } from "@/components/result/PeakScenicAccent";
 import { Notice } from "@/components/ui/Notice";
 import type { RunStatus } from "@/lib/agent/contracts";
 import { readMeetingHistory } from "@/lib/ui/meeting-history";
+import type { BaselineRecommendation } from "@/lib/recommendation/baseline";
 
 const REFRESH_DELAYS_MS = [2_000, 3_000, 5_000, 8_000, 13_000, 21_000];
 
@@ -24,6 +25,7 @@ export type PublicRunProgress = {
   pendingGroups: number;
   retryAt: string | null;
   diagnosticCode: string | null;
+  baseline?: BaselineRecommendation | null;
 };
 
 export async function advanceAutomaticRun({
@@ -200,12 +202,12 @@ export function getRunProgressMessage(progress: PublicRunProgress, now = new Dat
     case "awaiting_host_confirmation":
       return "替代城市正在等待发起人确认，共享结果暂不变更";
     case "incomplete":
-      return "有几位朋友的票价没查全，过一会再试一次";
+      return "见面城市先保留着；有几位朋友的票价没查全，过一会再试一次";
     case "failed":
       if (progress.diagnosticCode === "RUN_STALE_EXPIRED") {
         return "查询暂停太久中断了。多半是后台服务停太久，点「重新查询」后再等一会儿。";
       }
-      return "这次没安排成，稍后再试一次。如果反复失败，把下面这串编号发给发起人。";
+      return "见面城市先保留着；真实票价这次没查完，稍后再试一次。如果反复失败，把下面这串编号发给发起人。";
     case "completed":
       return "选好了！去看看这次在哪儿见";
   }

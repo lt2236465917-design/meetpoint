@@ -4,6 +4,8 @@ import { resolveAmapCityByAdcode } from "@/lib/city/amap-client";
 export type DepartureCityIdentity = {
   code: string;
   name: string;
+  lat: number;
+  lng: number;
 };
 
 export type DepartureCityResolution =
@@ -24,7 +26,7 @@ export async function resolveDepartureCityIdentity(input: {
   const builtIn = findCityByCode(input.code);
   if (builtIn) {
     return normalizeCityName(input.name) === normalizeCityName(builtIn.name)
-      ? { ok: true, city: { code: builtIn.code, name: builtIn.name } }
+      ? { ok: true, city: { code: builtIn.code, name: builtIn.name, lat: builtIn.lat, lng: builtIn.lng } }
       : { ok: false, error: "INVALID_DEPARTURE_CITY" };
   }
 
@@ -45,9 +47,12 @@ export async function resolveDepartureCityIdentity(input: {
     const local = CITIES.find((city) =>
       normalizeCityName(city.name) === canonicalName
     );
+    if (!local && (!Number.isFinite(resolved.city.lat) || !Number.isFinite(resolved.city.lng))) {
+      return { ok: false, error: "CITY_VALIDATION_UNAVAILABLE" };
+    }
     return local
-      ? { ok: true, city: { code: local.code, name: local.name } }
-      : { ok: true, city: { code: input.code, name: canonicalName } };
+      ? { ok: true, city: { code: local.code, name: local.name, lat: local.lat, lng: local.lng } }
+      : { ok: true, city: { code: input.code, name: canonicalName, lat: resolved.city.lat!, lng: resolved.city.lng! } };
   }
   return { ok: false, error: "INVALID_DEPARTURE_CITY" };
 }

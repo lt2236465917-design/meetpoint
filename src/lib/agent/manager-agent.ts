@@ -5,11 +5,14 @@ import { findCityByCode } from "@/data/cities";
 import { buildRouteTasks } from "@/lib/recommendation/query-matrix";
 import type { PreparedRun, RecommendationRepository } from "@/lib/recommendation/repository";
 import { transportModeSchema } from "@/lib/validation/schemas";
+import { createBaselineRecommendation } from "@/lib/recommendation/baseline";
 
 const participantSchema = z.object({
   id: z.string().trim().min(1),
   departureCityCode: z.string().trim().min(1),
   departureCityName: z.string().trim().min(1),
+  departureLat: z.number().finite().min(-90).max(90).optional(),
+  departureLng: z.number().finite().min(-180).max(180).optional(),
   acceptedModes: z.array(transportModeSchema).min(1),
 }).strict().superRefine((participant, context) => {
   if (!(
@@ -55,6 +58,14 @@ export class ManagerAgent {
     const requestedCity = parsed.alternative
       ? findCityByCode(parsed.alternative.cityCode)
       : null;
+    const departureCoordinates = parsed.participants.flatMap((participant) => (
+      participant.departureLat !== undefined && participant.departureLng !== undefined
+        ? [{ code: participant.departureCityCode, lat: participant.departureLat, lng: participant.departureLng }]
+        : []
+    ));
+    if (!parsed.alternative && departureCoordinates.length !== parsed.participants.length) {
+      throw new Error("automatic participants require canonical coordinates");
+    }
     if (parsed.alternative && (
       !requestedCity
       || requestedCity.name !== parsed.alternative.cityName
@@ -64,6 +75,7 @@ export class ManagerAgent {
       ? [requestedCity]
       : generateCandidateCities({
           departureCityCodes: parsed.participants.map((participant) => participant.departureCityCode),
+          departureCoordinates,
           manualAddCityCodes: parsed.manualAddCityCodes,
           manualExcludeCityCodes: parsed.manualExcludeCityCodes,
         });
@@ -75,6 +87,11 @@ export class ManagerAgent {
     if (candidates.length === 0 || tasks.length === 0) {
       throw new Error("participants produced no bounded route tasks");
     }
+    const baseline = requestedCity ? null : createBaselineRecommendation({
+      candidates,
+      departures: departureCoordinates,
+    });
+    if (!requestedCity && !baseline) throw new Error("participants produced no baseline recommendation");
     return this.repository.createRunMatrix({
       planId: parsed.planId,
       arrivalDate: parsed.arrivalDate,
@@ -87,6 +104,7 @@ export class ManagerAgent {
       kind: parsed.alternative ? "alternative" : "automatic",
       requestedCityCode: parsed.alternative?.cityCode ?? null,
       requestedByParticipantId: parsed.alternative?.requestedByParticipantId ?? null,
+      baseline,
     });
   }
 }
