@@ -1,5 +1,7 @@
 # 2026-07-28 Alibaba Cloud Mainland Phone Acceptance
 
+> Historical 2026-07-28 checkpoint. Preserve the original PENDING rows below as dated evidence. Fresh mainland-phone completed/incomplete/failed/retry flows passed on 2026-08-02; current evidence is `docs/acceptance/2026-08-02-reliable-baseline-production-acceptance.md`. Audited worktree cleanup followed on 2026-08-08, with byte-different drafts retained in six named stashes.
+
 **Status:** OPEN — remote preflight PASS; real mainland-phone create/join/plan/result and public-security filing remain required.
 
 **Canonical host:** `https://www.meetpoint.space`  

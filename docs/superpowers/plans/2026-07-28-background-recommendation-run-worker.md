@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Status:** Tasks 1–7 complete on `codex/repository-audit-complete` (2026-07-28 Subagent-Driven). ECS leave-and-finish checklist #11 **PASS** (2026-07-28, plan `ZNM4ZK` → `incomplete`); `202607280001` applied; live `/opt/meetpoint` healthy `run-worker` on `node:20-slim` with service-role `ws` transport.
+**Status:** Tasks 1–7 complete and shipped on `main`. ECS leave-and-finish checklist #11 **PASS** (2026-07-28, plan `ZNM4ZK` → `incomplete`); `202607280001` is recorded; live `/opt/meetpoint` runs a healthy `run-worker` on `node:20-slim` with service-role `ws` transport. The former development branch was removed during the audited 2026-08-08 repository cleanup.
 
 **Goal:** On Alibaba Cloud ECS Compose, add a private `run-worker` that continuously advances nonterminal automatic and alternative recommendation runs through the existing lease-guarded `advanceRun` path so users can leave the page and still reach a terminal (or host-confirmation) state.
 

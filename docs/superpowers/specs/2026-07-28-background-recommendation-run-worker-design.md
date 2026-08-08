@@ -1,6 +1,6 @@
 # Background Recommendation Run Worker Design
 
-**Status:** Approved 2026-07-28; implemented on branch `codex/repository-audit-complete` @ `f53acbd`. ECS Compose `run-worker` live; leave-and-finish checklist #11 PASS (2026-07-28, `ZNM4ZK`).
+**Status:** Approved 2026-07-28; implementation commit `f53acbd` is shipped on `main`. ECS Compose `run-worker` is live; leave-and-finish checklist #11 PASS (2026-07-28, `ZNM4ZK`). The former development branch was removed during the audited 2026-08-08 repository cleanup.
 
 **Date:** 2026-07-28
 

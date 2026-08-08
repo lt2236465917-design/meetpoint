@@ -61,9 +61,10 @@ This acceptance does not close the WeChat in-app-browser filing warning: the sam
 ## Remaining operational work
 
 - Resolve or appeal the WeChat direct-open ICP classification and repeat direct-link acceptance after Tencent propagation/review.
-- Wire the documented redacted log alerts and scheduled coverage/divergence checks into an external alerting destination.
+- Public homepage/API availability alerting was subsequently accepted on 2026-08-08; see `docs/acceptance/2026-08-08-external-availability-monitoring-acceptance.md`. Internal redacted log alerts and scheduled coverage/divergence checks remain unwired.
+- Complete the post-launch public-security filing outside the repository; do not store filing-owner identity or contact details here.
 - A second commercial supplier remains unprocured and disabled; no failover claim is made.
-- No git push, credential rotation, release-worktree deletion, or safety-stash deletion was performed.
+- At this 2026-08-02 acceptance cutoff, no git push, credential rotation, release-worktree deletion, or safety-stash deletion was performed. Audited repository cleanup followed on 2026-08-08; byte-different drafts remain preserved in six named stashes.
 
 ## Final local gates
 

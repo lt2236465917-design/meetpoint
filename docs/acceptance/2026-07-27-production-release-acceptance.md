@@ -1,5 +1,7 @@
 # 2026-07-27 Production Release Acceptance
 
+> Historical Vercel release checkpoint. Its mainland-China blocker was superseded by the Alibaba Cloud production acceptance on 2026-08-02: `docs/acceptance/2026-08-02-reliable-baseline-production-acceptance.md`.
+
 ## Release identity
 
 - Source release commit: `206cd7e7d6faec111c8888a506f314202df5d8b1`.

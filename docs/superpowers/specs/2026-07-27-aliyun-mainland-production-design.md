@@ -1,6 +1,6 @@
 # Alibaba Cloud Mainland Production Design
 
-**Status:** Live on Alibaba Cloud ECS for `www.meetpoint.space`; full create/join/plan/result mainland-phone acceptance and public-security filing remain open
+**Status:** Live on Alibaba Cloud ECS for `www.meetpoint.space`; fresh create/join/plan/result mainland-phone acceptance passed on 2026-08-02. External homepage/API availability alerting passed on 2026-08-08. WeChat direct-open classification, internal service-log/coverage alert routing, and public-security filing remain open.
 
 **Date:** 2026-07-27
 
@@ -8,7 +8,7 @@
 
 The Vercel Services release is healthy outside mainland China, but the only public aliases use `*.vercel.app` and timed out on a real mainland network. Vercel has no mainland infrastructure and does not guarantee availability there. The product targets people arranging meetings inside China, so an overseas-only endpoint is not an accepted production release.
 
-The operator's Alibaba Cloud ICP filing is approved for `meetpoint.space`, with `www.meetpoint.space` recorded as the homepage. Public DNS, HTTPS, OSS/CDN scenic delivery, and the ECS Compose stack are live; residual acceptance is full product-flow phone verification plus post-launch public-security filing.
+The operator's Alibaba Cloud ICP filing is approved for `meetpoint.space`, with `www.meetpoint.space` recorded as the homepage. Public DNS, HTTPS, OSS/CDN scenic delivery, and the ECS Compose stack are live. Full product-flow phone verification passed on 2026-08-02, and zero-cost external homepage/API checks passed on 2026-08-08. WeChat direct-open classification, internal service-log/coverage alert routing, and post-launch public-security filing remain operational work.
 
 ## Decision
 

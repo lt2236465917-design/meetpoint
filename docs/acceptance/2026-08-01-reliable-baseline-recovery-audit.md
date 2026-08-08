@@ -2,6 +2,8 @@
 
 Date: 2026-08-01
 
+> Historical recovery record. On 2026-08-08 the source `/8fdd` dirty state was preserved as named stash commit `85830cef9204c2e418958b5a3ced29157bdffe66`, then the audited source and target auxiliary worktrees were removed. The production result remains commit `9b965a7`; current cleanup state is recorded in `.superpowers/sdd/progress.md`.
+
 ## Scope and method
 
 - Common ancestor: `b38e60c`.
