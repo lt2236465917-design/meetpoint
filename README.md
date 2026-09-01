@@ -1,169 +1,50 @@
-# Cross-City MeetPoint
+# meetpoint｜跨城见面计划
 
-Mobile-usable Web MVP for choosing a fair cross-city meeting city for 2-6 people in China. Shareable plan links must work on phones. Shipped UI uses a true adaptive layout (no fake phone frame): full-bleed home hero, fluid `ResponsiveShell` — [adaptive shell design](docs/superpowers/specs/2026-07-17-desktop-adaptive-shell-design.md). Without Supabase credentials, development uses a non-persistent fallback for local creation, participation, and run-progress smoke tests.
+> 散在几座城的朋友，这次在哪儿见？
 
-## Release Status
+meetpoint 是一个为 2–6 人跨城见面设计的在线规划工具。
 
-The Multi-Agent flow and Repository Audit Batches A–C are implemented on `main`: one city, saving/fast schemes from verified quotes, private host-confirmed alternatives, deterministic database replay, canonical departure identity, and fail-closed terminal recovery. Policy `2026-07-19.v2` defines saving as the exact lowest verified fare in each participant's direct-first accepted-mode set (including direct normal train) and keeps fast within 130% of the saving total.
+当朋友、家人或同事分散在不同城市时，决定去哪座城市见，往往需要大家分别查机票、火车票，再反复比较时间和费用。meetpoint 用一个共享链接收集每个人的出发城市和交通偏好，帮助大家更快确定一座合适的见面城市。
 
-The `2026-08-01.baseline.v1` reliability layer is deployed in production. Every valid automatic run persists a geography-and-hub baseline city that remains visible while supplier collection is pending, incomplete, or failed, without fare, route, saving, or fast claims. Complete verified coverage is still required for the two live-fare schemes. Production migration, deployment, background completion, terminal retry, and deterministic replay passed on 2026-08-02; see [production acceptance](docs/acceptance/2026-08-02-reliable-baseline-production-acceptance.md).
+[立即体验 meetpoint](https://www.meetpoint.space/)
 
-The Vercel Services deployment builds the Next.js frontend and private travel-gateway container together and remains the overseas fallback. The primary China host is the filed Alibaba Cloud domain `https://www.meetpoint.space` (Nginx → loopback frontend on `3001`, private gateway + Compose `run-worker`). Fresh mainland-phone completed/incomplete/failed/retry flows passed on 2026-08-02. UptimeRobot Free now checks the canonical homepage and city-search API every five minutes with verified email routing; internal service-log/coverage alerts remain manual. Other operational work is the WeChat direct-open ICP classification, post-launch public-security filing, and procurement of a second supplier. See [production acceptance](docs/acceptance/2026-08-02-reliable-baseline-production-acceptance.md), [external availability acceptance](docs/acceptance/2026-08-08-external-availability-monitoring-acceptance.md), [mainland deployment design](docs/superpowers/specs/2026-07-27-aliyun-mainland-production-design.md), and [operator guide](docs/integration-guide.md).
+## 它能帮你解决什么
 
-After a restorable backup and PostgreSQL 17.10 restore rehearsal, the linked Supabase project applied and recorded `202607280001` and `202608010001` on 2026-08-02. Postflight migration history, schema, RPC, role, constraint, and rollback checks passed. Future schema changes still require a fresh restorable backup plus migration-list and dry-run review.
+- 用一个链接收集所有人的出发城市和交通偏好
+- 省去分别查票、手动汇总和反复讨论的麻烦
+- 为所有人推荐一座见面城市
+- 真实票价和路线数据查全并通过核验后，提供「省钱方案」和「省时方案」
+- 数据完整时，查看每个人的交通方式、出发与到达时间、行程时长和票价
 
-## Scripts
+## 适合这些场景
 
-- `npm run dev`
-- `npm run lint`
-- `npm run test`
-- `npm run test:postgres` — requires a disposable loopback database whose name ends in `_test`.
-- `npm run build`
-- `npm run probe:providers` — redacted operator probe for the existing provider path.
-- `npm run probe:deepseek-transports` — credentialed, redacted paired protocol comparison; never a production state writer.
-- `npm run worker:recommendation` — local/process entry for the Compose recommendation worker (`tsx src/worker/recommendation-run-worker.ts`); production uses the Compose `run-worker` service, not this script on the host.
+- 异地朋友、老同学约一次线下聚会
+- 家人从不同城市约一次团聚
+- 同事或小团队安排跨城见面
+- 2–6 人想一起出行，但还没决定在哪座城市集合
 
-## Current Flow
+## 三步完成安排
 
-- `/`: full-bleed train-window home hero (zero-scroll opening) with CTA to create a plan and “最近记录” entry to `/records`.
-- `/records`: browser-local recent meeting records on this device.
-- `/create`: host creates a meeting plan, receives a phone-openable public link, and saves the plan to local recent records.
-- `/p/[code]`: public plan page with a single StatusLane panel (status → one primary CTA → `已填写` list), automatic participant-status refresh, and a host「开始见面」action for local participants when the participant limit is reached. IA: `docs/superpowers/specs/2026-07-17-plan-result-ia-design.md`.
-- `/p/[code]/join`: participant submits name, departure city, and accepted transport modes, then returns to the public plan page automatically.
-- `/p/[code]/manage`: legacy route that points users back to the public plan page.
-- `/p/[code]/result`: shared team result page. The deterministic baseline city can appear before live completion and carries no supplier claims; exactly “省钱方案” and “省时方案” render only from persisted verified scheme routes after completion. Pending, collecting, cooling, calculating, validating, incomplete, and failed states keep the baseline visible with bounded progress, retry, or diagnostic guidance and no live-fare cards.
-- `/p/[code]/alternatives`: participant-only one-city recalculation flow. The preview stays private to its requester and the host until the host confirms replacement.
-- `POST /api/plans`: creates a plan from `{ title, arrivalDate, participantLimit }` and returns `{ code, shareUrl, hostToken }`; the host token is returned once.
-- `GET /api/plans/[code]`: returns public plan data and the run that owns the current shared result; before any shared result exists, it returns the latest automatic-run progress. A private preview never replaces the public projection before host confirmation.
-- `GET /api/cities/search?q=...`: merges built-in hub library hits with Amap prefecture-level matches when configured (local first, deduped); returns `{ cities }`. See [2026-07-18 design](docs/superpowers/specs/2026-07-18-inner-atmosphere-meetup-copy-design.md).
-- `POST /api/plans/[code]/participants`: creates a participant and returns `{ participantId, editToken }`.
-- `GET /api/plans/[code]/candidates`: returns stored candidate city controls for a plan.
-- `POST /api/plans/[code]/candidates`: currently returns `CANDIDATE_EDITING_UNAVAILABLE`.
-- `POST /api/plans/[code]/calculate`: creates a bounded automatic run (`202`, `disposition: "created"`) or resumes the identical active automatic run (`200`, `disposition: "resume_existing"`); requires `x-participant-token`. Once a shared result exists, automatic creation fails with `SHARED_RESULT_EXISTS`.
-- `POST /api/plans/[code]/runs/[runId]/advance`: advances at most one state transition or one bounded query batch; requires `x-participant-token`.
-- `POST /api/plans/[code]/previews`: after the first shared result exists, creates a one-city alternative run from `{ cityCode, cityName }` (`202 created`) or resumes the same participant/city preview (`200 resume_existing`); requires `x-participant-token`.
-- `GET /api/plans/[code]/previews/[runId]`: reads private progress and preview data only for the requesting participant or host; unauthorized callers receive 404.
-- `POST /api/plans/[code]/previews/[runId]/confirm`: atomically replaces the current shared result within the seven-day confirmation window; authority comes only from `x-host-token`, expired previews return `PREVIEW_EXPIRED`, and repeated successful confirmation is idempotent.
+1. 发起人创建计划，填写计划名称、到达日期和参与人数。
+2. 把邀请链接发到群里，每个人填写姓名、出发城市，以及能接受的交通方式。
+3. 人齐后点击「开始见面」，查看推荐城市和每个人的出行方案。
 
-## Core Modules
+## 当前支持
 
-- `src/lib/city/candidate-generator.ts`: deterministic candidate-city generation from participant cities and host controls.
-- `src/lib/city/amap-client.ts` and `src/lib/city/city-provider.ts`: local-first city search with canonical Amap administrative-district lookup, a 5-second timeout, one bounded retry, and a server-memory China city index fallback for prefecture-level departures.
-- `src/lib/fallback/mvp-store.ts`: server-side in-memory fallback store that preserves the target run states and publication guards for local tests; it never synthesizes estimates or calls suppliers.
-- `src/lib/travel/types.ts`: strict main-app request contract for the isolated travel gateway.
-- `src/lib/travel/gateway-client.ts`: server-side authenticated gateway client used by QueryAgent to persist verified quotes without participant identity crossing the gateway boundary.
-- `services/travel-provider-gateway/`: independently runnable FlyAI gateway with strict contracts, safe CLI execution, cache, concurrency limit, retry, authenticated HTTP API, and container configuration.
-- `src/lib/recommendation/policy.ts` and `validators.ts`: deterministic direct-first saving/fast schemes, unique-city ranking, evidence replay, and bounded policy evaluation.
-- `src/lib/recommendation/baseline.ts`: versioned deterministic baseline selection from server-canonical participant coordinates and the built-in hub catalog; it has no supplier or fare input.
-- `src/lib/recommendation/repository.ts`: durable run persistence and guarded result materialization. A gateway `quoteId` may repeat when multiple participants share a physical route, so selected evidence is resolved by participant plus quote ID rather than a global quote-ID lookup.
-- `src/lib/agent/`: provider-neutral model boundary plus Manager, Query, Calculation, Supervisor, Fallback, tracing, and bounded orchestration modules.
-- `src/lib/agent/deepseek-model.ts` and `deepseek-transport-comparison.ts`: server-only Chat Completions/Responses transports, read-only capped shadowing, strict local output validation, safe telemetry, and aggregate comparison.
-- `src/lib/agent/run-orchestrator.ts`: creates and incrementally advances durable runs with a persisted lease and rolling **2-hour** inactivity deadline; one exhausted route becomes terminal while other healthy route tasks continue. It dispatches to the guarded in-memory fallback when Supabase is absent.
-- `src/lib/recommendation/run-worker.ts` and `src/worker/recommendation-run-worker.ts`: Compose `run-worker` selection/tick loop and process entry (independent heartbeat); live on ECS; leave-and-finish checklist #11 PASS (2026-07-28).
-- `src/lib/recommendation/alternative-preview.ts` and `src/lib/security/host-confirmation.ts`: bind a private run to one canonical city and requesting participant, authorize private reads, and pass the exact Supervisor-approved proposal to host-only atomic confirmation.
-- `src/components/result/SharedRecommendation.tsx` and `SchemeCard.tsx`: render the published city once and map persisted participant routes directly on `.atmosphere-panel` glass (no nested white route cards), including team totals, route facts, quote fingerprints, and China-time freshness; they never render booking links or client-side route selection.
-- `src/components/result/RefreshingResultNotice.tsx`: maps every run status to Chinese progress/retry guidance. Leave-friendly copy (users can leave); optional bounded authenticated advance; terminal `incomplete` / `failed` create a fresh automatic run when the device still holds a participant token.
-- `src/components/home/HomeHero.tsx`: product `/` full-bleed train-window hero (brand `meetpoint`, train overlay, glass CTA to `/create`, entry to `/records`). It continuously cycles all four scenic clips, uses a near-end guard when a browser misses `ended`, and still supports manual scene selection.
-- `src/components/layout/FunctionalScenicBackdrop.tsx`, `ShellScenicBackdrop.tsx`, `ResponsiveShell.tsx`, and `src/app/globals.css`: one root-mounted route-fixed clip stays alive through functional-page loading/navigation, with playback checkpoints after unavoidable remounts; a transient media error falls through to the static fallback without permanently hiding a recovered video. `ResponsiveShell` renders adaptive `max-w-2xl` content above it.
-- `src/components/result/PeakScenicAccent.tsx` + `src/lib/ui/scenic-videos.ts`: transparent wait/reveal glass over the single route-fixed scene, plus the same-origin desktop/mobile scenic source catalog. `PeakScenicAccent` does not mount another video.
-- `src/lib/ui/meeting-history.ts`: browser-only local recent-record storage; it caches `useSyncExternalStore` snapshots so the records page does not trigger React update loops.
+- 中国境内 2–6 人单程跨城见面规划
+- 飞机、高铁/动车和普速火车
+- 手机和电脑浏览器直接访问，无需安装 App
+- 在当前设备保存最近参与过的见面计划
 
-## Environment
+## 使用说明
 
-Copy `.env.example` to `.env.local` and fill server-side keys locally for persistent Supabase-backed runs.
+meetpoint 用于帮助大家选择见面城市和比较出行方案，不直接提供订票、支付、酒店或市内路线服务。票价和班次可能随时间变化，请以购票平台的最终信息为准。
 
-If `NEXT_PUBLIC_SUPABASE_URL` or `SUPABASE_SERVICE_ROLE_KEY` is missing, the app uses the in-memory fallback store. It is only for local smoke testing, is cleared when the server restarts, and cannot obtain supplier quotes; an unseeded fallback run therefore ends as `incomplete` rather than publishing estimates.
+只有在真实票价和路线数据查询完整并通过核验后，meetpoint 才会显示「省钱方案」和「省时方案」；如果数据不完整，页面只提供基础城市建议，不会用估算价格或虚构路线补齐结果。
 
-For local browser testing, use `http://127.0.0.1:<port>`; for mobile-device testing, use the current Network URL printed by `npm run dev`. `next.config.ts` discovers active non-internal IPv4 addresses at server start instead of retaining a historical Wi-Fi address, so Next.js client resources and interactive forms load after network changes.
+## 项目资料
 
-Application variables:
+如果你想了解项目架构、接入或部署方式，可以继续查看：
 
-- `NEXT_PUBLIC_SUPABASE_URL`: public Supabase project URL used by browser and server clients.
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY`: public Supabase client bootstrap key; browser roles have no direct business-table or Realtime read path.
-- `NEXT_PUBLIC_SCENIC_BASE_URL`: optional public scenic-media base; production ECS uses `https://media.meetpoint.space`.
-- `SUPABASE_SERVICE_ROLE_KEY`: server-only service-role key for route handlers and background calculations.
-- `AMAP_API_KEY`: server-side Amap key for local-miss city validation; normalized city-level results can be selected even when they are absent from the built-in city library.
-- `DEEPSEEK_API_KEY`: server-side DeepSeek key for the provider-neutral Calculation/Supervisor model.
-- `DEEPSEEK_MODEL`: optional server-side model override; defaults to `deepseek-v4-flash`.
-- `DEEPSEEK_TRANSPORT`: `chat_completions` (default and rollback) or gated `responses`; unknown values fail closed.
-- `DEEPSEEK_SHADOW_TRANSPORT`: read-only candidate transport; defaults to `off` and must differ from the primary.
-- `DEEPSEEK_SHADOW_SAMPLE_RATE`: shadow sample ratio; `0` is the immediate kill switch.
-- `DEEPSEEK_SHADOW_MAX_CONCURRENCY`, `DEEPSEEK_SHADOW_MAX_CALLS_PER_PROCESS`, `DEEPSEEK_SHADOW_MAX_TOTAL_TOKENS_PER_PROCESS`: per-process shadow resource caps.
-- `DEEPSEEK_COMPARE_ITERATIONS`: operator-shell-only paired comparison count; do not persist it as runtime product configuration.
-- `FLYAI_API_KEY`: gateway-only supplier credential; never copy it into browser or root public configuration.
-- `FLYAI_PROBE_CLI_PATH`: optional operator-only executable override for the redacted FlyAI capability probe.
-- `PROBE_TRAVEL_DATE`: optional `YYYY-MM-DD` travel date for the operator-only provider probe; defaults to the next UTC date.
-- `PROBE_FLYAI_SORT_TYPE`: optional operator-only FlyAI probe sort (`3` price ascending, default; `8` direct first); it never changes production gateway queries.
-- `TRAVEL_GATEWAY_URL`: server-side internal gateway URL used by the main-app travel provider.
-- `TRAVEL_GATEWAY_TOKEN`: server-side bearer token for the internal gateway.
-- `TRAVEL_GATEWAY_TIMEOUT_MS`: optional main-app gateway request timeout; defaults to `30000` ms.
-- `AGENT_QUERY_CONCURRENCY`: optional logical QueryAgent worker count, clamped to `1..8`; defaults to `4` and does not change the gateway's physical supplier concurrency.
-- `RUN_WORKER_POLL_INTERVAL_MS`: Compose worker poll interval; defaults to `3000` ms and accepts `500..60000`.
-
-The provider-neutral `AgentModel` uses DeepSeek for Calculation and Supervisor only after complete real-quote coverage. Chat Completions is the stable default; Responses is an environment-selected candidate using the same `deepseek-v4-flash` model, not a model upgrade. Both paths share 15-second timeouts, one `MODEL_INVALID_OUTPUT` retry, strict local schemas, safe error mapping, deterministic validators, and publication guards. Optional shadow calls are capped and cannot write proposals, agent events, run state, Supabase data, or shared results. The production switch, bounded shadow, and one-variable rollback passed on 2026-08-02; the final effective runtime is `deepseek-v4-flash`, Chat primary, shadow off, sample rate zero.
-
-For local real-ticket smoke tests, run the gateway separately and set `TRAVEL_GATEWAY_URL=http://127.0.0.1:8080` in `.env.local`. The `.env.local` `TRAVEL_GATEWAY_TOKEN` must match `services/travel-provider-gateway/.env`; otherwise QueryAgent records the gateway failure and the run cannot publish without complete verified coverage.
-
-## Travel Provider Status
-
-Tasks 1-10 of the historical [Amap and FlyAI implementation plan](docs/superpowers/plans/2026-07-12-amap-flyai-integration.md) are complete: Amap city validation, travel query freshness persistence, the isolated gateway, and its authenticated client are fixture-verified. The active Multi-Agent path persists only validated real options as verified quotes; retryable failures receive bounded recovery, and incomplete coverage publishes nothing.
-
-The shared result never promotes pre-migration `city_recommendations` or `travel_options`: those rows are historical read-only data. New publication loads guarded `recommendation_results`, `recommendation_schemes`, and selected verified-quote routes, then renders one city with saving and fast schemes. A pre-migration plan without a stored host credential may still view historical data but must create a new plan to use host-confirmed alternatives.
-
-The gateway has its own environment file at `services/travel-provider-gateway/.env.example` and commands:
-
-```bash
-cd services/travel-provider-gateway
-npm ci
-npm run lint
-npm run test
-npm run build
-npm run probe:contract # credentialed deploy-time canary; redacted sample evidence only
-```
-
-The gateway exposes `GET /healthz` and authenticated `POST /v1/search`. It accepts only supported normalized requests, calls FlyAI through an argument-array CLI invocation with shell execution disabled, and returns stable error codes for no route, no ticket, rate limit, upstream unavailability, CLI failure, timeout, and invalid responses. Its 5-minute cache is process-local; supplier calls are globally serial, same-key cache misses share one in-flight request, and rate limiting has no immediate retry (5-second then 15-second global cooldown). A health response proves only that the gateway process is reachable, not supplier quota, risk-control clearance, or real-ticket availability.
-
-For operations, the default FlyAI path writes a server-only `flyai_diagnostic` log event. Its fixed allowlist is `routeFingerprint`, `mode`, `outcome`, `itemCount`, `normalizedCount`, `droppedCount`, `droppedReasons`, and `cliErrorCode`; it is not an HTTP contract, cache entry, or database record, and contains no supplier key names, provider text, ticket facts, city names, personal data, or secrets. Live `data.itemList` entries are validated independently, so one malformed entry does not discard adjacent real routes; only a non-empty list with no valid route returns `PROVIDER_INVALID_RESPONSE`. Connecting itineraries normalize the complete ordered segment set and reject invalid sequence, over-eight-segment, or mixed-mode evidence. Live prices accept `ticketPrice`, `price`, or documented `adultPrice`, including currency-prefixed numeric strings.
-
-Run `npm run probe:providers` only with operator-managed keys exported from root `.env.local` and `services/travel-provider-gateway/.env`; keep `FLYAI_API_KEY` in the gateway file rather than copying it into root configuration. `PROBE_TRAVEL_DATE` optionally fixes the probe date, and `PROBE_FLYAI_SORT_TYPE=3|8` compares price-first with direct-first ordering without changing production. The probe leaves journey type unfiltered and prints one redacted JSON summary with status, latency, field names, and total/direct/connecting/unclassified counts, never provider payload values. The active QueryAgent keeps route/mode work bounded and never replaces missing verified quotes with estimates. Supplier coverage remains an operational acceptance question: use a new full plan and route-fingerprint diagnostics after cooldown, and do not treat `/healthz` or a single successful fare row as proof of supplier-wide authorization, quota recovery, or production readiness.
-
-Future Fliggy/FlyAI MCP or skill integrations should be treated as gateway-side provider adapters, not main-app dependencies. Compare them against the same fixed route/mode probe set before replacing FlyAI or changing fallback behavior.
-
-## Verification
-
-Run after code changes:
-
-```bash
-npm run lint
-npm run test
-npm run build
-```
-
-For gateway changes, also run:
-
-```bash
-cd services/travel-provider-gateway
-npm run lint
-npm run test
-npm run build
-```
-
-In managed sandboxes, `npm run build` can fail if Next/Turbopack is blocked from creating a process and binding a local port. Re-run the same command in an environment that permits local port binding before release.
-
-For UI changes, also verify a mobile viewport around `390x844` and a desktop viewport around `1440x1000`: no fake phone chrome; usable adaptive width; home opening zero-scroll; records on `/records` — see the adaptive-shell spec.
-
-## Manual Handoff Smoke
-
-After the automated verification above, run this browser smoke for regression handoff:
-
-1. Create a plan.
-2. Open `/records` and confirm the created plan appears in recent meeting records on the same device.
-3. Open the public link.
-4. Submit two participants from different cities.
-5. Confirm the public plan page updates filling records without a manual browser refresh.
-6. After the participant limit is reached, start calculation from the public plan page on a device that has filled the plan.
-7. Confirm the calculate request returns `202 created` for a new run or `200 resume_existing` for the identical active run, and the progress route is reachable with the participant token.
-8. Do not use local fallback to claim a published target result: it has no supplier adapter and will finish as `incomplete` without injected verified quotes. Consult `docs/acceptance/2026-08-02-reliable-baseline-production-acceptance.md` for current production evidence and residuals.
-9. With a completed fixture or Supabase-backed run, confirm `/p/[code]/result` shows the city once, exactly “省钱方案” and “省时方案”, every participant route, quote freshness in China time, and no estimate, average-fare, three-city, or booking-link UI.
-10. From a completed result, open “换个城市看看”, select one supported city, and confirm the requester sees “仅你可见的预览” while the shared result remains unchanged.
-11. Open the preview URL in the host browser, confirm “确认替换共享结果” appears only there, then confirm once; the shared result should show the replacement city. Repeated idempotent confirmation is covered by API/RPC tests rather than a second physical UI request.
+- [架构说明](docs/architecture.md)
+- [接入与部署指南](docs/integration-guide.md)
